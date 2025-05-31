@@ -74,7 +74,9 @@ impl Debug for TransportConfig {
 impl Default for TransportConfig {
     fn default() -> Self {
         Self {
+            #[cfg(feature = "tcp")]
             enable_tcp: true,
+            #[cfg(feature = "tcp")]
             tcp_config_callback: Box::new(|config| config),
             #[cfg(feature = "quic")]
             enable_quic: true,
@@ -164,7 +166,9 @@ pub(crate) fn build_transport(
     keypair: identity::Keypair,
     relay: Option<ClientTransport>,
     TransportConfig {
+        #[cfg(feature = "tcp")]
         enable_tcp,
+        #[cfg(feature = "tcp")]
         tcp_config_callback,
         timeout,
         #[cfg(feature = "dns")]

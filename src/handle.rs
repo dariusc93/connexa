@@ -3,6 +3,7 @@ mod floodsub;
 mod gossipsub;
 mod rendezvous;
 mod request_response;
+#[cfg(feature = "stream")]
 mod stream;
 mod swarm;
 
@@ -11,6 +12,7 @@ use crate::handle::floodsub::ConnexaFloodsub;
 use crate::handle::gossipsub::ConnexaGossipsub;
 use crate::handle::rendezvous::ConnexaRendezvous;
 use crate::handle::request_response::ConnexaRequestResponse;
+#[cfg(feature = "stream")]
 use crate::handle::stream::ConnexaStream;
 use crate::handle::swarm::ConnexaSwarm;
 use crate::types::Command;
@@ -59,6 +61,7 @@ impl Connexa {
     pub fn floodsub(&self) -> ConnexaFloodsub {
         ConnexaFloodsub::new(self)
     }
+
     pub fn gossipsub(&self) -> ConnexaGossipsub {
         ConnexaGossipsub::new(self)
     }
@@ -71,6 +74,7 @@ impl Connexa {
         ConnexaRequestResponse::new(self)
     }
 
+    #[cfg(feature = "stream")]
     pub fn stream(&self) -> ConnexaStream {
         ConnexaStream::new(self)
     }

@@ -2,8 +2,11 @@ use crate::behaviour;
 use crate::behaviour::BehaviourEvent;
 use crate::types::{
     Command, DHTCommand, FloodsubMessage, GossipsubMessage, PubsubCommand, PubsubEvent,
-    PubsubFloodsubPublish, PubsubPublishType, RequestResponseCommand, StreamCommand, SwarmCommand,
+    PubsubFloodsubPublish, PubsubPublishType, RequestResponseCommand, SwarmCommand,
 };
+
+#[cfg(feature = "stream")]
+use crate::types::StreamCommand;
 use either::Either;
 use futures::channel::{mpsc, oneshot};
 use futures::{FutureExt, StreamExt};
@@ -621,6 +624,7 @@ where
                     self.pending_dht_put_record.insert(id, resp);
                 }
             },
+            #[cfg(feature = "stream")]
             Command::Stream(stream_command) => match stream_command {
                 StreamCommand::NewStream { protocol, resp } => {
                     let Some(stream) = swarm.behaviour_mut().stream.as_mut() else {

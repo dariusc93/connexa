@@ -20,6 +20,7 @@ pub enum Command<T = ()> {
     Pubsub(PubsubCommand),
     Dht(DHTCommand),
     RequestResponse(RequestResponseCommand),
+    #[cfg(feature = "stream")]
     Stream(StreamCommand),
     Rendezvous(RendezvousCommand),
     Custom(T),
@@ -49,6 +50,7 @@ impl From<RequestResponseCommand> for Command {
     }
 }
 
+#[cfg(feature = "stream")]
 impl From<StreamCommand> for Command {
     fn from(cmd: StreamCommand) -> Self {
         Command::Stream(cmd)
@@ -218,6 +220,8 @@ pub enum RequestResponseCommand {
         resp: oneshot::Sender<Result<mpsc::Receiver<(PeerId, InboundRequestId, Bytes)>>>,
     },
 }
+
+#[cfg(feature = "stream")]
 pub enum StreamCommand {
     NewStream {
         protocol: StreamProtocol,
@@ -227,6 +231,7 @@ pub enum StreamCommand {
         resp: oneshot::Sender<Result<libp2p_stream::Control>>,
     },
 }
+
 pub enum RendezvousCommand {
     Register {
         namespace: String,

@@ -3,7 +3,9 @@ mod transport;
 
 use crate::behaviour;
 use crate::behaviour::request_response::RequestResponseConfig;
-use crate::builder::transport::{DnsResolver, TransportConfig};
+#[cfg(feature = "dns")]
+use crate::builder::transport::DnsResolver;
+use crate::builder::transport::TransportConfig;
 use crate::handle::Connexa;
 use crate::task::ConnexaTask;
 use executor::ConnexaExecutor;
@@ -16,11 +18,14 @@ use libp2p::identify::Config as IdentifyConfig;
 use libp2p::identity::Keypair;
 use libp2p::kad::Config as KadConfig;
 use libp2p::ping::Config as PingConfig;
+#[cfg(feature = "pnet")]
 use libp2p::pnet::PreSharedKey;
 use libp2p::relay::Config as RelayServerConfig;
 use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 use libp2p_connection_limits::ConnectionLimits;
 use std::fmt::Debug;
+// Since this used for quic duration, we will feature gate it to satisfy lint
+#[cfg(feature = "quic")]
 use std::time::Duration;
 use tracing::Span;
 
@@ -255,6 +260,7 @@ where
         self
     }
 
+    #[cfg(feature = "quic")]
     pub fn enable_quic(self) -> Self {
         //Note: It might be wise to set the timeout and keepalive low on
         //      quic transport since its not properly resetting connection state when reconnecting before connection timeout
@@ -267,6 +273,7 @@ where
         })
     }
 
+    #[cfg(feature = "quic")]
     pub fn enable_quic_with_config<F>(mut self, f: F) -> Self
     where
         F: FnMut(&mut libp2p::quic::Config) + 'static,
@@ -277,10 +284,12 @@ where
         self
     }
 
+    #[cfg(feature = "tcp")]
     pub fn enable_tcp(self) -> Self {
         self.enable_tcp_with_config(|config| config.nodelay(true))
     }
 
+    #[cfg(feature = "tcp")]
     pub fn enable_tcp_with_config<F>(mut self, f: F) -> Self
     where
         F: FnOnce(libp2p::tcp::Config) -> libp2p::tcp::Config + 'static,
@@ -291,17 +300,20 @@ where
         self
     }
 
+    #[cfg(feature = "pnet")]
     pub fn enable_pnet(mut self, psk: PreSharedKey) -> Self {
         self.transport_config.enable_pnet = true;
         self.transport_config.pnet_psk = Some(psk);
         self
     }
 
+    #[cfg(feature = "websocket")]
     pub fn enable_websocket(mut self) -> Self {
         self.transport_config.enable_websocket = true;
         self
     }
 
+    #[cfg(feature = "websocket")]
     pub fn enable_secure_websocket(mut self, pem: Option<(Vec<String>, String)>) -> Self {
         self.transport_config.enable_secure_websocket = true;
         self.transport_config.enable_websocket = true;
@@ -309,10 +321,12 @@ where
         self
     }
 
+    #[cfg(feature = "dns")]
     pub fn enable_dns(self) -> Self {
         self.enable_dns_with_resolver(DnsResolver::default())
     }
 
+    #[cfg(feature = "dns")]
     pub fn enable_dns_with_resolver(mut self, resolver: DnsResolver) -> Self {
         self.transport_config.dns_resolver = Some(resolver);
         self.transport_config.enable_dns = true;
