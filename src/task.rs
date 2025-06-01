@@ -27,8 +27,8 @@ use libp2p::kad::{
 };
 use libp2p::mdns::Event as MdnsEvent;
 use libp2p::ping::Event as PingEvent;
-use libp2p::relay::Event as RelayServerEvent;
 use libp2p::relay::client::Event as RelayClientEvent;
+use libp2p::relay::Event as RelayServerEvent;
 use libp2p::rendezvous::client::Event as RendezvousClientEvent;
 use libp2p::rendezvous::server::Event as RendezvousServerEvent;
 use libp2p::swarm::derive_prelude::ListenerId;
@@ -95,7 +95,7 @@ where
     pub pending_listen_on: IndexMap<ListenerId, oneshot::Sender<std::io::Result<ListenerId>>>,
     pub pending_remove_listener: IndexMap<ListenerId, oneshot::Sender<std::io::Result<()>>>,
 
-    pub pending_add_external_address: IndexMap<Multiaddr, oneshot::Sender<std::io::Result<()>>>,
+    // pub pending_add_external_address: IndexMap<Multiaddr, oneshot::Sender<std::io::Result<()>>>,
     pub pending_remove_external_address: IndexMap<Multiaddr, oneshot::Sender<std::io::Result<()>>>,
 
     pub pending_add_peer_address:
@@ -140,7 +140,7 @@ where
             pending_disconnection_by_connection_id: IndexMap::new(),
             pending_listen_on: IndexMap::new(),
             pending_remove_listener: IndexMap::new(),
-            pending_add_external_address: IndexMap::new(),
+            // pending_add_external_address: IndexMap::new(),
             pending_remove_external_address: IndexMap::new(),
             pending_add_peer_address: IndexMap::new(),
             floodsub_listener: Default::default(),
@@ -230,9 +230,10 @@ where
                     self.pending_remove_listener.insert(listener_id, resp);
                 }
                 SwarmCommand::AddExternalAddress { address, resp } => {
-                    let addr = address.clone();
+                    // let addr = address.clone();
                     swarm.add_external_address(address);
-                    self.pending_add_external_address.insert(addr, resp);
+                    // self.pending_add_external_address.insert(addr, resp);
+                    let _ = resp.send(Ok(()));
                 }
                 SwarmCommand::RemoveExternalAddress { address, resp } => {
                     swarm.remove_external_address(&address);
@@ -818,9 +819,7 @@ where
             SwarmEvent::Dialing { .. } => {}
             SwarmEvent::NewExternalAddrCandidate { .. } => {}
             SwarmEvent::ExternalAddrConfirmed { address } => {
-                if let Some(ch) = self.pending_add_external_address.shift_remove(&address) {
-                    let _ = ch.send(Ok(()));
-                }
+                tracing::debug!(%address, "external address confirmed");
             }
             SwarmEvent::ExternalAddrExpired { address } => {
                 if let Some(ch) = self.pending_remove_external_address.shift_remove(&address) {
@@ -963,11 +962,11 @@ where
     pub fn process_floodsub_event(&mut self, event: FloodsubEvent) {
         let (topics, event) = match event {
             FloodsubEvent::Message(libp2p::floodsub::FloodsubMessage {
-                source,
-                data,
-                sequence_number,
-                topics,
-            }) => {
+                                       source,
+                                       data,
+                                       sequence_number,
+                                       topics,
+                                   }) => {
                 let message = FloodsubMessage {
                     source,
                     data,
@@ -1194,15 +1193,15 @@ where
             } => match result {
                 QueryResult::Bootstrap(result) => match result {
                     Ok(BootstrapOk {
-                        peer,
-                        num_remaining,
-                    }) => {
+                           peer,
+                           num_remaining,
+                       }) => {
                         tracing::info!(?peer, ?num_remaining, "kademlia bootstrap");
                     }
                     Err(BootstrapError::Timeout {
-                        peer,
-                        num_remaining,
-                    }) => {
+                            peer,
+                            num_remaining,
+                        }) => {
                         tracing::info!(?peer, ?num_remaining, "kademlia bootstrap timeout");
                     }
                 },
@@ -1259,8 +1258,8 @@ where
                         }
                     }
                     Ok(GetRecordOk::FinishedWithNoAdditionalRecord {
-                        cache_candidates: _,
-                    }) => {
+                           cache_candidates: _,
+                       }) => {
                         if let Some(mut ch) = self.pending_dht_get_record.shift_remove(&id) {
                             ch.close_channel();
                         }
