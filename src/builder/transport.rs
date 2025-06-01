@@ -3,27 +3,27 @@ use either::Either;
 #[allow(unused_imports)]
 use futures::future::Either as FutureEither;
 use libp2p::core::muxing::StreamMuxerBox;
-use libp2p::core::transport::Boxed;
 use libp2p::core::transport::dummy::{DummyStream, DummyTransport};
 #[allow(unused_imports)]
 use libp2p::core::transport::timeout::TransportTimeout;
 use libp2p::core::transport::upgrade::Version;
+use libp2p::core::transport::Boxed;
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "dns")]
 use libp2p::dns::{ResolverConfig, ResolverOpts};
 use libp2p::identity;
 use std::fmt::{Debug, Formatter};
 
-use libp2p::PeerId;
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "pnet")]
 use libp2p::pnet::{PnetConfig, PreSharedKey};
 use libp2p::relay::client::Transport as ClientTransport;
+use libp2p::PeerId;
 use std::io;
 use std::time::Duration;
 use {
-    libp2p::Transport,
     libp2p::core::transport::{MemoryTransport, OrTransport},
+    libp2p::Transport,
 };
 
 /// Transport type.
@@ -75,22 +75,22 @@ impl Default for TransportConfig {
     fn default() -> Self {
         Self {
             #[cfg(feature = "tcp")]
-            enable_tcp: true,
+            enable_tcp: false,
             #[cfg(feature = "tcp")]
             tcp_config_callback: Box::new(|config| config),
             #[cfg(feature = "quic")]
-            enable_quic: true,
+            enable_quic: false,
             #[cfg(feature = "websocket")]
             enable_websocket: false,
             #[cfg(feature = "websocket")]
             websocket_pem: None,
             #[cfg(feature = "websocket")]
-            enable_secure_websocket: true,
+            enable_secure_websocket: false,
             enable_memory_transport: false,
             #[cfg(feature = "quic")]
             quic_config_callback: Box::new(|_| {}),
             #[cfg(feature = "dns")]
-            enable_dns: true,
+            enable_dns: false,
             #[cfg(feature = "webtransport")]
             enable_webtransport: false,
             #[cfg(feature = "webrtc")]
@@ -190,7 +190,7 @@ pub(crate) fn build_transport(
         #[cfg(feature = "websocket")]
         websocket_pem,
         #[cfg(feature = "webtransport")]
-            enable_webtransport: _,
+        enable_webtransport: _,
         #[cfg(feature = "pnet")]
         enable_pnet,
         #[cfg(feature = "pnet")]
@@ -206,9 +206,9 @@ pub(crate) fn build_transport(
     #[cfg(feature = "noise")]
     use libp2p::noise;
     #[cfg(feature = "quic")]
-    use libp2p::quic::{Config as QuicConfig, tokio::Transport as TokioQuicTransport};
+    use libp2p::quic::{tokio::Transport as TokioQuicTransport, Config as QuicConfig};
     #[cfg(feature = "tcp")]
-    use libp2p::tcp::{Config as GenTcpConfig, tokio::Transport as TokioTcpTransport};
+    use libp2p::tcp::{tokio::Transport as TokioTcpTransport, Config as GenTcpConfig};
     #[cfg(feature = "tls")]
     use libp2p::tls;
 
@@ -496,16 +496,16 @@ pub(crate) fn build_transport(
 mod dual_transport {
     use either::Either;
     use futures::{
-        TryFutureExt,
         future::{self, MapOk},
+        TryFutureExt,
     };
     use libp2p::{
-        PeerId,
         core::{
-            UpgradeInfo,
             either::EitherFuture,
             upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
+            UpgradeInfo,
         },
+        PeerId,
     };
     use std::iter::{Chain, Map};
 
@@ -550,8 +550,8 @@ mod dual_transport {
 
     impl<C, A, B, TA, TB, EA, EB> InboundConnectionUpgrade<C> for SelectSecurityUpgrade<A, B>
     where
-        A: InboundConnectionUpgrade<C, Output = (PeerId, TA), Error = EA>,
-        B: InboundConnectionUpgrade<C, Output = (PeerId, TB), Error = EB>,
+        A: InboundConnectionUpgrade<C, Output=(PeerId, TA), Error=EA>,
+        B: InboundConnectionUpgrade<C, Output=(PeerId, TB), Error=EB>,
     {
         type Output = (PeerId, future::Either<TA, TB>);
         type Error = Either<EA, EB>;
@@ -565,14 +565,14 @@ mod dual_transport {
                 Either::Left(info) => EitherFuture::First(self.0.upgrade_inbound(sock, info)),
                 Either::Right(info) => EitherFuture::Second(self.1.upgrade_inbound(sock, info)),
             }
-            .map_ok(future::Either::factor_first)
+                .map_ok(future::Either::factor_first)
         }
     }
 
     impl<C, A, B, TA, TB, EA, EB> OutboundConnectionUpgrade<C> for SelectSecurityUpgrade<A, B>
     where
-        A: OutboundConnectionUpgrade<C, Output = (PeerId, TA), Error = EA>,
-        B: OutboundConnectionUpgrade<C, Output = (PeerId, TB), Error = EB>,
+        A: OutboundConnectionUpgrade<C, Output=(PeerId, TA), Error=EA>,
+        B: OutboundConnectionUpgrade<C, Output=(PeerId, TB), Error=EB>,
     {
         type Output = (PeerId, future::Either<TA, TB>);
         type Error = Either<EA, EB>;
@@ -586,7 +586,7 @@ mod dual_transport {
                 Either::Left(info) => EitherFuture::First(self.0.upgrade_outbound(sock, info)),
                 Either::Right(info) => EitherFuture::Second(self.1.upgrade_outbound(sock, info)),
             }
-            .map_ok(future::Either::factor_first)
+                .map_ok(future::Either::factor_first)
         }
     }
 }
