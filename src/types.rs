@@ -7,14 +7,15 @@ use indexmap::IndexSet;
 use libp2p::gossipsub::MessageId;
 use libp2p::kad::{Mode, PeerInfo, PeerRecord, Quorum, RecordKey};
 use libp2p::request_response::InboundRequestId;
-use libp2p::swarm::ConnectionId;
 use libp2p::swarm::derive_prelude::ListenerId;
 use libp2p::swarm::dial_opts::DialOpts;
+use libp2p::swarm::ConnectionId;
 use libp2p::{Multiaddr, PeerId, StreamProtocol};
 use std::collections::HashSet;
 
 type Result<T> = std::io::Result<T>;
 
+#[derive(Debug)]
 pub enum Command<T = ()> {
     Swarm(SwarmCommand),
     Pubsub(PubsubCommand),
@@ -63,6 +64,7 @@ impl From<RendezvousCommand> for Command {
     }
 }
 
+#[derive(Debug)]
 pub enum SwarmCommand {
     Dial {
         opt: DialOpts,
@@ -108,6 +110,7 @@ pub enum SwarmCommand {
     },
 }
 
+#[derive(Debug)]
 pub enum PubsubCommand {
     //TODO: Maybe return stream?
     Subscribe {
@@ -136,6 +139,7 @@ pub enum PubsubCommand {
     Publish(PubsubPublishType),
 }
 
+#[derive(Debug)]
 pub enum PubsubPublishType {
     Gossipsub {
         topic: String,
@@ -145,6 +149,7 @@ pub enum PubsubPublishType {
     Floodsub(PubsubFloodsubPublish, oneshot::Sender<Result<()>>),
 }
 
+#[derive(Debug)]
 pub enum PubsubFloodsubPublish {
     Publish { topic: String, data: Bytes },
     PublishAny { topic: String, data: Bytes },
@@ -152,6 +157,7 @@ pub enum PubsubFloodsubPublish {
     PublishManyAny { topics: Vec<String>, data: Bytes },
 }
 
+#[derive(Debug)]
 pub enum DHTCommand {
     FindPeer {
         peer_id: PeerId,
@@ -167,7 +173,7 @@ pub enum DHTCommand {
     },
     GetProviders {
         key: RecordKey,
-        resp: oneshot::Sender<Result<mpsc::Receiver<std::io::Result<HashSet<PeerId>>>>>,
+        resp: oneshot::Sender<Result<mpsc::Receiver<Result<HashSet<PeerId>>>>>,
     },
     SetDHTMode {
         mode: Option<Mode>,
@@ -195,18 +201,19 @@ pub enum DHTCommand {
     },
 }
 
+#[derive(Debug)]
 pub enum RequestResponseCommand {
     SendRequests {
         protocol: Option<StreamProtocol>,
         peers: IndexSet<PeerId>,
         request: Bytes,
-        resp: oneshot::Sender<Result<BoxStream<'static, (PeerId, std::io::Result<Bytes>)>>>,
+        resp: oneshot::Sender<Result<BoxStream<'static, (PeerId, Result<Bytes>)>>>,
     },
     SendRequest {
         protocol: Option<StreamProtocol>,
         peer_id: PeerId,
         request: Bytes,
-        resp: oneshot::Sender<Result<BoxFuture<'static, std::io::Result<Bytes>>>>,
+        resp: oneshot::Sender<Result<BoxFuture<'static, Result<Bytes>>>>,
     },
     SendResponse {
         protocol: Option<StreamProtocol>,
@@ -222,6 +229,7 @@ pub enum RequestResponseCommand {
 }
 
 #[cfg(feature = "stream")]
+#[derive(Debug)]
 pub enum StreamCommand {
     NewStream {
         protocol: StreamProtocol,
@@ -232,6 +240,7 @@ pub enum StreamCommand {
     },
 }
 
+#[derive(Debug)]
 pub enum RendezvousCommand {
     Register {
         namespace: String,
@@ -253,13 +262,14 @@ pub enum RendezvousCommand {
     },
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum PubsubEvent<M> {
     Subscribed { peer_id: PeerId },
     Unsubscribed { peer_id: PeerId },
     Message { message: M },
 }
 
+#[derive(Debug)]
 #[non_exhaustive]
 pub struct GossipsubMessage {
     pub message_id: MessageId,
@@ -296,7 +306,7 @@ impl Clone for GossipsubMessage {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct FloodsubMessage {
     pub source: PeerId,
