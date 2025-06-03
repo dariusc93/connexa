@@ -93,6 +93,11 @@ where
         ConnexaRendezvous::new(self)
     }
 
+    /// Keypair that was used during initialization
+    pub fn keypair(&self) -> &Keypair {
+        &self.keypair
+    }
+
     /// Shuts down the underlining task
     /// Note that this does not gracefully shut down the task
     pub fn shutdown(self) {
