@@ -30,6 +30,9 @@ webrtc = ["dep:libp2p-webrtc", "dep:libp2p-webrtc-websys"]
 websocket = ["libp2p/websocket", "libp2p/websocket-websys"]
 webtransport = ["libp2p/webtransport-websys"]
 
+[workspace]
+members = ["examples/gossipsub"]
+
 [workspace.dependencies]
 async-rt = "0.1.5"
 async-trait = { version = "0.1.88" }
