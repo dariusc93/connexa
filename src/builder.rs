@@ -9,6 +9,7 @@ use crate::builder::transport::TransportConfig;
 use crate::handle::Connexa;
 use crate::task::ConnexaTask;
 use executor::ConnexaExecutor;
+use libp2p::Swarm;
 use libp2p::autonat::v1::Config as AutonatV1Config;
 use libp2p::autonat::v2::client::Config as AutonatV2ClientConfig;
 use libp2p::floodsub::FloodsubConfig;
@@ -21,7 +22,6 @@ use libp2p::ping::Config as PingConfig;
 use libp2p::pnet::PreSharedKey;
 use libp2p::relay::Config as RelayServerConfig;
 use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
-use libp2p::Swarm;
 use libp2p_connection_limits::ConnectionLimits;
 use std::fmt::Debug;
 // Since this used for quic duration, we will feature gate it to satisfy lint

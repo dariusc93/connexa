@@ -74,7 +74,7 @@ impl Connexa {
         ConnexaDht::new(self)
     }
 
-    /// Returns a handle for request-response functions 
+    /// Returns a handle for request-response functions
     pub fn request_response(&self) -> ConnexaRequestResponse {
         ConnexaRequestResponse::new(self)
     }

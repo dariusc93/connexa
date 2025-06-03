@@ -27,8 +27,8 @@ use libp2p::kad::{
 };
 use libp2p::mdns::Event as MdnsEvent;
 use libp2p::ping::Event as PingEvent;
-use libp2p::relay::client::Event as RelayClientEvent;
 use libp2p::relay::Event as RelayServerEvent;
+use libp2p::relay::client::Event as RelayClientEvent;
 use libp2p::rendezvous::client::Event as RendezvousClientEvent;
 use libp2p::rendezvous::server::Event as RendezvousServerEvent;
 use libp2p::swarm::derive_prelude::ListenerId;
@@ -963,11 +963,11 @@ where
     pub fn process_floodsub_event(&mut self, event: FloodsubEvent) {
         let (topics, event) = match event {
             FloodsubEvent::Message(libp2p::floodsub::FloodsubMessage {
-                                       source,
-                                       data,
-                                       sequence_number,
-                                       topics,
-                                   }) => {
+                source,
+                data,
+                sequence_number,
+                topics,
+            }) => {
                 let message = FloodsubMessage {
                     source,
                     data,
@@ -1194,15 +1194,15 @@ where
             } => match result {
                 QueryResult::Bootstrap(result) => match result {
                     Ok(BootstrapOk {
-                           peer,
-                           num_remaining,
-                       }) => {
+                        peer,
+                        num_remaining,
+                    }) => {
                         tracing::info!(?peer, ?num_remaining, "kademlia bootstrap");
                     }
                     Err(BootstrapError::Timeout {
-                            peer,
-                            num_remaining,
-                        }) => {
+                        peer,
+                        num_remaining,
+                    }) => {
                         tracing::info!(?peer, ?num_remaining, "kademlia bootstrap timeout");
                     }
                 },
@@ -1259,8 +1259,8 @@ where
                         }
                     }
                     Ok(GetRecordOk::FinishedWithNoAdditionalRecord {
-                           cache_candidates: _,
-                       }) => {
+                        cache_candidates: _,
+                    }) => {
                         if let Some(mut ch) = self.pending_dht_get_record.shift_remove(&id) {
                             ch.close_channel();
                         }
