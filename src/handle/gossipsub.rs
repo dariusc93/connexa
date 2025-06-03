@@ -6,12 +6,15 @@ use futures::channel::oneshot;
 use futures::stream::BoxStream;
 use libp2p::PeerId;
 
-pub struct ConnexaGossipsub<'a> {
-    connexa: &'a Connexa,
+pub struct ConnexaGossipsub<'a, T> {
+    connexa: &'a Connexa<T>,
 }
 
-impl<'a> ConnexaGossipsub<'a> {
-    pub(crate) fn new(connexa: &'a Connexa) -> Self {
+impl<'a, T> ConnexaGossipsub<'a, T>
+where
+    T: Send + Sync + 'static,
+{
+    pub(crate) fn new(connexa: &'a Connexa<T>) -> Self {
         Self { connexa }
     }
 

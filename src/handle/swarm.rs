@@ -7,12 +7,15 @@ use libp2p::swarm::ConnectionId;
 use libp2p::swarm::dial_opts::DialOpts;
 use libp2p::{Multiaddr, PeerId};
 
-pub struct ConnexaSwarm<'a> {
-    connexa: &'a Connexa,
+pub struct ConnexaSwarm<'a, T> {
+    connexa: &'a Connexa<T>,
 }
 
-impl<'a> ConnexaSwarm<'a> {
-    pub(crate) fn new(connexa: &'a Connexa) -> Self {
+impl<'a, T> ConnexaSwarm<'a, T>
+where
+    T: Send + Sync + 'static,
+{
+    pub(crate) fn new(connexa: &'a Connexa<T>) -> Self {
         Self { connexa }
     }
     pub async fn dial(&self, target: impl Into<DialOpts>) -> crate::handle::Result<ConnectionId> {

@@ -27,38 +27,38 @@ pub enum Command<T = ()> {
     Custom(T),
 }
 
-impl From<SwarmCommand> for Command {
+impl<T> From<SwarmCommand> for Command<T> {
     fn from(cmd: SwarmCommand) -> Self {
         Command::Swarm(cmd)
     }
 }
 
-impl From<PubsubCommand> for Command {
+impl<T> From<PubsubCommand> for Command<T> {
     fn from(cmd: PubsubCommand) -> Self {
         Command::Pubsub(cmd)
     }
 }
 
-impl From<DHTCommand> for Command {
+impl<T> From<DHTCommand> for Command<T> {
     fn from(cmd: DHTCommand) -> Self {
         Command::Dht(cmd)
     }
 }
 
-impl From<RequestResponseCommand> for Command {
+impl<T> From<RequestResponseCommand> for Command<T> {
     fn from(cmd: RequestResponseCommand) -> Self {
         Command::RequestResponse(cmd)
     }
 }
 
 #[cfg(feature = "stream")]
-impl From<StreamCommand> for Command {
+impl<T> From<StreamCommand> for Command<T> {
     fn from(cmd: StreamCommand) -> Self {
         Command::Stream(cmd)
     }
 }
 
-impl From<RendezvousCommand> for Command {
+impl<T> From<RendezvousCommand> for Command<T> {
     fn from(cmd: RendezvousCommand) -> Self {
         Command::Rendezvous(cmd)
     }

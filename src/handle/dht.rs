@@ -8,12 +8,15 @@ use libp2p::kad::{Mode, PeerInfo, PeerRecord, Quorum, RecordKey};
 use libp2p::{Multiaddr, PeerId};
 use std::collections::HashSet;
 
-pub struct ConnexaDht<'a> {
-    connexa: &'a Connexa,
+pub struct ConnexaDht<'a, T> {
+    connexa: &'a Connexa<T>,
 }
 
-impl<'a> ConnexaDht<'a> {
-    pub(crate) fn new(connexa: &'a Connexa) -> Self {
+impl<'a, T> ConnexaDht<'a, T>
+where
+    T: Send + Sync + 'static,
+{
+    pub(crate) fn new(connexa: &'a Connexa<T>) -> Self {
         Self { connexa }
     }
 

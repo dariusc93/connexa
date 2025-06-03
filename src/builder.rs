@@ -40,6 +40,7 @@ where
     C: NetworkBehaviour,
     C: Send,
     C::ToSwarm: Debug,
+    T: Send + Sync + 'static,
 {
     keypair: Keypair,
     custom_behaviour: Option<C>,
@@ -102,7 +103,7 @@ where
     C: NetworkBehaviour,
     C: Send,
     C::ToSwarm: Debug,
-    T: std::marker::Send + 'static,
+    T: Send + Sync + 'static,
 {
     /// Create a new instance
     pub fn new_identity() -> Self {

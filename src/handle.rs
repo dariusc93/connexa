@@ -45,7 +45,7 @@ impl<T> Connexa<T> {
     }
 }
 
-impl Debug for Connexa {
+impl<T> Debug for Connexa<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Connexa")
             .field("public_key", &self.keypair.public())
@@ -53,40 +53,43 @@ impl Debug for Connexa {
     }
 }
 
-impl Connexa {
+impl<T> Connexa<T>
+where
+    T: Send + Sync + 'static,
+{
     /// Returns a handle for swarm functions
-    pub fn swarm(&self) -> ConnexaSwarm {
+    pub fn swarm(&self) -> ConnexaSwarm<T> {
         ConnexaSwarm::new(self)
     }
 
     /// Returns a handle for floodsub functions
-    pub fn floodsub(&self) -> ConnexaFloodsub {
+    pub fn floodsub(&self) -> ConnexaFloodsub<T> {
         ConnexaFloodsub::new(self)
     }
 
     /// Returns a handle for gossipsub functions   
-    pub fn gossipsub(&self) -> ConnexaGossipsub {
+    pub fn gossipsub(&self) -> ConnexaGossipsub<T> {
         ConnexaGossipsub::new(self)
     }
 
     /// Returns a handle for dht functions  
-    pub fn dht(&self) -> ConnexaDht {
+    pub fn dht(&self) -> ConnexaDht<T> {
         ConnexaDht::new(self)
     }
 
     /// Returns a handle for request-response functions
-    pub fn request_response(&self) -> ConnexaRequestResponse {
+    pub fn request_response(&self) -> ConnexaRequestResponse<T> {
         ConnexaRequestResponse::new(self)
     }
 
     /// Returns a handle for stream functions
     #[cfg(feature = "stream")]
-    pub fn stream(&self) -> ConnexaStream {
+    pub fn stream(&self) -> ConnexaStream<T> {
         ConnexaStream::new(self)
     }
 
     /// Returns a handle for rendezvous functions
-    pub fn rendezvous(&self) -> ConnexaRendezvous {
+    pub fn rendezvous(&self) -> ConnexaRendezvous<T> {
         ConnexaRendezvous::new(self)
     }
 

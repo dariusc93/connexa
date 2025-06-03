@@ -8,12 +8,15 @@ use indexmap::IndexSet;
 use libp2p::request_response::InboundRequestId;
 use libp2p::{PeerId, StreamProtocol};
 
-pub struct ConnexaRequestResponse<'a> {
-    connexa: &'a Connexa,
+pub struct ConnexaRequestResponse<'a, T> {
+    connexa: &'a Connexa<T>,
 }
 
-impl<'a> ConnexaRequestResponse<'a> {
-    pub(crate) fn new(connexa: &'a Connexa) -> Self {
+impl<'a, T> ConnexaRequestResponse<'a, T>
+where
+    T: Send + Sync + 'static,
+{
+    pub(crate) fn new(connexa: &'a Connexa<T>) -> Self {
         Self { connexa }
     }
 

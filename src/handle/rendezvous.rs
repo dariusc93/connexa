@@ -2,12 +2,15 @@ use crate::handle::Connexa;
 
 // TODO
 #[allow(dead_code)]
-pub struct ConnexaRendezvous<'a> {
-    connexa: &'a Connexa,
+pub struct ConnexaRendezvous<'a, T> {
+    connexa: &'a Connexa<T>,
 }
 
-impl<'a> ConnexaRendezvous<'a> {
-    pub(crate) fn new(connexa: &'a Connexa) -> Self {
+impl<'a, T> ConnexaRendezvous<'a, T>
+where
+    T: Send + Sync + 'static,
+{
+    pub(crate) fn new(connexa: &'a Connexa<T>) -> Self {
         Self { connexa }
     }
 }

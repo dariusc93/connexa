@@ -3,12 +3,15 @@ use crate::types::StreamCommand;
 use futures::channel::oneshot;
 use libp2p::StreamProtocol;
 
-pub struct ConnexaStream<'a> {
-    connexa: &'a Connexa,
+pub struct ConnexaStream<'a, T> {
+    connexa: &'a Connexa<T>,
 }
 
-impl<'a> ConnexaStream<'a> {
-    pub(crate) fn new(connexa: &'a Connexa) -> Self {
+impl<'a, T> ConnexaStream<'a, T>
+where
+    T: Send + Sync + 'static,
+{
+    pub(crate) fn new(connexa: &'a Connexa<T>) -> Self {
         Self { connexa }
     }
 
