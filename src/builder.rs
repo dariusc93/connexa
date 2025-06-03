@@ -9,7 +9,6 @@ use crate::builder::transport::TransportConfig;
 use crate::handle::Connexa;
 use crate::task::ConnexaTask;
 use executor::ConnexaExecutor;
-use libp2p::Swarm;
 use libp2p::autonat::v1::Config as AutonatV1Config;
 use libp2p::autonat::v2::client::Config as AutonatV2ClientConfig;
 use libp2p::floodsub::FloodsubConfig;
@@ -22,6 +21,7 @@ use libp2p::ping::Config as PingConfig;
 use libp2p::pnet::PreSharedKey;
 use libp2p::relay::Config as RelayServerConfig;
 use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
+use libp2p::Swarm;
 use libp2p_connection_limits::ConnectionLimits;
 use std::fmt::Debug;
 // Since this used for quic duration, we will feature gate it to satisfy lint
@@ -47,7 +47,7 @@ where
     custom_task_callback: Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, T) + 'static + Send>,
     custom_event_callback:
         Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, C::ToSwarm) + 'static + Send>,
-    swarm_event_callback: Box<dyn Fn(&SwarmEvent<C>) + 'static + Send>,
+    swarm_event_callback: Box<dyn Fn(&SwarmEvent<behaviour::BehaviourEvent<C>>) + 'static + Send>,
     config: Config,
     swarm_config: Box<dyn Fn(libp2p::swarm::Config) -> libp2p::swarm::Config>,
     transport_config: TransportConfig,
@@ -133,6 +133,41 @@ where
         F: Fn(libp2p::swarm::Config) -> libp2p::swarm::Config + 'static,
     {
         self.swarm_config = Box::new(f);
+        self
+    }
+
+    /// Set a file descriptor limit.
+    /// Note that this is only available on Unix-based operating systems, while others will only output
+    /// a warning in the logs
+    pub fn set_file_descriptor_limit(mut self, limit: FileDescLimit) -> Self {
+        self.file_descriptor_limits = Some(limit);
+        self
+    }
+
+    /// Set a callback for custom task events.
+    pub fn set_custom_task_callback<F>(mut self, f: F) -> Self
+    where
+        F: Fn(&mut Swarm<behaviour::Behaviour<C>>, T) + 'static + Send,
+    {
+        self.custom_task_callback = Box::new(f);
+        self
+    }
+
+    /// Handles events from the custom behaviour.
+    pub fn set_custom_event_callback<F>(mut self, f: F) -> Self
+    where
+        F: Fn(&mut Swarm<behaviour::Behaviour<C>>, C::ToSwarm) + 'static + Send,
+    {
+        self.custom_event_callback = Box::new(f);
+        self
+    }
+
+    /// Handles libp2p swarm events
+    pub fn set_swarm_event_callback<F>(mut self, f: F) -> Self
+    where
+        F: Fn(&SwarmEvent<behaviour::BehaviourEvent<C>>) + 'static + Send,
+    {
+        self.swarm_event_callback = Box::new(f);
         self
     }
 

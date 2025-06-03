@@ -54,7 +54,7 @@ where
     pub custom_task_callback: Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, T) + 'static + Send>,
     pub custom_event_callback:
         Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, C::ToSwarm) + 'static + Send>,
-    pub swarm_event_callback: Box<dyn Fn(&SwarmEvent<C>) + 'static + Send>,
+    pub swarm_event_callback: Box<dyn Fn(&SwarmEvent<BehaviourEvent<C>>) + 'static + Send>,
 
     /// A listener for sending dht records for manual validation
     pub dht_put_record_sender:
@@ -168,7 +168,7 @@ where
 
     pub fn set_swarm_event_callback<F>(&mut self, callback: F)
     where
-        F: Fn(&SwarmEvent<C>) + Send + 'static,
+        F: Fn(&SwarmEvent<BehaviourEvent<C>>) + Send + 'static,
     {
         self.swarm_event_callback = Box::new(callback);
     }
@@ -724,6 +724,7 @@ where
     }
 
     pub fn process_swarm_event(&mut self, event: SwarmEvent<behaviour::BehaviourEvent<C>>) {
+        (self.swarm_event_callback)(&event);
         match event {
             SwarmEvent::Behaviour(event) => self.process_swarm_behaviour_event(event),
             SwarmEvent::ConnectionEstablished {
