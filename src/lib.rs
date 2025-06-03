@@ -8,3 +8,8 @@ pub(crate) mod types;
 pub mod dummy {
     pub use crate::behaviour::dummy::{Behaviour, DummyHandler};
 }
+
+pub mod prelude {
+    pub use crate::types::*;
+    pub use libp2p::{Multiaddr, PeerId};
+}
