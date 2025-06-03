@@ -89,6 +89,12 @@ impl Connexa {
     pub fn rendezvous(&self) -> ConnexaRendezvous {
         ConnexaRendezvous::new(self)
     }
+
+    /// Shuts down the underlining task
+    /// Note that this does not gracefully shut down the task
+    pub fn shutdown(self) {
+        self.to_task.abort();
+    }
 }
 
 impl<T> Connexa<T> {
