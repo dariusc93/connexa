@@ -55,7 +55,7 @@ where
 }
 
 // TODO: Instead of providing the optional configuration,
-//       we should instead use a FnOnce to pass the default configuration
+//       we should instead use a Fn pointer to pass the default configuration
 //       and allow changes there instead, which would be used when constructing
 //       the behaviour
 #[derive(Default)]
@@ -104,11 +104,13 @@ where
     C::ToSwarm: Debug,
     T: std::marker::Send + 'static,
 {
+    /// Create a new instance
     pub fn new_identity() -> Self {
         let keypair = Keypair::generate_ed25519();
         Self::with_existing_identity(&keypair)
     }
 
+    /// Create an instance with an existing keypair.
     pub fn with_existing_identity(keypair: &Keypair) -> Self {
         let keypair = keypair.clone();
         Self {
@@ -154,6 +156,7 @@ where
         self
     }
 
+    /// Enables DCuTR
     pub fn with_dcutr(mut self) -> Self {
         self.protocols.dcutr = true;
         self
@@ -192,19 +195,21 @@ where
         self
     }
 
+    /// Enables stream
     #[cfg(feature = "stream")]
     pub fn with_streams(mut self) -> Self {
         self.protocols.streams = true;
         self
     }
 
-    /// Enables pubsub
+    /// Enables gossipsub
     pub fn with_gossipsub(mut self, config: GossipsubConfig) -> Self {
         self.protocols.gossipsub = true;
         self.config.gossipsub_config.replace(config);
         self
     }
 
+    /// Enables floodsub
     pub fn with_floodsub(mut self, config: FloodsubConfig) -> Self {
         self.protocols.floodsub = true;
         self.config.floodsub_config.replace(config);
@@ -229,19 +234,21 @@ where
         self
     }
 
-    /// Enables autonat
+    /// Enables autonat v1
     pub fn with_autonat_v1(mut self, config: AutonatV1Config) -> Self {
         self.protocols.autonat_v1 = true;
         self.config.autonat_v1_config.replace(config);
         self
     }
 
+    /// Enables autonat v2 client
     pub fn with_autonat_v2_client(mut self, config: AutonatV2ClientConfig) -> Self {
         self.protocols.autonat_v2_client = true;
         self.config.autonat_v2_client_config.replace(config);
         self
     }
 
+    /// Enables autonat v2 server
     pub fn with_autonat_v2_server(mut self) -> Self {
         self.protocols.autonat_v2_server = true;
         self
@@ -255,11 +262,14 @@ where
     }
 
     /// Set a custom behaviour
+    /// Note that if you want to communicate or interact with the behaviour that you would need to set a callback via
+    /// `custom_event_callback` and `custom_task_callback`.
     pub fn with_custom_behaviour(mut self, behaviour: C) -> Self {
         self.custom_behaviour = Some(behaviour);
         self
     }
 
+    /// Enables quic transport
     #[cfg(feature = "quic")]
     pub fn enable_quic(self) -> Self {
         //Note: It might be wise to set the timeout and keepalive low on
@@ -273,6 +283,7 @@ where
         })
     }
 
+    /// Enables quic transport with custom configuration
     #[cfg(feature = "quic")]
     pub fn enable_quic_with_config<F>(mut self, f: F) -> Self
     where
@@ -284,11 +295,13 @@ where
         self
     }
 
+    /// Enables tcp transport
     #[cfg(feature = "tcp")]
     pub fn enable_tcp(self) -> Self {
         self.enable_tcp_with_config(|config| config.nodelay(true))
     }
 
+    /// Enables tcp transport with custom configuration
     #[cfg(feature = "tcp")]
     pub fn enable_tcp_with_config<F>(mut self, f: F) -> Self
     where
@@ -300,6 +313,7 @@ where
         self
     }
 
+    /// Enables pnet transport
     #[cfg(feature = "pnet")]
     pub fn enable_pnet(mut self, psk: PreSharedKey) -> Self {
         self.transport_config.enable_pnet = true;
@@ -307,12 +321,14 @@ where
         self
     }
 
+    /// Enables websocket transport
     #[cfg(feature = "websocket")]
     pub fn enable_websocket(mut self) -> Self {
         self.transport_config.enable_websocket = true;
         self
     }
 
+    /// Enables secure websocket transport
     #[cfg(feature = "websocket")]
     pub fn enable_secure_websocket(mut self, pem: Option<(Vec<String>, String)>) -> Self {
         self.transport_config.enable_secure_websocket = true;
@@ -321,11 +337,13 @@ where
         self
     }
 
+    /// Enables DNS
     #[cfg(feature = "dns")]
     pub fn enable_dns(self) -> Self {
         self.enable_dns_with_resolver(DnsResolver::default())
     }
 
+    /// Enables DNS with a specific resolver
     #[cfg(feature = "dns")]
     pub fn enable_dns_with_resolver(mut self, resolver: DnsResolver) -> Self {
         self.transport_config.dns_resolver = Some(resolver);
@@ -333,6 +351,7 @@ where
         self
     }
 
+    /// Enables memory transport
     pub fn enable_memory_transport(mut self) -> Self {
         self.transport_config.enable_memory_transport = true;
         self

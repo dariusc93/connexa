@@ -54,37 +54,45 @@ impl Debug for Connexa {
 }
 
 impl Connexa {
+    /// Returns a handle for swarm functions
     pub fn swarm(&self) -> ConnexaSwarm {
         ConnexaSwarm::new(self)
     }
 
+    /// Returns a handle for floodsub functions
     pub fn floodsub(&self) -> ConnexaFloodsub {
         ConnexaFloodsub::new(self)
     }
 
+    /// Returns a handle for gossipsub functions   
     pub fn gossipsub(&self) -> ConnexaGossipsub {
         ConnexaGossipsub::new(self)
     }
 
+    /// Returns a handle for dht functions  
     pub fn dht(&self) -> ConnexaDht {
         ConnexaDht::new(self)
     }
 
+    /// Returns a handle for request-response functions 
     pub fn request_response(&self) -> ConnexaRequestResponse {
         ConnexaRequestResponse::new(self)
     }
 
+    /// Returns a handle for stream functions
     #[cfg(feature = "stream")]
     pub fn stream(&self) -> ConnexaStream {
         ConnexaStream::new(self)
     }
 
+    /// Returns a handle for rendezvous functions
     pub fn rendezvous(&self) -> ConnexaRendezvous {
         ConnexaRendezvous::new(self)
     }
 }
 
 impl<T> Connexa<T> {
+    /// Send a custom event to the running task that can be handled by the set `ConnexaTask::custom_task_callback`
     pub async fn send_custom_event(&self, event: T) -> Result<()>
     where
         T: Send + Sync + 'static,
