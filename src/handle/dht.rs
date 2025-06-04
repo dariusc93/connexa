@@ -30,8 +30,8 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
-    pub async fn provide(&self, key: impl Into<RecordKey>) -> std::io::Result<()> {
-        let key = key.into();
+    pub async fn provide(&self, key: impl ToRecordKey) -> std::io::Result<()> {
+        let key = key.to_record_key();
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
@@ -41,8 +41,8 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
-    pub async fn stop_provide(&self, key: impl Into<RecordKey>) -> std::io::Result<()> {
-        let key = key.into();
+    pub async fn stop_provide(&self, key: impl ToRecordKey) -> std::io::Result<()> {
+        let key = key.to_record_key();
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
@@ -54,9 +54,9 @@ where
 
     pub async fn get_providers(
         &self,
-        key: impl Into<RecordKey>,
+        key: impl ToRecordKey,
     ) -> std::io::Result<BoxStream<'static, std::io::Result<HashSet<PeerId>>>> {
-        let key = key.into();
+        let key = key.to_record_key();
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
@@ -90,9 +90,9 @@ where
 
     pub async fn get(
         &self,
-        key: impl Into<RecordKey>,
+        key: impl ToRecordKey,
     ) -> std::io::Result<BoxStream<'static, std::io::Result<PeerRecord>>> {
-        let key = key.into();
+        let key = key.to_record_key();
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
@@ -104,11 +104,11 @@ where
 
     pub async fn put(
         &self,
-        key: impl Into<RecordKey>,
+        key: impl ToRecordKey,
         data: impl Into<Bytes>,
         quorum: Quorum,
     ) -> std::io::Result<()> {
-        let key = key.into();
+        let key = key.to_record_key();
         let data = data.into();
         let (tx, rx) = oneshot::channel();
         self.connexa
