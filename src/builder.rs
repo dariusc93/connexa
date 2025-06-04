@@ -61,7 +61,7 @@ where
 //       the behaviour
 #[derive(Default)]
 pub(crate) struct Config {
-    pub kademlia_config: Option<KadConfig>,
+    pub kademlia_config: Option<(String, Box<dyn Fn(KadConfig) -> KadConfig>)>,
     pub gossipsub_config: Option<GossipsubConfig>,
     pub floodsub_config: Option<FloodsubConfig>,
     pub ping_config: Option<PingConfig>,
@@ -173,9 +173,17 @@ where
     }
 
     /// Enables kademlia
-    pub fn with_kademlia(mut self, config: KadConfig) -> Self {
+    pub fn with_kademlia(self) -> Self {
+        self.with_kademlia_with_config("/ipfs/kad/1.0.0", |config| config)
+    }
+
+    /// Enables kademlia
+    pub fn with_kademlia_with_config<F>(mut self, protocol: impl Into<String>, f: F) -> Self
+    where
+        F: Fn(KadConfig) -> KadConfig + 'static,
+    {
         self.protocols.kad = true;
-        self.config.kademlia_config = Some(config);
+        self.config.kademlia_config = Some((protocol.into(), Box::new(f)));
         self
     }
 

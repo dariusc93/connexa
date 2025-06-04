@@ -101,6 +101,11 @@ where
 
         let kad_config = config
             .kademlia_config
+            .map(|(protocol, config_cb)| {
+                let protocol = StreamProtocol::try_from_owned(protocol).expect("valid protocol");
+                let config = libp2p::kad::Config::new(protocol);
+                config_cb(config)
+            })
             .unwrap_or_else(|| libp2p::kad::Config::new(libp2p::kad::PROTOCOL_NAME));
 
         let kademlia: Toggle<Kademlia<MemoryStore>> = protocols
