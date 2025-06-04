@@ -1221,7 +1221,12 @@ where
                             let _ = ch.try_send(Ok(providers));
                         }
                     }
-                    Ok(GetProvidersOk::FinishedWithNoAdditionalRecord { closest_peers: _ }) => {}
+                    Ok(GetProvidersOk::FinishedWithNoAdditionalRecord { closest_peers: _ }) => {
+                        if let Some(mut ch) = self.pending_dht_get_provider_record.shift_remove(&id)
+                        {
+                            ch.close_channel();
+                        }
+                    }
                     Err(e) => {
                         tracing::error!(%e, "error getting providers");
                         if let Some(mut ch) = self.pending_dht_get_provider_record.shift_remove(&id)
