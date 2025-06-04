@@ -59,8 +59,14 @@ where
     /// A listener for sending dht records for manual validation
     pub dht_put_record_sender:
         IndexMap<Key, Vec<mpsc::Sender<(Record, oneshot::Sender<std::io::Result<Record>>)>>>,
+
+    pub dht_put_record_global_sender:
+        Vec<mpsc::Sender<(Record, oneshot::Sender<std::io::Result<Record>>)>>,
+
     pub dht_put_record_receiver:
         StreamMap<Key, FutureSet<oneshot::Receiver<std::io::Result<Record>>>>,
+
+    pub dht_put_record_global_receiver: FutureSet<oneshot::Receiver<std::io::Result<Record>>>,
 
     /// a listener for sending dht provider records for manual validation
     pub dht_provider_record_sender: IndexMap<
@@ -72,8 +78,17 @@ where
             )>,
         >,
     >,
+    pub dht_provider_record_global_sender: Vec<
+        mpsc::Sender<(
+            ProviderRecord,
+            oneshot::Sender<std::io::Result<ProviderRecord>>,
+        )>,
+    >,
+
     pub dht_provider_record_receiver:
         StreamMap<Key, FutureSet<oneshot::Receiver<std::io::Result<ProviderRecord>>>>,
+    pub dht_provider_record_global_receiver:
+        FutureSet<oneshot::Receiver<std::io::Result<ProviderRecord>>>,
 
     pub pending_dht_put_record: IndexMap<QueryId, oneshot::Sender<std::io::Result<()>>>,
     pub pending_dht_put_provider_record: IndexMap<QueryId, oneshot::Sender<std::io::Result<()>>>,
@@ -124,9 +139,13 @@ where
             custom_task_callback: Box::new(|_, _| ()),
             swarm_event_callback: Box::new(|_| ()),
             dht_put_record_sender: IndexMap::new(),
+            dht_put_record_global_sender: vec![],
             dht_put_record_receiver: StreamMap::new(),
+            dht_put_record_global_receiver: Default::default(),
             dht_provider_record_sender: IndexMap::new(),
+            dht_provider_record_global_sender: vec![],
             dht_provider_record_receiver: StreamMap::new(),
+            dht_provider_record_global_receiver: Default::default(),
             pending_dht_put_record: Default::default(),
             pending_dht_put_provider_record: IndexMap::new(),
             pending_dht_get_record: Default::default(),
@@ -547,6 +566,37 @@ where
 
                     let _ = resp.send(Ok(rx));
                 }
+                DHTCommand::ProviderListener {
+                    key: Some(key),
+                    resp,
+                } => {
+                    if !swarm.behaviour_mut().kademlia.is_enabled() {
+                        let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                        return;
+                    }
+
+                    let (tx, rx) = mpsc::channel(10);
+
+                    self.dht_provider_record_sender
+                        .entry(key)
+                        .or_default()
+                        .push(tx);
+
+                    let _ = resp.send(Ok(rx));
+                }
+
+                DHTCommand::ProviderListener { key: _, resp } => {
+                    if !swarm.behaviour_mut().kademlia.is_enabled() {
+                        let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                        return;
+                    }
+
+                    let (tx, rx) = mpsc::channel(10);
+
+                    self.dht_provider_record_global_sender.push(tx);
+
+                    let _ = resp.send(Ok(rx));
+                }
                 DHTCommand::SetDHTMode { mode, resp } => {
                     let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
                         let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
@@ -593,7 +643,7 @@ where
                         return;
                     };
 
-                    let id = kad.get_record(key.clone());
+                    let id = kad.get_record(key);
 
                     let (tx, rx) = mpsc::channel(10);
 
@@ -623,6 +673,33 @@ where
                     };
 
                     self.pending_dht_put_record.insert(id, resp);
+                }
+                DHTCommand::RecordListener {
+                    key: Some(key),
+                    resp,
+                } => {
+                    if !swarm.behaviour_mut().kademlia.is_enabled() {
+                        let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                        return;
+                    }
+
+                    let (tx, rx) = mpsc::channel(10);
+
+                    self.dht_put_record_sender.entry(key).or_default().push(tx);
+
+                    let _ = resp.send(Ok(rx));
+                }
+                DHTCommand::RecordListener { key: _, resp } => {
+                    if !swarm.behaviour_mut().kademlia.is_enabled() {
+                        let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                        return;
+                    }
+
+                    let (tx, rx) = mpsc::channel(10);
+
+                    self.dht_put_record_global_sender.push(tx);
+
+                    let _ = resp.send(Ok(rx));
                 }
             },
             #[cfg(feature = "stream")]
@@ -1115,6 +1192,16 @@ where
 
                     tracing::trace!(?provider_record, "kademlia add provider request");
                     let key = provider_record.key.clone();
+
+                    self.dht_provider_record_global_sender
+                        .retain(|ch_sender| !ch_sender.is_closed());
+
+                    for ch_sender in self.dht_provider_record_global_sender.iter_mut() {
+                        let (tx, rx) = oneshot::channel();
+                        let _ = ch_sender.try_send((provider_record.clone(), tx));
+                        self.dht_provider_record_global_receiver.insert(rx);
+                    }
+
                     let Some(sender) = self.dht_provider_record_sender.get_mut(&key) else {
                         return;
                     };
@@ -1159,6 +1246,16 @@ where
                     };
 
                     tracing::trace!(?record, "kademlia put record request");
+
+                    self.dht_put_record_global_sender
+                        .retain(|ch_sender| !ch_sender.is_closed());
+
+                    for ch_sender in self.dht_put_record_global_sender.iter_mut() {
+                        let (tx, rx) = oneshot::channel();
+                        let _ = ch_sender.try_send((record.clone(), tx));
+                        self.dht_put_record_global_receiver.insert(rx);
+                    }
+
                     let key = record.key.clone();
                     let Some(sender) = self.dht_put_record_sender.get_mut(&key) else {
                         return;
@@ -1443,6 +1540,33 @@ where
             }
         }
 
+        while let Poll::Ready(Some(result)) =
+            self.dht_put_record_global_receiver.poll_next_unpin(cx)
+        {
+            let record = match result {
+                Ok(Ok(record)) => record,
+                Ok(Err(e)) => {
+                    tracing::error!(?e, "dht put record failed");
+                    continue;
+                }
+                Err(e) => {
+                    tracing::error!(?e, "dht put record failed");
+                    continue;
+                }
+            };
+
+            let key = record.key.clone();
+            tracing::trace!(?key, ?record, "dht put record result");
+            if let Some(swarm) = self.swarm.as_mut() {
+                if let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() {
+                    match kad.store_mut().put(record) {
+                        Ok(_) => tracing::info!(?key, "dht put record success"),
+                        Err(e) => tracing::error!(?key, ?e, "dht put record failed"),
+                    }
+                }
+            }
+        }
+
         while let Poll::Ready(Some((key, result))) =
             self.dht_provider_record_receiver.poll_next_unpin(cx)
         {
@@ -1457,6 +1581,34 @@ where
                     continue;
                 }
             };
+
+            tracing::trace!(?key, ?record, "dht provider record result");
+            if let Some(swarm) = self.swarm.as_mut() {
+                if let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() {
+                    match kad.store_mut().add_provider(record) {
+                        Ok(_) => tracing::info!(?key, "dht add provider record success"),
+                        Err(e) => tracing::error!(?key, ?e, "dht add provider record failed"),
+                    }
+                }
+            }
+        }
+
+        while let Poll::Ready(Some(result)) =
+            self.dht_provider_record_global_receiver.poll_next_unpin(cx)
+        {
+            let record = match result {
+                Ok(Ok(record)) => record,
+                Ok(Err(e)) => {
+                    tracing::error!(?e, "dht provider record failed");
+                    continue;
+                }
+                Err(e) => {
+                    tracing::error!(?e, "dht provider record failed");
+                    continue;
+                }
+            };
+
+            let key = record.key.clone();
 
             tracing::trace!(?key, ?record, "dht provider record result");
             if let Some(swarm) = self.swarm.as_mut() {

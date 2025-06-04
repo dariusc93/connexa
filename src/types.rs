@@ -5,7 +5,7 @@ use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use indexmap::IndexSet;
 use libp2p::gossipsub::MessageId;
-use libp2p::kad::{Mode, PeerInfo, PeerRecord, Quorum, RecordKey};
+use libp2p::kad::{Mode, PeerInfo, PeerRecord, ProviderRecord, Quorum, Record, RecordKey};
 use libp2p::request_response::InboundRequestId;
 use libp2p::swarm::ConnectionId;
 use libp2p::swarm::derive_prelude::ListenerId;
@@ -175,6 +175,12 @@ pub enum DHTCommand {
         key: RecordKey,
         resp: oneshot::Sender<Result<mpsc::Receiver<Result<HashSet<PeerId>>>>>,
     },
+    ProviderListener {
+        key: Option<RecordKey>,
+        resp: oneshot::Sender<
+            Result<mpsc::Receiver<(ProviderRecord, oneshot::Sender<Result<ProviderRecord>>)>>,
+        >,
+    },
     SetDHTMode {
         mode: Option<Mode>,
         resp: oneshot::Sender<Result<()>>,
@@ -198,6 +204,10 @@ pub enum DHTCommand {
         data: Bytes,
         quorum: Quorum,
         resp: oneshot::Sender<Result<()>>,
+    },
+    RecordListener {
+        key: Option<RecordKey>,
+        resp: oneshot::Sender<Result<mpsc::Receiver<(Record, oneshot::Sender<Result<Record>>)>>>,
     },
 }
 

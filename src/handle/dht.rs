@@ -1,10 +1,10 @@
 use crate::handle::Connexa;
 use crate::types::DHTCommand;
 use bytes::Bytes;
-use futures::StreamExt;
 use futures::channel::oneshot;
 use futures::stream::BoxStream;
-use libp2p::kad::{Mode, PeerInfo, PeerRecord, Quorum, RecordKey};
+use futures::StreamExt;
+use libp2p::kad::{Mode, PeerInfo, PeerRecord, ProviderRecord, Quorum, Record, RecordKey};
 use libp2p::{Multiaddr, PeerId};
 use std::collections::HashSet;
 
@@ -66,6 +66,28 @@ where
         rx.await.map_err(std::io::Error::other)?.map(|s| s.boxed())
     }
 
+    pub async fn provider_listener(
+        &self,
+        key: impl ToOptionalRecordKey,
+    ) -> std::io::Result<
+        BoxStream<
+            'static,
+            (
+                ProviderRecord,
+                oneshot::Sender<std::io::Result<ProviderRecord>>,
+            ),
+        >,
+    > {
+        let key = key.to_record_key();
+        let (tx, rx) = oneshot::channel();
+        self.connexa
+            .to_task
+            .clone()
+            .send(DHTCommand::ProviderListener { key, resp: tx }.into())
+            .await?;
+        rx.await.map_err(std::io::Error::other)?.map(|s| s.boxed())
+    }
+
     pub async fn get(
         &self,
         key: impl Into<RecordKey>,
@@ -99,10 +121,25 @@ where
                     quorum,
                     resp: tx,
                 }
-                .into(),
+                    .into(),
             )
             .await?;
         rx.await.map_err(std::io::Error::other)?
+    }
+
+    pub async fn record_listener(
+        &self,
+        key: impl ToOptionalRecordKey,
+    ) -> std::io::Result<BoxStream<'static, (Record, oneshot::Sender<std::io::Result<Record>>)>>
+    {
+        let key = key.to_record_key();
+        let (tx, rx) = oneshot::channel();
+        self.connexa
+            .to_task
+            .clone()
+            .send(DHTCommand::RecordListener { key, resp: tx }.into())
+            .await?;
+        rx.await.map_err(std::io::Error::other)?.map(|s| s.boxed())
     }
 
     pub async fn set_mode(&self, mode: impl Into<Option<Mode>>) -> std::io::Result<()> {
@@ -137,9 +174,54 @@ where
                     addr,
                     resp: tx,
                 }
-                .into(),
+                    .into(),
             )
             .await?;
         rx.await.map_err(std::io::Error::other)?
+    }
+}
+
+pub trait ToRecordKey {
+    fn to_record_key(self) -> RecordKey;
+}
+
+pub trait ToOptionalRecordKey {
+    fn to_record_key(self) -> Option<RecordKey>;
+}
+
+impl ToRecordKey for RecordKey {
+    fn to_record_key(self) -> RecordKey {
+        self
+    }
+}
+
+impl ToRecordKey for String {
+    fn to_record_key(self) -> RecordKey {
+        self.as_bytes().to_vec().into()
+    }
+}
+
+impl ToRecordKey for &str {
+    fn to_record_key(self) -> RecordKey {
+        self.as_bytes().to_vec().into()
+    }
+}
+
+impl ToRecordKey for Vec<u8> {
+    fn to_record_key(self) -> RecordKey {
+        self.into()
+    }
+}
+
+impl ToRecordKey for Bytes {
+    fn to_record_key(self) -> RecordKey {
+        // TODO: Implement conversion upstream
+        self.to_vec().into()
+    }
+}
+
+impl<R: ToRecordKey> ToOptionalRecordKey for Option<R> {
+    fn to_record_key(self) -> Option<RecordKey> {
+        self.map(|r| r.to_record_key())
     }
 }
