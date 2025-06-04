@@ -213,10 +213,22 @@ impl ToRecordKey for Vec<u8> {
     }
 }
 
+impl ToRecordKey for &[u8] {
+    fn to_record_key(self) -> RecordKey {
+        self.to_vec().into()
+    }
+}
+
 impl ToRecordKey for Bytes {
     fn to_record_key(self) -> RecordKey {
         // TODO: Implement conversion upstream
         self.to_vec().into()
+    }
+}
+
+impl<R: ToRecordKey> ToOptionalRecordKey for R {
+    fn to_record_key(self) -> Option<RecordKey> {
+        Some(self.to_record_key())
     }
 }
 
