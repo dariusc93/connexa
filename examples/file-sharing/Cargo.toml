@@ -1,0 +1,12 @@
+[package]
+name = "file-sharing"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+tokio.workspace = true
+futures.workspace = true
+connexa = { path = "../../" }
+clap = { version = "4.5.39", features = ["derive"] }
+rustyline-async = { version = "0.4.6" }
