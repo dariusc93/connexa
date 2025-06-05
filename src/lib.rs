@@ -11,7 +11,7 @@ pub mod dummy {
 
 pub mod prelude {
     pub use crate::types::*;
-    pub use libp2p::{multiaddr::Protocol, swarm::*, Multiaddr, PeerId, StreamProtocol};
+    pub use libp2p::{Multiaddr, PeerId, StreamProtocol, multiaddr::Protocol, swarm::*};
     pub mod dht {
         pub use libp2p::kad::{Mode, Quorum};
     }

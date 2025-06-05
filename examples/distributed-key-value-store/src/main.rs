@@ -2,8 +2,8 @@ use clap::Parser;
 use connexa::builder::ConnexaBuilder;
 use connexa::prelude::dht::Quorum;
 use connexa::prelude::{DHTEvent, Multiaddr, PeerId, Protocol};
-use futures::stream::BoxStream;
 use futures::StreamExt;
+use futures::stream::BoxStream;
 use futures::{FutureExt, Stream};
 use pollable_map::stream::StreamMap;
 use rustyline_async::Readline;
@@ -79,7 +79,6 @@ async fn main() -> std::io::Result<()> {
 
     let mut get_records_stream = StreamMap::default();
     let mut get_providers_stream = StreamMap::default();
-
 
     loop {
         tokio::select! {
@@ -238,7 +237,10 @@ impl Stream for ProviderStream {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match futures::ready!(self.st.poll_next_unpin(cx)) {
             Some(Ok(peers)) => {
-                let diffs = peers.difference(&self.cache).copied().collect::<HashSet<_>>();
+                let diffs = peers
+                    .difference(&self.cache)
+                    .copied()
+                    .collect::<HashSet<_>>();
                 self.cache.extend(diffs.clone());
                 Poll::Ready(Some(Ok(diffs)))
             }

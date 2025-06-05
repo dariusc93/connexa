@@ -21,14 +21,14 @@ use libp2p::gossipsub::Event as GossipsubEvent;
 use libp2p::identify::Event as IdentifyEvent;
 use libp2p::kad::store::RecordStore;
 use libp2p::kad::{
-    AddProviderOk, BootstrapError, BootstrapOk, Event as KademliaEvent,
-    GetClosestPeersOk, GetProvidersOk, GetRecordOk, InboundRequest, PeerInfo, PeerRecord,
-    ProviderRecord, PutRecordOk, QueryId, QueryResult, Record, RecordKey as Key, RoutingUpdate,
+    AddProviderOk, BootstrapError, BootstrapOk, Event as KademliaEvent, GetClosestPeersOk,
+    GetProvidersOk, GetRecordOk, InboundRequest, PeerInfo, PeerRecord, ProviderRecord, PutRecordOk,
+    QueryId, QueryResult, Record, RecordKey as Key, RoutingUpdate,
 };
 use libp2p::mdns::Event as MdnsEvent;
 use libp2p::ping::Event as PingEvent;
-use libp2p::relay::client::Event as RelayClientEvent;
 use libp2p::relay::Event as RelayServerEvent;
+use libp2p::relay::client::Event as RelayClientEvent;
 use libp2p::rendezvous::client::Event as RendezvousClientEvent;
 use libp2p::rendezvous::server::Event as RendezvousServerEvent;
 use libp2p::swarm::derive_prelude::ListenerId;
@@ -985,11 +985,11 @@ where
     pub fn process_floodsub_event(&mut self, event: FloodsubEvent) {
         let (topics, event) = match event {
             FloodsubEvent::Message(libp2p::floodsub::FloodsubMessage {
-                                       source,
-                                       data,
-                                       sequence_number,
-                                       topics,
-                                   }) => {
+                source,
+                data,
+                sequence_number,
+                topics,
+            }) => {
                 let message = FloodsubMessage {
                     source,
                     data,
@@ -1095,7 +1095,11 @@ where
                 info,
             } => {
                 tracing::info!(%peer_id, %connection_id, ?info, "identify received");
-                let libp2p::identify::Info { listen_addrs, protocols, .. } = info;
+                let libp2p::identify::Info {
+                    listen_addrs,
+                    protocols,
+                    ..
+                } = info;
 
                 if let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() {
                     if protocols.iter().any(|p| libp2p::kad::PROTOCOL_NAME.eq(p)) {
@@ -1246,15 +1250,15 @@ where
             } => match result {
                 QueryResult::Bootstrap(result) => match result {
                     Ok(BootstrapOk {
-                           peer,
-                           num_remaining,
-                       }) => {
+                        peer,
+                        num_remaining,
+                    }) => {
                         tracing::info!(?peer, ?num_remaining, "kademlia bootstrap");
                     }
                     Err(BootstrapError::Timeout {
-                            peer,
-                            num_remaining,
-                        }) => {
+                        peer,
+                        num_remaining,
+                    }) => {
                         tracing::info!(?peer, ?num_remaining, "kademlia bootstrap timeout");
                     }
                 },
@@ -1268,7 +1272,8 @@ where
                     Err(e) => {
                         tracing::error!(%id, %e, "kademlia get closest peers error");
                         if let Some(ch) = self.pending_dht_find_closest_peer.shift_remove(&id) {
-                            let _ = ch.send(Err(std::io::Error::new(std::io::ErrorKind::TimedOut, e)));
+                            let _ =
+                                ch.send(Err(std::io::Error::new(std::io::ErrorKind::TimedOut, e)));
                         }
                     }
                 },
@@ -1322,8 +1327,8 @@ where
                         }
                     }
                     Ok(GetRecordOk::FinishedWithNoAdditionalRecord {
-                           cache_candidates: _,
-                       }) => {
+                        cache_candidates: _,
+                    }) => {
                         if let Some(mut ch) = self.pending_dht_get_record.shift_remove(&id) {
                             ch.close_channel();
                         }
