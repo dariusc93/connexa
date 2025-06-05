@@ -1027,7 +1027,9 @@ where
         match event {
             AutonatV1Event::InboundProbe(_) => {}
             AutonatV1Event::OutboundProbe(_) => {}
-            AutonatV1Event::StatusChanged { .. } => {}
+            AutonatV1Event::StatusChanged { old, new } => {
+                tracing::info!(old = ?old, new = ?new, "nat status changed");
+            }
         }
     }
 
