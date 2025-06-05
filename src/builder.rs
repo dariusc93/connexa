@@ -9,7 +9,6 @@ use crate::builder::transport::TransportConfig;
 use crate::handle::Connexa;
 use crate::task::ConnexaTask;
 use executor::ConnexaExecutor;
-use libp2p::Swarm;
 use libp2p::autonat::v1::Config as AutonatV1Config;
 use libp2p::autonat::v2::client::Config as AutonatV2ClientConfig;
 use libp2p::floodsub::FloodsubConfig;
@@ -22,6 +21,7 @@ use libp2p::ping::Config as PingConfig;
 use libp2p::pnet::PreSharedKey;
 use libp2p::relay::Config as RelayServerConfig;
 use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
+use libp2p::Swarm;
 use libp2p_connection_limits::ConnectionLimits;
 use std::fmt::Debug;
 // Since this used for quic duration, we will feature gate it to satisfy lint
@@ -35,19 +35,22 @@ pub enum FileDescLimit {
     Custom(u64),
 }
 
-pub struct ConnexaBuilder<C = libp2p::swarm::dummy::Behaviour, T = ()>
+pub struct ConnexaBuilder<X, C, T>
 where
     C: NetworkBehaviour,
     C: Send,
     C::ToSwarm: Debug,
     T: Send + Sync + 'static,
+    X: Default + Send + Sync + 'static,
 {
     keypair: Keypair,
+    context: X,
     custom_behaviour: Option<C>,
     file_descriptor_limits: Option<FileDescLimit>,
-    custom_task_callback: Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, T) + 'static + Send>,
+    custom_task_callback:
+        Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, T) + 'static + Send>,
     custom_event_callback:
-        Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, C::ToSwarm) + 'static + Send>,
+        Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, C::ToSwarm) + 'static + Send>,
     swarm_event_callback: Box<dyn Fn(&SwarmEvent<behaviour::BehaviourEvent<C>>) + 'static + Send>,
     config: Config,
     swarm_config: Box<dyn Fn(libp2p::swarm::Config) -> libp2p::swarm::Config>,
@@ -98,12 +101,13 @@ pub(crate) struct Protocols {
     pub(crate) connection_limits: bool,
 }
 
-impl<C, T> ConnexaBuilder<C, T>
+impl<X, C, T> ConnexaBuilder<X, C, T>
 where
     C: NetworkBehaviour,
     C: Send,
     C::ToSwarm: Debug,
     T: Send + Sync + 'static,
+    X: Default + Unpin + Send + Sync + 'static,
 {
     /// Create a new instance
     pub fn new_identity() -> Self {
@@ -117,9 +121,10 @@ where
         Self {
             keypair,
             custom_behaviour: None,
+            context: X::default(),
             file_descriptor_limits: None,
-            custom_task_callback: Box::new(|_, _| ()),
-            custom_event_callback: Box::new(|_, _| ()),
+            custom_task_callback: Box::new(|_, _, _| ()),
+            custom_event_callback: Box::new(|_, _, _| ()),
             swarm_event_callback: Box::new(|_| ()),
             config: Config::default(),
             protocols: Protocols::default(),
@@ -148,7 +153,7 @@ where
     /// Set a callback for custom task events.
     pub fn set_custom_task_callback<F>(mut self, f: F) -> Self
     where
-        F: Fn(&mut Swarm<behaviour::Behaviour<C>>, T) + 'static + Send,
+        F: Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, T) + 'static + Send,
     {
         self.custom_task_callback = Box::new(f);
         self
@@ -157,7 +162,7 @@ where
     /// Handles events from the custom behaviour.
     pub fn set_custom_event_callback<F>(mut self, f: F) -> Self
     where
-        F: Fn(&mut Swarm<behaviour::Behaviour<C>>, C::ToSwarm) + 'static + Send,
+        F: Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, C::ToSwarm) + 'static + Send,
     {
         self.custom_event_callback = Box::new(f);
         self
@@ -169,6 +174,11 @@ where
         F: Fn(&SwarmEvent<behaviour::BehaviourEvent<C>>) + 'static + Send,
     {
         self.swarm_event_callback = Box::new(f);
+        self
+    }
+
+    pub fn set_context(mut self, context: X) -> Self {
+        self.context = context;
         self
     }
 
@@ -404,6 +414,7 @@ where
     pub fn start(self) -> std::io::Result<Connexa<T>> {
         let ConnexaBuilder {
             keypair,
+            context,
             custom_behaviour,
             file_descriptor_limits,
             custom_task_callback,
@@ -458,12 +469,14 @@ where
 
         let to_task = async_rt::task::spawn_coroutine_with_context(
             (
+                context,
                 custom_task_callback,
                 custom_event_callback,
                 swarm_event_callback,
                 connexa_task,
             ),
-            |(tcb, ecb, scb, mut ctx), rx| async move {
+            |(context, tcb, ecb, scb, mut ctx), rx| async move {
+                ctx.set_context(context);
                 ctx.set_task_callback(tcb);
                 ctx.set_event_callback(ecb);
                 ctx.set_command_receiver(rx);

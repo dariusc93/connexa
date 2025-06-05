@@ -27,8 +27,8 @@ use libp2p::kad::{
 };
 use libp2p::mdns::Event as MdnsEvent;
 use libp2p::ping::Event as PingEvent;
-use libp2p::relay::Event as RelayServerEvent;
 use libp2p::relay::client::Event as RelayClientEvent;
+use libp2p::relay::Event as RelayServerEvent;
 use libp2p::rendezvous::client::Event as RendezvousClientEvent;
 use libp2p::rendezvous::server::Event as RendezvousServerEvent;
 use libp2p::swarm::derive_prelude::ListenerId;
@@ -44,16 +44,17 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-pub struct ConnexaTask<C: NetworkBehaviour, T = ()>
+pub struct ConnexaTask<X, C: NetworkBehaviour, T = ()>
 where
     C: Send,
     C::ToSwarm: Debug,
 {
     pub swarm: Optional<Swarm<behaviour::Behaviour<C>>>,
     pub command_receiver: Optional<mpsc::Receiver<Command<T>>>,
-    pub custom_task_callback: Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, T) + 'static + Send>,
+    pub context: X,
+    pub custom_task_callback: Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, T) + 'static + Send>,
     pub custom_event_callback:
-        Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, C::ToSwarm) + 'static + Send>,
+        Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, C::ToSwarm) + 'static + Send>,
     pub swarm_event_callback: Box<dyn Fn(&SwarmEvent<BehaviourEvent<C>>) + 'static + Send>,
 
     /// A listener for sending dht events
@@ -103,8 +104,9 @@ where
     pub cleanup_interval: Duration,
 }
 
-impl<C: NetworkBehaviour, T> ConnexaTask<C, T>
+impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>
 where
+    X: Default + Send + 'static,
     C: Send,
     C::ToSwarm: Debug,
 {
@@ -112,9 +114,10 @@ where
         let duration = Duration::from_secs(10);
         Self {
             swarm: Optional::new(swarm),
+            context: X::default(),
             command_receiver: Optional::default(),
-            custom_event_callback: Box::new(|_, _| ()),
-            custom_task_callback: Box::new(|_, _| ()),
+            custom_event_callback: Box::new(|_, _, _| ()),
+            custom_task_callback: Box::new(|_, _, _| ()),
             swarm_event_callback: Box::new(|_| ()),
             dht_event_sender: Default::default(),
             dht_event_global_sender: vec![],
@@ -142,20 +145,24 @@ where
         }
     }
 
+    pub fn set_context(&mut self, context: X) {
+        self.context = context;
+    }
+
     pub fn set_command_receiver(&mut self, command_receiver: mpsc::Receiver<Command<T>>) {
         self.command_receiver.replace(command_receiver);
     }
 
     pub fn set_event_callback<F>(&mut self, callback: F)
     where
-        F: Fn(&mut Swarm<behaviour::Behaviour<C>>, C::ToSwarm) + Send + 'static,
+        F: Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, C::ToSwarm) + Send + 'static,
     {
         self.custom_event_callback = Box::new(callback);
     }
 
     pub fn set_task_callback<F>(&mut self, callback: F)
     where
-        F: Fn(&mut Swarm<behaviour::Behaviour<C>>, T) + Send + 'static,
+        F: Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, T) + Send + 'static,
     {
         self.custom_task_callback = Box::new(callback);
     }
@@ -740,7 +747,7 @@ where
                 let _ = rendezvous_command;
             }
             Command::Custom(custom_command) => {
-                (self.custom_task_callback)(swarm, custom_command);
+                (self.custom_task_callback)(swarm, &mut self.context, custom_command);
             }
         }
     }
@@ -885,7 +892,7 @@ where
             BehaviourEvent::AutonatV2Client(event) => self.process_autonat_v2_client_event(event),
             BehaviourEvent::AutonatV2Server(event) => self.process_autonat_v2_server_event(event),
             BehaviourEvent::Custom(custom_event) => {
-                (self.custom_event_callback)(swarm, custom_event)
+                (self.custom_event_callback)(swarm, &mut self.context, custom_event)
             }
             _ => unreachable!(),
         }
@@ -985,11 +992,11 @@ where
     pub fn process_floodsub_event(&mut self, event: FloodsubEvent) {
         let (topics, event) = match event {
             FloodsubEvent::Message(libp2p::floodsub::FloodsubMessage {
-                source,
-                data,
-                sequence_number,
-                topics,
-            }) => {
+                                       source,
+                                       data,
+                                       sequence_number,
+                                       topics,
+                                   }) => {
                 let message = FloodsubMessage {
                     source,
                     data,
@@ -1250,15 +1257,15 @@ where
             } => match result {
                 QueryResult::Bootstrap(result) => match result {
                     Ok(BootstrapOk {
-                        peer,
-                        num_remaining,
-                    }) => {
+                           peer,
+                           num_remaining,
+                       }) => {
                         tracing::info!(?peer, ?num_remaining, "kademlia bootstrap");
                     }
                     Err(BootstrapError::Timeout {
-                        peer,
-                        num_remaining,
-                    }) => {
+                            peer,
+                            num_remaining,
+                        }) => {
                         tracing::info!(?peer, ?num_remaining, "kademlia bootstrap timeout");
                     }
                 },
@@ -1327,8 +1334,8 @@ where
                         }
                     }
                     Ok(GetRecordOk::FinishedWithNoAdditionalRecord {
-                        cache_candidates: _,
-                    }) => {
+                           cache_candidates: _,
+                       }) => {
                         if let Some(mut ch) = self.pending_dht_get_record.shift_remove(&id) {
                             ch.close_channel();
                         }
@@ -1444,8 +1451,9 @@ where
     }
 }
 
-impl<C: NetworkBehaviour, T> Future for ConnexaTask<C, T>
+impl<X, C: NetworkBehaviour, T> Future for ConnexaTask<X, C, T>
 where
+    X: Default + Unpin + Send + 'static,
     C: Send,
     C::ToSwarm: Debug,
     T: 'static,

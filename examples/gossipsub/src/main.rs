@@ -1,6 +1,5 @@
 use clap::Parser;
-use connexa::builder::ConnexaBuilder;
-use connexa::prelude::{GossipsubMessage, Multiaddr, PubsubEvent};
+use connexa::prelude::{DefaultConnexaBuilder, GossipsubMessage, Multiaddr, PubsubEvent};
 use futures::FutureExt;
 use futures::StreamExt;
 use rustyline_async::Readline;
@@ -20,7 +19,7 @@ struct Opt {
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     let opt = Opt::parse();
-    let connexa = ConnexaBuilder::<connexa::dummy::Behaviour>::new_identity()
+    let connexa = DefaultConnexaBuilder::new_identity()
         .enable_tcp()
         .enable_quic()
         .with_gossipsub(Default::default())

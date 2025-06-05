@@ -1,9 +1,8 @@
 use clap::Parser;
-use connexa::builder::ConnexaBuilder;
 use connexa::prelude::dht::Quorum;
-use connexa::prelude::{DHTEvent, Multiaddr, PeerId, Protocol};
-use futures::StreamExt;
+use connexa::prelude::{DHTEvent, DefaultConnexaBuilder, Multiaddr, PeerId, Protocol};
 use futures::stream::BoxStream;
+use futures::StreamExt;
 use futures::{FutureExt, Stream};
 use pollable_map::stream::StreamMap;
 use rustyline_async::Readline;
@@ -24,7 +23,7 @@ struct Opt {
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     let opt = Opt::parse();
-    let connexa = ConnexaBuilder::<connexa::dummy::Behaviour>::new_identity()
+    let connexa = DefaultConnexaBuilder::new_identity()
         .enable_tcp()
         .enable_quic()
         .with_kademlia()

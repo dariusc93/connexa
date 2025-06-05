@@ -1,7 +1,6 @@
 use clap::Parser;
 use connexa::behaviour::request_response::RequestResponseConfig;
-use connexa::builder::ConnexaBuilder;
-use connexa::prelude::{Multiaddr, Protocol};
+use connexa::prelude::{DefaultConnexaBuilder, Multiaddr, Protocol};
 use futures::StreamExt;
 use std::path::PathBuf;
 use tokio::io::AsyncWriteExt;
@@ -36,7 +35,7 @@ const FILE_SHARING_PROTOCOL: &str = "/connexa/file-share";
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     let opt = Opt::parse();
-    let connexa = ConnexaBuilder::<connexa::dummy::Behaviour>::new_identity()
+    let connexa = DefaultConnexaBuilder::new_identity()
         .enable_tcp()
         .enable_quic()
         .with_request_response(vec![RequestResponseConfig {

@@ -10,9 +10,13 @@ pub mod dummy {
 }
 
 pub mod prelude {
+    use crate::builder::ConnexaBuilder;
     pub use crate::types::*;
-    pub use libp2p::{Multiaddr, PeerId, StreamProtocol, multiaddr::Protocol, swarm::*};
+    pub use libp2p::{multiaddr::Protocol, swarm::*, Multiaddr, PeerId, StreamProtocol};
+
     pub mod dht {
         pub use libp2p::kad::{Mode, Quorum};
     }
+    
+    pub type DefaultConnexaBuilder = ConnexaBuilder<(), super::dummy::Behaviour, ()>;
 }
