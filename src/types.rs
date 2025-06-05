@@ -175,12 +175,6 @@ pub enum DHTCommand {
         key: RecordKey,
         resp: oneshot::Sender<Result<mpsc::Receiver<Result<HashSet<PeerId>>>>>,
     },
-    ProviderListener {
-        key: Option<RecordKey>,
-        resp: oneshot::Sender<
-            Result<mpsc::Receiver<(ProviderRecord, oneshot::Sender<Result<ProviderRecord>>)>>,
-        >,
-    },
     SetDHTMode {
         mode: Option<Mode>,
         resp: oneshot::Sender<Result<()>>,
@@ -205,9 +199,9 @@ pub enum DHTCommand {
         quorum: Quorum,
         resp: oneshot::Sender<Result<()>>,
     },
-    RecordListener {
+    Listener {
         key: Option<RecordKey>,
-        resp: oneshot::Sender<Result<mpsc::Receiver<(Record, oneshot::Sender<Result<Record>>)>>>,
+        resp: oneshot::Sender<Result<mpsc::Receiver<DHTEvent>>>,
     },
 }
 
@@ -270,6 +264,75 @@ pub enum RendezvousCommand {
         ttl: Option<i64>,
         resp: oneshot::Sender<Result<mpsc::UnboundedReceiver<(PeerId, Vec<Multiaddr>)>>>,
     },
+}
+
+#[derive(Clone, Debug)]
+pub enum DHTEvent {
+    PutRecord {
+        source: PeerId,
+        record: RecordHandle<Record>,
+    },
+    ProvideRecord {
+        record: RecordHandle<ProviderRecord>,
+    },
+}
+
+impl DHTEvent {
+    pub(crate) fn set_record_confirmation(&self, ch: oneshot::Sender<Result<Record>>) -> Self {
+        let mut event = self.clone();
+        match &mut event {
+            DHTEvent::PutRecord { record, .. } => {
+                record.confirm.replace(ch);
+                event
+            }
+            _ => unreachable!("DHTEvent::PutRecord called on non-PutRecord"),
+        }
+    }
+    pub(crate) fn set_provider_confirmation(
+        &self,
+        ch: oneshot::Sender<Result<ProviderRecord>>,
+    ) -> Self {
+        let mut event = self.clone();
+        match &mut event {
+            DHTEvent::ProvideRecord { record, .. } => {
+                record.confirm.replace(ch);
+                event
+            }
+            _ => unreachable!("DHTEvent::ProvideRecord called on non-ProvideRecord"),
+        }
+    }
+
+    pub(crate) fn get_record_handle(&self) -> &RecordHandle<Record> {
+        match self {
+            DHTEvent::PutRecord { record, .. } => record,
+            _ => unreachable!("DHTEvent::PutRecord called on non-PutRecord"),
+        }
+    }
+
+    pub(crate) fn get_provider_handle(&self) -> &RecordHandle<ProviderRecord> {
+        match self {
+            DHTEvent::ProvideRecord { record, .. } => record,
+            _ => unreachable!("DHTEvent::ProvideRecord called on non-ProvideRecord"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct RecordHandle<R> {
+    /// The underlining record, if available
+    /// Note: a record is only provided if configured by kademlia behaviour
+    pub record: Option<R>,
+    /// Channel used to confirm provided record
+    pub confirm: Option<oneshot::Sender<Result<R>>>,
+}
+
+impl<R: Clone> Clone for RecordHandle<R> {
+    fn clone(&self) -> Self {
+        Self {
+            record: self.record.clone(),
+            confirm: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

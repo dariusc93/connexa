@@ -1,10 +1,10 @@
 use crate::handle::Connexa;
-use crate::types::DHTCommand;
+use crate::types::{DHTCommand, DHTEvent};
 use bytes::Bytes;
+use futures::StreamExt;
 use futures::channel::oneshot;
 use futures::stream::BoxStream;
-use futures::StreamExt;
-use libp2p::kad::{Mode, PeerInfo, PeerRecord, ProviderRecord, Quorum, Record, RecordKey};
+use libp2p::kad::{Mode, PeerInfo, PeerRecord, Quorum, RecordKey};
 use libp2p::{Multiaddr, PeerId};
 use std::collections::HashSet;
 
@@ -66,24 +66,16 @@ where
         rx.await.map_err(std::io::Error::other)?.map(|s| s.boxed())
     }
 
-    pub async fn provider_listener(
+    pub async fn listener(
         &self,
         key: impl ToOptionalRecordKey,
-    ) -> std::io::Result<
-        BoxStream<
-            'static,
-            (
-                ProviderRecord,
-                oneshot::Sender<std::io::Result<ProviderRecord>>,
-            ),
-        >,
-    > {
+    ) -> std::io::Result<BoxStream<'static, DHTEvent>> {
         let key = key.to_record_key();
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
             .clone()
-            .send(DHTCommand::ProviderListener { key, resp: tx }.into())
+            .send(DHTCommand::Listener { key, resp: tx }.into())
             .await?;
         rx.await.map_err(std::io::Error::other)?.map(|s| s.boxed())
     }
@@ -121,25 +113,10 @@ where
                     quorum,
                     resp: tx,
                 }
-                    .into(),
+                .into(),
             )
             .await?;
         rx.await.map_err(std::io::Error::other)?
-    }
-
-    pub async fn record_listener(
-        &self,
-        key: impl ToOptionalRecordKey,
-    ) -> std::io::Result<BoxStream<'static, (Record, oneshot::Sender<std::io::Result<Record>>)>>
-    {
-        let key = key.to_record_key();
-        let (tx, rx) = oneshot::channel();
-        self.connexa
-            .to_task
-            .clone()
-            .send(DHTCommand::RecordListener { key, resp: tx }.into())
-            .await?;
-        rx.await.map_err(std::io::Error::other)?.map(|s| s.boxed())
     }
 
     pub async fn set_mode(&self, mode: impl Into<Option<Mode>>) -> std::io::Result<()> {
@@ -174,7 +151,7 @@ where
                     addr,
                     resp: tx,
                 }
-                    .into(),
+                .into(),
             )
             .await?;
         rx.await.map_err(std::io::Error::other)?

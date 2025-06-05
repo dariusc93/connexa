@@ -1,8 +1,8 @@
 use crate::behaviour;
 use crate::behaviour::BehaviourEvent;
 use crate::types::{
-    Command, DHTCommand, FloodsubMessage, GossipsubMessage, PubsubCommand, PubsubEvent,
-    PubsubFloodsubPublish, PubsubPublishType, RequestResponseCommand, SwarmCommand,
+    Command, DHTCommand, DHTEvent, FloodsubMessage, GossipsubMessage, PubsubCommand, PubsubEvent,
+    PubsubFloodsubPublish, PubsubPublishType, RecordHandle, RequestResponseCommand, SwarmCommand,
 };
 
 #[cfg(feature = "stream")]
@@ -21,14 +21,14 @@ use libp2p::gossipsub::Event as GossipsubEvent;
 use libp2p::identify::Event as IdentifyEvent;
 use libp2p::kad::store::RecordStore;
 use libp2p::kad::{
-    AddProviderOk, BootstrapError, BootstrapOk, Event as KademliaEvent, GetClosestPeersError,
+    AddProviderOk, BootstrapError, BootstrapOk, Event as KademliaEvent,
     GetClosestPeersOk, GetProvidersOk, GetRecordOk, InboundRequest, PeerInfo, PeerRecord,
     ProviderRecord, PutRecordOk, QueryId, QueryResult, Record, RecordKey as Key, RoutingUpdate,
 };
 use libp2p::mdns::Event as MdnsEvent;
 use libp2p::ping::Event as PingEvent;
-use libp2p::relay::Event as RelayServerEvent;
 use libp2p::relay::client::Event as RelayClientEvent;
+use libp2p::relay::Event as RelayServerEvent;
 use libp2p::rendezvous::client::Event as RendezvousClientEvent;
 use libp2p::rendezvous::server::Event as RendezvousServerEvent;
 use libp2p::swarm::derive_prelude::ListenerId;
@@ -56,34 +56,13 @@ where
         Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, C::ToSwarm) + 'static + Send>,
     pub swarm_event_callback: Box<dyn Fn(&SwarmEvent<BehaviourEvent<C>>) + 'static + Send>,
 
-    /// A listener for sending dht records for manual validation
-    pub dht_put_record_sender:
-        IndexMap<Key, Vec<mpsc::Sender<(Record, oneshot::Sender<std::io::Result<Record>>)>>>,
-
-    pub dht_put_record_global_sender:
-        Vec<mpsc::Sender<(Record, oneshot::Sender<std::io::Result<Record>>)>>,
+    /// A listener for sending dht events
+    pub dht_event_sender: IndexMap<Key, Vec<mpsc::Sender<DHTEvent>>>,
+    pub dht_event_global_sender: Vec<mpsc::Sender<DHTEvent>>,
 
     pub dht_put_record_receiver:
         StreamMap<Key, FutureSet<oneshot::Receiver<std::io::Result<Record>>>>,
-
     pub dht_put_record_global_receiver: FutureSet<oneshot::Receiver<std::io::Result<Record>>>,
-
-    /// a listener for sending dht provider records for manual validation
-    pub dht_provider_record_sender: IndexMap<
-        Key,
-        Vec<
-            mpsc::Sender<(
-                ProviderRecord,
-                oneshot::Sender<std::io::Result<ProviderRecord>>,
-            )>,
-        >,
-    >,
-    pub dht_provider_record_global_sender: Vec<
-        mpsc::Sender<(
-            ProviderRecord,
-            oneshot::Sender<std::io::Result<ProviderRecord>>,
-        )>,
-    >,
 
     pub dht_provider_record_receiver:
         StreamMap<Key, FutureSet<oneshot::Receiver<std::io::Result<ProviderRecord>>>>,
@@ -138,12 +117,10 @@ where
             custom_event_callback: Box::new(|_, _| ()),
             custom_task_callback: Box::new(|_, _| ()),
             swarm_event_callback: Box::new(|_| ()),
-            dht_put_record_sender: IndexMap::new(),
-            dht_put_record_global_sender: vec![],
+            dht_event_sender: Default::default(),
+            dht_event_global_sender: vec![],
             dht_put_record_receiver: StreamMap::new(),
             dht_put_record_global_receiver: Default::default(),
-            dht_provider_record_sender: IndexMap::new(),
-            dht_provider_record_global_sender: vec![],
             dht_provider_record_receiver: StreamMap::new(),
             dht_provider_record_global_receiver: Default::default(),
             pending_dht_put_record: Default::default(),
@@ -566,7 +543,7 @@ where
 
                     let _ = resp.send(Ok(rx));
                 }
-                DHTCommand::ProviderListener {
+                DHTCommand::Listener {
                     key: Some(key),
                     resp,
                 } => {
@@ -577,15 +554,12 @@ where
 
                     let (tx, rx) = mpsc::channel(10);
 
-                    self.dht_provider_record_sender
-                        .entry(key)
-                        .or_default()
-                        .push(tx);
+                    self.dht_event_sender.entry(key).or_default().push(tx);
 
                     let _ = resp.send(Ok(rx));
                 }
 
-                DHTCommand::ProviderListener { key: _, resp } => {
+                DHTCommand::Listener { key: _, resp } => {
                     if !swarm.behaviour_mut().kademlia.is_enabled() {
                         let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
                         return;
@@ -593,7 +567,7 @@ where
 
                     let (tx, rx) = mpsc::channel(10);
 
-                    self.dht_provider_record_global_sender.push(tx);
+                    self.dht_event_global_sender.push(tx);
 
                     let _ = resp.send(Ok(rx));
                 }
@@ -673,33 +647,6 @@ where
                     };
 
                     self.pending_dht_put_record.insert(id, resp);
-                }
-                DHTCommand::RecordListener {
-                    key: Some(key),
-                    resp,
-                } => {
-                    if !swarm.behaviour_mut().kademlia.is_enabled() {
-                        let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
-                        return;
-                    }
-
-                    let (tx, rx) = mpsc::channel(10);
-
-                    self.dht_put_record_sender.entry(key).or_default().push(tx);
-
-                    let _ = resp.send(Ok(rx));
-                }
-                DHTCommand::RecordListener { key: _, resp } => {
-                    if !swarm.behaviour_mut().kademlia.is_enabled() {
-                        let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
-                        return;
-                    }
-
-                    let (tx, rx) = mpsc::channel(10);
-
-                    self.dht_put_record_global_sender.push(tx);
-
-                    let _ = resp.send(Ok(rx));
                 }
             },
             #[cfg(feature = "stream")]
@@ -1040,11 +987,11 @@ where
     pub fn process_floodsub_event(&mut self, event: FloodsubEvent) {
         let (topics, event) = match event {
             FloodsubEvent::Message(libp2p::floodsub::FloodsubMessage {
-                source,
-                data,
-                sequence_number,
-                topics,
-            }) => {
+                                       source,
+                                       data,
+                                       sequence_number,
+                                       topics,
+                                   }) => {
                 let message = FloodsubMessage {
                     source,
                     data,
@@ -1186,42 +1133,40 @@ where
                     );
                 }
                 InboundRequest::AddProvider { record } => {
-                    let Some(provider_record) = record else {
-                        return;
+                    let event = DHTEvent::ProvideRecord {
+                        record: RecordHandle {
+                            record: record.clone(),
+                            confirm: None,
+                        },
                     };
-
-                    tracing::trace!(?provider_record, "kademlia add provider request");
-                    let key = provider_record.key.clone();
-
-                    self.dht_provider_record_global_sender
-                        .retain(|ch_sender| !ch_sender.is_closed());
-
-                    for ch_sender in self.dht_provider_record_global_sender.iter_mut() {
-                        let (tx, rx) = oneshot::channel();
-                        let _ = ch_sender.try_send((provider_record.clone(), tx));
-                        self.dht_provider_record_global_receiver.insert(rx);
+                    for ch_sender in self.dht_event_global_sender.iter_mut() {
+                        let event = match record.is_some() {
+                            true => {
+                                let (tx, rx) = oneshot::channel();
+                                self.dht_provider_record_global_receiver.insert(rx);
+                                event.set_provider_confirmation(tx)
+                            }
+                            false => event.clone(),
+                        };
+                        let _ = ch_sender.try_send(event);
                     }
 
-                    let Some(sender) = self.dht_provider_record_sender.get_mut(&key) else {
+                    let Some(record) = record else {
                         return;
                     };
 
-                    sender.retain(|ch_sender| !ch_sender.is_closed());
+                    tracing::trace!(?record, "kademlia add provider request");
+
+                    let key = record.key.clone();
+
+                    let Some(sender) = self.dht_event_sender.get_mut(&key) else {
+                        return;
+                    };
+
                     for ch_sender in sender.iter_mut() {
                         let (tx, rx) = oneshot::channel();
-                        let _ = ch_sender.try_send((provider_record.clone(), tx));
-                        // TODO: Implement a `get_mut_or_default` into pollable-map
-                        let set = match self.dht_provider_record_receiver.get_mut(&key) {
-                            Some(set) => set,
-                            None => {
-                                self.dht_provider_record_receiver
-                                    .insert(key.clone(), FutureSet::new());
-                                self.dht_provider_record_receiver
-                                    .get_mut(&key)
-                                    .expect("entry exist in map")
-                            }
-                        };
-
+                        let _ = ch_sender.try_send(event.set_provider_confirmation(tx));
+                        let set = self.dht_provider_record_receiver.get_mut_or_default(&key);
                         set.insert(rx);
                     }
                 }
@@ -1241,42 +1186,40 @@ where
                     record,
                 } => {
                     tracing::trace!(?source, ?connection, "kademlia put record request");
+
+                    let event = DHTEvent::PutRecord {
+                        source,
+                        record: RecordHandle {
+                            record: record.clone(),
+                            confirm: None,
+                        },
+                    };
+                    for ch_sender in self.dht_event_global_sender.iter_mut() {
+                        let event = match record.is_some() {
+                            true => {
+                                let (tx, rx) = oneshot::channel();
+                                self.dht_provider_record_global_receiver.insert(rx);
+                                event.set_provider_confirmation(tx)
+                            }
+                            false => event.clone(),
+                        };
+                        let _ = ch_sender.try_send(event);
+                    }
+
                     let Some(record) = record else {
                         return;
                     };
 
-                    tracing::trace!(?record, "kademlia put record request");
-
-                    self.dht_put_record_global_sender
-                        .retain(|ch_sender| !ch_sender.is_closed());
-
-                    for ch_sender in self.dht_put_record_global_sender.iter_mut() {
-                        let (tx, rx) = oneshot::channel();
-                        let _ = ch_sender.try_send((record.clone(), tx));
-                        self.dht_put_record_global_receiver.insert(rx);
-                    }
-
                     let key = record.key.clone();
-                    let Some(sender) = self.dht_put_record_sender.get_mut(&key) else {
+                    let Some(sender) = self.dht_event_sender.get_mut(&key) else {
                         return;
                     };
 
-                    sender.retain(|ch_sender| !ch_sender.is_closed());
                     for ch_sender in sender.iter_mut() {
                         let (tx, rx) = oneshot::channel();
-                        let _ = ch_sender.try_send((record.clone(), tx));
+                        let _ = ch_sender.try_send(event.set_record_confirmation(tx));
 
-                        // TODO: Implement a `get_mut_or_default` into pollable-map
-                        let set = match self.dht_put_record_receiver.get_mut(&key) {
-                            Some(set) => set,
-                            None => {
-                                self.dht_put_record_receiver
-                                    .insert(key.clone(), FutureSet::new());
-                                self.dht_put_record_receiver
-                                    .get_mut(&key)
-                                    .expect("entry exist in map")
-                            }
-                        };
+                        let set = self.dht_put_record_receiver.get_mut_or_default(&key);
 
                         set.insert(rx);
                     }
@@ -1291,24 +1234,30 @@ where
             } => match result {
                 QueryResult::Bootstrap(result) => match result {
                     Ok(BootstrapOk {
-                        peer,
-                        num_remaining,
-                    }) => {
+                           peer,
+                           num_remaining,
+                       }) => {
                         tracing::info!(?peer, ?num_remaining, "kademlia bootstrap");
                     }
                     Err(BootstrapError::Timeout {
-                        peer,
-                        num_remaining,
-                    }) => {
+                            peer,
+                            num_remaining,
+                        }) => {
                         tracing::info!(?peer, ?num_remaining, "kademlia bootstrap timeout");
                     }
                 },
                 QueryResult::GetClosestPeers(result) => match result {
                     Ok(GetClosestPeersOk { key, peers }) => {
                         tracing::info!(?key, ?peers, "kademlia get closest peers");
+                        if let Some(ch) = self.pending_dht_find_closest_peer.shift_remove(&id) {
+                            let _ = ch.send(Ok(peers));
+                        }
                     }
-                    Err(GetClosestPeersError::Timeout { key, peers }) => {
-                        tracing::info!(?key, ?peers, "kademlia get closest peers timeout");
+                    Err(e) => {
+                        tracing::error!(%id, %e, "kademlia get closest peers error");
+                        if let Some(ch) = self.pending_dht_find_closest_peer.shift_remove(&id) {
+                            let _ = ch.send(Err(std::io::Error::new(std::io::ErrorKind::TimedOut, e)));
+                        }
                     }
                 },
                 QueryResult::GetProviders(result) => match result {
@@ -1361,8 +1310,8 @@ where
                         }
                     }
                     Ok(GetRecordOk::FinishedWithNoAdditionalRecord {
-                        cache_candidates: _,
-                    }) => {
+                           cache_candidates: _,
+                       }) => {
                         if let Some(mut ch) = self.pending_dht_get_record.shift_remove(&id) {
                             ch.close_channel();
                         }
@@ -1499,6 +1448,13 @@ where
                 v.retain(|ch| !ch.is_closed());
                 !v.is_empty()
             });
+
+            self.dht_event_sender.retain(|_, v| {
+                v.retain(|ch| !ch.is_closed());
+                !v.is_empty()
+            });
+
+            self.dht_event_global_sender.retain(|ch| !ch.is_closed());
         }
 
         while let Poll::Ready(Some(command)) = self.command_receiver.poll_next_unpin(cx) {
