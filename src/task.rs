@@ -89,7 +89,6 @@ where
     pub pending_listen_on: IndexMap<ListenerId, oneshot::Sender<std::io::Result<ListenerId>>>,
     pub pending_remove_listener: IndexMap<ListenerId, oneshot::Sender<std::io::Result<()>>>,
 
-    // pub pending_add_external_address: IndexMap<Multiaddr, oneshot::Sender<std::io::Result<()>>>,
     pub pending_remove_external_address: IndexMap<Multiaddr, oneshot::Sender<std::io::Result<()>>>,
 
     pub pending_add_peer_address:
@@ -136,7 +135,6 @@ where
             pending_disconnection_by_connection_id: IndexMap::new(),
             pending_listen_on: IndexMap::new(),
             pending_remove_listener: IndexMap::new(),
-            // pending_add_external_address: IndexMap::new(),
             pending_remove_external_address: IndexMap::new(),
             pending_add_peer_address: IndexMap::new(),
             floodsub_listener: Default::default(),
@@ -1085,6 +1083,9 @@ where
     }
 
     pub fn process_identify_event(&mut self, event: IdentifyEvent) {
+        let Some(swarm) = self.swarm.as_mut() else {
+            return;
+        };
         match event {
             IdentifyEvent::Received {
                 peer_id,
@@ -1092,6 +1093,15 @@ where
                 info,
             } => {
                 tracing::info!(%peer_id, %connection_id, ?info, "identify received");
+                let libp2p::identify::Info { listen_addrs, protocols, .. } = info;
+
+                if let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() {
+                    if protocols.iter().any(|p| libp2p::kad::PROTOCOL_NAME.eq(p)) {
+                        for addr in listen_addrs {
+                            kad.add_address(&peer_id, addr.clone());
+                        }
+                    }
+                }
             }
             IdentifyEvent::Sent {
                 peer_id,
