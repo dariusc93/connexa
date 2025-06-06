@@ -7,9 +7,9 @@ use indexmap::IndexSet;
 use libp2p::gossipsub::MessageId;
 use libp2p::kad::{Mode, PeerInfo, PeerRecord, ProviderRecord, Quorum, Record, RecordKey};
 use libp2p::request_response::InboundRequestId;
-use libp2p::swarm::ConnectionId;
 use libp2p::swarm::derive_prelude::ListenerId;
 use libp2p::swarm::dial_opts::DialOpts;
+use libp2p::swarm::ConnectionId;
 use libp2p::{Multiaddr, PeerId, StreamProtocol};
 use std::collections::HashSet;
 
@@ -302,19 +302,20 @@ impl DHTEvent {
         }
     }
 
-    pub(crate) fn get_record_handle(&self) -> &RecordHandle<Record> {
-        match self {
-            DHTEvent::PutRecord { record, .. } => record,
-            _ => unreachable!("DHTEvent::PutRecord called on non-PutRecord"),
-        }
-    }
-
-    pub(crate) fn get_provider_handle(&self) -> &RecordHandle<ProviderRecord> {
-        match self {
-            DHTEvent::ProvideRecord { record, .. } => record,
-            _ => unreachable!("DHTEvent::ProvideRecord called on non-ProvideRecord"),
-        }
-    }
+    //
+    // pub(crate) fn get_record_handle(&self) -> &RecordHandle<Record> {
+    //     match self {
+    //         DHTEvent::PutRecord { record, .. } => record,
+    //         _ => unreachable!("DHTEvent::PutRecord called on non-PutRecord"),
+    //     }
+    // }
+    //
+    // pub(crate) fn get_provider_handle(&self) -> &RecordHandle<ProviderRecord> {
+    //     match self {
+    //         DHTEvent::ProvideRecord { record, .. } => record,
+    //         _ => unreachable!("DHTEvent::ProvideRecord called on non-ProvideRecord"),
+    //     }
+    // }
 }
 
 #[derive(Debug)]

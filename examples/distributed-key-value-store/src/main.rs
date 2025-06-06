@@ -1,8 +1,8 @@
 use clap::Parser;
 use connexa::prelude::dht::Quorum;
 use connexa::prelude::{DHTEvent, DefaultConnexaBuilder, Multiaddr, PeerId, Protocol};
-use futures::stream::BoxStream;
 use futures::StreamExt;
+use futures::stream::BoxStream;
 use futures::{FutureExt, Stream};
 use pollable_map::stream::StreamMap;
 use rustyline_async::Readline;
