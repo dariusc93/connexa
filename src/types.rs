@@ -301,21 +301,6 @@ impl DHTEvent {
             _ => unreachable!("DHTEvent::ProvideRecord called on non-ProvideRecord"),
         }
     }
-
-    //
-    // pub(crate) fn get_record_handle(&self) -> &RecordHandle<Record> {
-    //     match self {
-    //         DHTEvent::PutRecord { record, .. } => record,
-    //         _ => unreachable!("DHTEvent::PutRecord called on non-PutRecord"),
-    //     }
-    // }
-    //
-    // pub(crate) fn get_provider_handle(&self) -> &RecordHandle<ProviderRecord> {
-    //     match self {
-    //         DHTEvent::ProvideRecord { record, .. } => record,
-    //         _ => unreachable!("DHTEvent::ProvideRecord called on non-ProvideRecord"),
-    //     }
-    // }
 }
 
 #[derive(Debug)]
