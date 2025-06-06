@@ -20,6 +20,7 @@ where
         Self { connexa }
     }
 
+    /// Subscribes to a topic in the floodsub network
     pub async fn subscribe(&self, topic: impl Into<String>) -> std::io::Result<()> {
         let topic = topic.into();
         let (tx, rx) = oneshot::channel();
@@ -33,6 +34,7 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
+    /// Creates a listener for a specific topic that returns a stream of pubsub events
     pub async fn listener(
         &self,
         topic: impl Into<String>,
@@ -51,6 +53,7 @@ where
             .map(|rx| rx.boxed())
     }
 
+    /// Unsubscribes from a topic in the floodsub network
     pub async fn unsubscribe(&self, topic: impl Into<String>) -> std::io::Result<()> {
         let topic = topic.into();
         let (tx, rx) = oneshot::channel();
@@ -64,6 +67,7 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
+    /// Returns a list of peers subscribed to the specified topic
     pub async fn peers(&self, topic: impl Into<String>) -> std::io::Result<Vec<PeerId>> {
         let topic = topic.into();
         let (tx, rx) = oneshot::channel();
@@ -77,6 +81,7 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
+    /// Publishes a message to a single topic in the floodsub network
     pub async fn publish(
         &self,
         topic: impl Into<String>,
@@ -101,6 +106,7 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
+    /// Publishes a message to any peers in a single topic, regardless if they're subscribed
     pub async fn publish_any(
         &self,
         topic: impl Into<String>,
@@ -125,6 +131,7 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
+    /// Publishes the same message to multiple topics in the floodsub network
     pub async fn publish_many(
         &self,
         topics: impl IntoIterator<Item = impl Into<String>>,
@@ -149,6 +156,7 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
+    /// Publishes the same message to any peers in multiple topics, regardless if they're subscribed
     pub async fn publish_many_any(
         &self,
         topics: impl IntoIterator<Item = impl Into<String>>,

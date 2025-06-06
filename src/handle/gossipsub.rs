@@ -18,6 +18,7 @@ where
         Self { connexa }
     }
 
+    /// Subscribes to a specified topic in the gossipsub network.
     pub async fn subscribe(&self, topic: impl Into<String>) -> std::io::Result<()> {
         let topic = topic.into();
         let (tx, rx) = oneshot::channel();
@@ -31,6 +32,7 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
+    /// Creates a listener for a specified gossipsub topic.
     pub async fn listener(
         &self,
         topic: impl Into<String>,
@@ -49,6 +51,7 @@ where
             .map(|rx| rx.boxed())
     }
 
+    /// Unsubscribes from a specified gossipsub topic.
     pub async fn unsubscribe(&self, topic: impl Into<String>) -> std::io::Result<()> {
         let topic = topic.into();
         let (tx, rx) = oneshot::channel();
@@ -62,6 +65,7 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
+    /// Retrieves a list of peers that are subscribed to a specified topic.
     pub async fn peers(&self, topic: impl Into<String>) -> std::io::Result<Vec<PeerId>> {
         let topic = topic.into();
         let (tx, rx) = oneshot::channel();
@@ -75,6 +79,7 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
+    /// Publishes a message to a specified gossipsub topic.
     pub async fn publish(
         &self,
         topic: impl Into<String>,

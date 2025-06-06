@@ -20,6 +20,7 @@ where
         Self { connexa }
     }
 
+    /// Listen for incoming requests on a specified protocol
     pub async fn listen_for_requests(
         &self,
         protocol: impl Into<OptionalStreamProtocol>,
@@ -38,6 +39,7 @@ where
             .map(StreamExt::boxed)
     }
 
+    /// Send a request to multiple peers, returning a stream of responses
     pub async fn send_requests(
         &self,
         peers: impl IntoIterator<Item = PeerId>,
@@ -74,6 +76,7 @@ where
             .map(StreamExt::boxed)
     }
 
+    /// Send a request to a single peer and await the response
     pub async fn send_request(
         &self,
         peer_id: PeerId,
@@ -105,6 +108,7 @@ where
         fut.await
     }
 
+    /// Send a response to a specific inbound request
     pub async fn send_response(
         &self,
         peer_id: PeerId,

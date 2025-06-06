@@ -15,6 +15,7 @@ where
         Self { connexa }
     }
 
+    /// Creates a new stream with the specified protocol
     pub async fn new_stream(
         &self,
         protocol: StreamProtocol,
@@ -29,6 +30,7 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
+    /// Gets a control handle for managing streams
     pub async fn control_handle(&self) -> std::io::Result<libp2p_stream::Control> {
         let (tx, rx) = oneshot::channel();
         self.connexa

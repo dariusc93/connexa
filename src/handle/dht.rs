@@ -20,6 +20,7 @@ where
         Self { connexa }
     }
 
+    /// Queries the DHT for information about a specific peer by its PeerID
     pub async fn find_peer(&self, peer_id: PeerId) -> std::io::Result<Vec<PeerInfo>> {
         let (tx, rx) = oneshot::channel();
         self.connexa
@@ -30,6 +31,7 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
+    /// Announces to the DHT that this peer can provide data for a given key
     pub async fn provide(&self, key: impl ToRecordKey) -> std::io::Result<()> {
         let key = key.to_record_key();
         let (tx, rx) = oneshot::channel();
@@ -41,6 +43,7 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
+    /// Stop announcing that this peer can provide data for a given key
     pub async fn stop_provide(&self, key: impl ToRecordKey) -> std::io::Result<()> {
         let key = key.to_record_key();
         let (tx, rx) = oneshot::channel();
@@ -52,6 +55,7 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
+    /// Queries the DHT for peers that can provide data for a given key
     pub async fn get_providers(
         &self,
         key: impl ToRecordKey,
@@ -66,6 +70,7 @@ where
         rx.await.map_err(std::io::Error::other)?.map(|s| s.boxed())
     }
 
+    /// Creates a listener for DHT events related to a specific key
     pub async fn listener(
         &self,
         key: impl ToOptionalRecordKey,
@@ -80,6 +85,7 @@ where
         rx.await.map_err(std::io::Error::other)?.map(|s| s.boxed())
     }
 
+    /// Retrieves data from the DHT for a given key
     pub async fn get(
         &self,
         key: impl ToRecordKey,
@@ -94,6 +100,7 @@ where
         rx.await.map_err(std::io::Error::other)?.map(|s| s.boxed())
     }
 
+    /// Stores data in the DHT under a given key with a specified quorum
     pub async fn put(
         &self,
         key: impl ToRecordKey,
@@ -119,6 +126,8 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
+    /// Sets the DHT mode (Client/Server)
+    /// Mode can be None to disable DHT
     pub async fn set_mode(&self, mode: impl Into<Option<Mode>>) -> std::io::Result<()> {
         let mode = mode.into();
         let (tx, rx) = oneshot::channel();
@@ -130,6 +139,7 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
+    /// Gets the current DHT mode
     pub async fn mode(&self) -> std::io::Result<Mode> {
         let (tx, rx) = oneshot::channel();
         self.connexa
@@ -140,6 +150,7 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
+    /// Adds an address to the routing table for a specific peer
     pub async fn add_address(&self, peer_id: PeerId, addr: Multiaddr) -> std::io::Result<()> {
         let (tx, rx) = oneshot::channel();
         self.connexa
