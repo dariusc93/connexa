@@ -1,9 +1,18 @@
+#![allow(unused_imports)]
 use crate::behaviour;
 use crate::behaviour::BehaviourEvent;
-use crate::types::{
-    Command, DHTCommand, DHTEvent, FloodsubMessage, GossipsubMessage, PubsubCommand, PubsubEvent,
-    PubsubFloodsubPublish, PubsubPublishType, RecordHandle, RequestResponseCommand, SwarmCommand,
-};
+use crate::types::{Command, SwarmCommand};
+
+#[cfg(feature = "gossipsub")]
+use crate::types::GossipsubMessage;
+#[cfg(feature = "request-response")]
+use crate::types::RequestResponseCommand;
+#[cfg(feature = "kad")]
+use crate::types::{DHTCommand, DHTEvent, RecordHandle};
+#[cfg(feature = "floodsub")]
+use crate::types::{FloodsubMessage, PubsubFloodsubPublish};
+#[cfg(any(feature = "floodsub", feature = "gossipsub"))]
+use crate::types::{PubsubCommand, PubsubEvent, PubsubPublishType};
 
 #[cfg(feature = "stream")]
 use crate::types::StreamCommand;
@@ -12,27 +21,43 @@ use futures::channel::{mpsc, oneshot};
 use futures::{FutureExt, StreamExt};
 use futures_timer::Delay;
 use indexmap::IndexMap;
+#[cfg(feature = "autonat")]
 use libp2p::autonat::v1::Event as AutonatV1Event;
+#[cfg(feature = "autonat")]
 use libp2p::autonat::v2::client::Event as AutonatV2ClientEvent;
+#[cfg(feature = "autonat")]
 use libp2p::autonat::v2::server::Event as AutonatV2ServerEvent;
+#[cfg(all(feature = "relay", feature = "dcutr"))]
 use libp2p::dcutr::Event as DcutrEvent;
+#[cfg(feature = "floodsub")]
 use libp2p::floodsub::FloodsubEvent;
+#[cfg(feature = "gossipsub")]
 use libp2p::gossipsub::Event as GossipsubEvent;
+#[cfg(feature = "identify")]
 use libp2p::identify::Event as IdentifyEvent;
+#[cfg(feature = "kad")]
 use libp2p::kad::store::RecordStore;
+#[cfg(feature = "kad")]
 use libp2p::kad::{
     AddProviderOk, BootstrapError, BootstrapOk, Event as KademliaEvent, GetClosestPeersOk,
     GetProvidersOk, GetRecordOk, InboundRequest, PeerInfo, PeerRecord, ProviderRecord, PutRecordOk,
     QueryId, QueryResult, Record, RecordKey as Key, RoutingUpdate,
 };
+#[cfg(feature = "mdns")]
 use libp2p::mdns::Event as MdnsEvent;
+#[cfg(feature = "ping")]
 use libp2p::ping::Event as PingEvent;
+#[cfg(feature = "relay")]
 use libp2p::relay::Event as RelayServerEvent;
+#[cfg(feature = "relay")]
 use libp2p::relay::client::Event as RelayClientEvent;
+#[cfg(feature = "rendezvous")]
 use libp2p::rendezvous::client::Event as RendezvousClientEvent;
+#[cfg(feature = "rendezvous")]
 use libp2p::rendezvous::server::Event as RendezvousServerEvent;
 use libp2p::swarm::derive_prelude::ListenerId;
 use libp2p::swarm::{ConnectionId, NetworkBehaviour, SwarmEvent};
+#[cfg(feature = "upnp")]
 use libp2p::upnp::Event as UpnpEvent;
 use libp2p::{Multiaddr, PeerId, Swarm};
 use pollable_map::futures::set::FutureSet;
@@ -59,28 +84,36 @@ where
     pub swarm_event_callback: Box<dyn Fn(&SwarmEvent<BehaviourEvent<C>>) + 'static + Send>,
 
     /// A listener for sending dht events
+    #[cfg(feature = "kad")]
     pub dht_event_sender: IndexMap<Key, Vec<mpsc::Sender<DHTEvent>>>,
+    #[cfg(feature = "kad")]
     pub dht_event_global_sender: Vec<mpsc::Sender<DHTEvent>>,
 
+    #[cfg(feature = "kad")]
     pub dht_put_record_receiver:
         StreamMap<Key, FutureSet<oneshot::Receiver<std::io::Result<Record>>>>,
+    #[cfg(feature = "kad")]
     pub dht_put_record_global_receiver: FutureSet<oneshot::Receiver<std::io::Result<Record>>>,
-
+    #[cfg(feature = "kad")]
     pub dht_provider_record_receiver:
         StreamMap<Key, FutureSet<oneshot::Receiver<std::io::Result<ProviderRecord>>>>,
+    #[cfg(feature = "kad")]
     pub dht_provider_record_global_receiver:
         FutureSet<oneshot::Receiver<std::io::Result<ProviderRecord>>>,
-
+    #[cfg(feature = "kad")]
     pub pending_dht_put_record: IndexMap<QueryId, oneshot::Sender<std::io::Result<()>>>,
+    #[cfg(feature = "kad")]
     pub pending_dht_put_provider_record: IndexMap<QueryId, oneshot::Sender<std::io::Result<()>>>,
-
+    #[cfg(feature = "kad")]
     pub pending_dht_get_record: IndexMap<QueryId, mpsc::Sender<std::io::Result<PeerRecord>>>,
+    #[cfg(feature = "kad")]
     pub pending_dht_get_provider_record:
         IndexMap<QueryId, mpsc::Sender<std::io::Result<HashSet<PeerId>>>>,
-
+    #[cfg(feature = "kad")]
     pub pending_dht_find_closest_peer:
         IndexMap<QueryId, oneshot::Sender<std::io::Result<Vec<PeerInfo>>>>,
 
+    #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
     pub pubsub_event_sender: Vec<mpsc::Sender<Either<GossipsubEvent, FloodsubEvent>>>,
 
     pub pending_connection: IndexMap<ConnectionId, oneshot::Sender<std::io::Result<ConnectionId>>>,
@@ -96,8 +129,10 @@ where
     pub pending_add_peer_address:
         IndexMap<(PeerId, Multiaddr), oneshot::Sender<std::io::Result<()>>>,
 
+    #[cfg(feature = "gossipsub")]
     pub gossipsub_listener:
         IndexMap<libp2p::gossipsub::TopicHash, Vec<mpsc::Sender<PubsubEvent<GossipsubMessage>>>>,
+    #[cfg(feature = "floodsub")]
     pub floodsub_listener:
         IndexMap<libp2p::floodsub::Topic, Vec<mpsc::Sender<PubsubEvent<FloodsubMessage>>>>,
 
@@ -120,17 +155,29 @@ where
             custom_event_callback: Box::new(|_, _, _| ()),
             custom_task_callback: Box::new(|_, _, _| ()),
             swarm_event_callback: Box::new(|_| ()),
+            #[cfg(feature = "kad")]
             dht_event_sender: Default::default(),
+            #[cfg(feature = "kad")]
             dht_event_global_sender: vec![],
+            #[cfg(feature = "kad")]
             dht_put_record_receiver: StreamMap::new(),
+            #[cfg(feature = "kad")]
             dht_put_record_global_receiver: Default::default(),
+            #[cfg(feature = "kad")]
             dht_provider_record_receiver: StreamMap::new(),
+            #[cfg(feature = "kad")]
             dht_provider_record_global_receiver: Default::default(),
+            #[cfg(feature = "kad")]
             pending_dht_put_record: Default::default(),
+            #[cfg(feature = "kad")]
             pending_dht_put_provider_record: IndexMap::new(),
+            #[cfg(feature = "kad")]
             pending_dht_get_record: Default::default(),
+            #[cfg(feature = "kad")]
             pending_dht_get_provider_record: Default::default(),
+            #[cfg(feature = "kad")]
             pending_dht_find_closest_peer: Default::default(),
+            #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
             pubsub_event_sender: Vec::new(),
             cleanup_timer: Delay::new(duration),
             cleanup_interval: duration,
@@ -141,7 +188,9 @@ where
             pending_remove_listener: IndexMap::new(),
             pending_remove_external_address: IndexMap::new(),
             pending_add_peer_address: IndexMap::new(),
+            #[cfg(feature = "floodsub")]
             floodsub_listener: Default::default(),
+            #[cfg(feature = "gossipsub")]
             gossipsub_listener: Default::default(),
         }
     }
@@ -259,6 +308,7 @@ where
                     self.pending_add_peer_address.insert((peer_id, addr), resp);
                 }
             },
+            #[cfg(any(feature = "gossipsub", feature = "floodsub"))]
             Command::Pubsub(pubsub_command) => match pubsub_command {
                 PubsubCommand::Subscribe { topic, resp } => {
                     match swarm.behaviour_mut().pubsub.as_mut() {
@@ -498,6 +548,7 @@ where
                     let _ = resp.send(Ok(rx));
                 }
             },
+            #[cfg(feature = "kad")]
             Command::Dht(dht_command) => match dht_command {
                 DHTCommand::FindPeer { peer_id, resp } => {
                     let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
@@ -681,6 +732,7 @@ where
                     let _ = resp.send(Ok(stream.new_control()));
                 }
             },
+            #[cfg(feature = "rendezvous")]
             Command::RequestResponse(request_response_command) => match request_response_command {
                 RequestResponseCommand::SendRequests {
                     protocol,
@@ -743,6 +795,7 @@ where
                     let _ = resp.send(Ok(rx));
                 }
             },
+            #[cfg(feature = "rendezvous")]
             Command::Rendezvous(rendezvous_command) => {
                 // TODO
                 let _ = rendezvous_command;
@@ -875,22 +928,38 @@ where
         };
 
         match event {
+            #[cfg(feature = "relay")]
             BehaviourEvent::Relay(event) => self.process_relay_server_event(event),
+            #[cfg(feature = "relay")]
             BehaviourEvent::RelayClient(event) => self.process_relay_client_event(event),
+            #[cfg(feature = "upnp")]
             BehaviourEvent::Upnp(event) => self.process_upnp_event(event),
+            #[cfg(all(feature = "dcutr", feature = "relay"))]
             BehaviourEvent::Dcutr(event) => self.process_dcutr_event(event),
+            #[cfg(feature = "rendezvous")]
             BehaviourEvent::RendezvousClient(event) => self.process_rendezvous_client_event(event),
+            #[cfg(feature = "rendezvous")]
             BehaviourEvent::RendezvousServer(event) => self.process_rendezvous_server_event(event),
+            #[cfg(feature = "mdns")]
             BehaviourEvent::Mdns(event) => self.process_mdns_event(event),
+            #[cfg(any(feature = "gossipsub", feature = "floodsub"))]
             BehaviourEvent::Pubsub(ev) => match ev {
+                #[cfg(feature = "gossipsub")]
                 Either::Left(gossipsub_event) => self.process_gossipsub_event(gossipsub_event),
+                #[cfg(feature = "floodsub")]
                 Either::Right(floodsub_event) => self.process_floodsub_event(floodsub_event),
             },
+            #[cfg(feature = "kad")]
             BehaviourEvent::Kademlia(event) => self.process_kademlia_event(event),
+            #[cfg(feature = "identify")]
             BehaviourEvent::Identify(event) => self.process_identify_event(event),
+            #[cfg(feature = "ping")]
             BehaviourEvent::Ping(event) => self.process_ping_event(event),
+            #[cfg(feature = "autonat")]
             BehaviourEvent::AutonatV1(event) => self.process_autonat_v1_event(event),
+            #[cfg(feature = "autonat")]
             BehaviourEvent::AutonatV2Client(event) => self.process_autonat_v2_client_event(event),
+            #[cfg(feature = "autonat")]
             BehaviourEvent::AutonatV2Server(event) => self.process_autonat_v2_server_event(event),
             BehaviourEvent::Custom(custom_event) => {
                 (self.custom_event_callback)(swarm, &mut self.context, custom_event)
@@ -899,6 +968,7 @@ where
         }
     }
 
+    #[cfg(feature = "rendezvous")]
     pub fn process_rendezvous_client_event(&mut self, event: RendezvousClientEvent) {
         match event {
             RendezvousClientEvent::Discovered { .. } => {}
@@ -909,6 +979,7 @@ where
         }
     }
 
+    #[cfg(feature = "rendezvous")]
     pub fn process_rendezvous_server_event(&mut self, event: RendezvousServerEvent) {
         match event {
             RendezvousServerEvent::DiscoverServed { .. } => {}
@@ -920,6 +991,7 @@ where
         }
     }
 
+    #[cfg(feature = "upnp")]
     pub fn process_upnp_event(&mut self, event: UpnpEvent) {
         match event {
             UpnpEvent::NewExternalAddr(addr) => {
@@ -937,6 +1009,7 @@ where
         }
     }
 
+    #[cfg(feature = "gossipsub")]
     pub fn process_gossipsub_event(&mut self, event: GossipsubEvent) {
         let (topic, event) = match event {
             GossipsubEvent::Message {
@@ -990,6 +1063,7 @@ where
         }
     }
 
+    #[cfg(feature = "floodsub")]
     pub fn process_floodsub_event(&mut self, event: FloodsubEvent) {
         let (topics, event) = match event {
             FloodsubEvent::Message(libp2p::floodsub::FloodsubMessage {
@@ -1031,6 +1105,7 @@ where
         }
     }
 
+    #[cfg(feature = "autonat")]
     pub fn process_autonat_v1_event(&mut self, event: AutonatV1Event) {
         match event {
             AutonatV1Event::InboundProbe(_) => {}
@@ -1041,6 +1116,7 @@ where
         }
     }
 
+    #[cfg(feature = "autonat")]
     pub fn process_autonat_v2_client_event(&mut self, event: AutonatV2ClientEvent) {
         let AutonatV2ClientEvent {
             tested_addr,
@@ -1058,6 +1134,7 @@ where
         }
     }
 
+    #[cfg(feature = "autonat")]
     pub fn process_autonat_v2_server_event(&mut self, event: AutonatV2ServerEvent) {
         let AutonatV2ServerEvent {
             all_addrs,
@@ -1076,6 +1153,7 @@ where
         }
     }
 
+    #[cfg(feature = "ping")]
     pub fn process_ping_event(&mut self, event: PingEvent) {
         let PingEvent {
             peer,
@@ -1092,6 +1170,7 @@ where
         }
     }
 
+    #[cfg(feature = "identify")]
     pub fn process_identify_event(&mut self, event: IdentifyEvent) {
         let Some(swarm) = self.swarm.as_mut() else {
             return;
@@ -1109,6 +1188,7 @@ where
                     ..
                 } = info;
 
+                #[cfg(feature = "identify")]
                 if let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() {
                     if protocols.iter().any(|p| libp2p::kad::PROTOCOL_NAME.eq(p)) {
                         for addr in listen_addrs {
@@ -1116,6 +1196,9 @@ where
                         }
                     }
                 }
+
+                let _ = listen_addrs;
+                let _ = protocols;
             }
             IdentifyEvent::Sent {
                 peer_id,
@@ -1140,6 +1223,7 @@ where
         }
     }
 
+    #[cfg(feature = "kad")]
     pub fn process_kademlia_event(&mut self, event: KademliaEvent) {
         match event {
             KademliaEvent::InboundRequest { request } => match request {
@@ -1401,6 +1485,7 @@ where
         }
     }
 
+    #[cfg(feature = "mdns")]
     pub fn process_mdns_event(&mut self, event: MdnsEvent) {
         match event {
             MdnsEvent::Discovered(discovered) => {
@@ -1416,6 +1501,7 @@ where
         }
     }
 
+    #[cfg(all(feature = "relay", feature = "dcutr"))]
     pub fn process_dcutr_event(&mut self, event: DcutrEvent) {
         let DcutrEvent {
             remote_peer_id,
@@ -1431,6 +1517,7 @@ where
         }
     }
 
+    #[cfg(feature = "relay")]
     pub fn process_relay_client_event(&mut self, event: RelayClientEvent) {
         match event {
             RelayClientEvent::ReservationReqAccepted { .. } => {}
@@ -1439,6 +1526,7 @@ where
         }
     }
 
+    #[cfg(feature = "relay")]
     pub fn process_relay_server_event(&mut self, event: RelayServerEvent) {
         match event {
             RelayServerEvent::ReservationReqAccepted { .. } => {}
@@ -1465,21 +1553,25 @@ where
         if self.cleanup_timer.poll_unpin(cx).is_ready() {
             let interval = self.cleanup_interval;
             self.cleanup_timer.reset(interval);
+            #[cfg(feature = "gossipsub")]
             self.gossipsub_listener.retain(|_, v| {
                 v.retain(|ch| !ch.is_closed());
                 !v.is_empty()
             });
 
+            #[cfg(feature = "floodsub")]
             self.floodsub_listener.retain(|_, v| {
                 v.retain(|ch| !ch.is_closed());
                 !v.is_empty()
             });
 
+            #[cfg(feature = "kad")]
             self.dht_event_sender.retain(|_, v| {
                 v.retain(|ch| !ch.is_closed());
                 !v.is_empty()
             });
 
+            #[cfg(feature = "kad")]
             self.dht_event_global_sender.retain(|ch| !ch.is_closed());
         }
 
@@ -1496,6 +1588,7 @@ where
             }
         }
 
+        #[cfg(feature = "kad")]
         while let Poll::Ready(Some((key, result))) =
             self.dht_put_record_receiver.poll_next_unpin(cx)
         {
@@ -1522,6 +1615,7 @@ where
             }
         }
 
+        #[cfg(feature = "kad")]
         while let Poll::Ready(Some(result)) =
             self.dht_put_record_global_receiver.poll_next_unpin(cx)
         {
@@ -1549,6 +1643,7 @@ where
             }
         }
 
+        #[cfg(feature = "kad")]
         while let Poll::Ready(Some((key, result))) =
             self.dht_provider_record_receiver.poll_next_unpin(cx)
         {
@@ -1575,6 +1670,7 @@ where
             }
         }
 
+        #[cfg(feature = "kad")]
         while let Poll::Ready(Some(result)) =
             self.dht_provider_record_global_receiver.poll_next_unpin(cx)
         {
