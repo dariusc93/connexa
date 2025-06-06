@@ -18,9 +18,14 @@ use libp2p::PeerId;
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "pnet")]
 use libp2p::pnet::{PnetConfig, PreSharedKey};
+#[cfg(feature = "relay")]
 use libp2p::relay::client::Transport as ClientTransport;
+#[cfg(not(feature = "relay"))]
+type ClientTransport = ();
+
 use std::io;
 use std::time::Duration;
+#[allow(unused_imports)]
 use {
     libp2p::Transport,
     libp2p::core::transport::{MemoryTransport, OrTransport},
@@ -227,6 +232,7 @@ pub(crate) fn build_transport(
         false => Either::Right(transport),
     };
 
+    #[cfg(feature = "relay")]
     let transport = match relay {
         Some(relay) => Either::Left(OrTransport::new(relay, transport)),
         None => Either::Right(transport),

@@ -1,11 +1,15 @@
+#![allow(unused_imports)]
 use bytes::Bytes;
 use either::Either;
 use futures::channel::{mpsc, oneshot};
 use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use indexmap::IndexSet;
+#[cfg(feature = "gossipsub")]
 use libp2p::gossipsub::MessageId;
+#[cfg(feature = "kad")]
 use libp2p::kad::{Mode, PeerInfo, PeerRecord, ProviderRecord, Quorum, Record, RecordKey};
+#[cfg(feature = "request-response")]
 use libp2p::request_response::InboundRequestId;
 use libp2p::swarm::ConnectionId;
 use libp2p::swarm::derive_prelude::ListenerId;
@@ -18,11 +22,15 @@ type Result<T> = std::io::Result<T>;
 #[derive(Debug)]
 pub enum Command<T = ()> {
     Swarm(SwarmCommand),
+    #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
     Pubsub(PubsubCommand),
+    #[cfg(feature = "kad")]
     Dht(DHTCommand),
+    #[cfg(feature = "request-response")]
     RequestResponse(RequestResponseCommand),
     #[cfg(feature = "stream")]
     Stream(StreamCommand),
+    #[cfg(feature = "rendezvous")]
     Rendezvous(RendezvousCommand),
     Custom(T),
 }
@@ -33,18 +41,21 @@ impl<T> From<SwarmCommand> for Command<T> {
     }
 }
 
+#[cfg(any(feature = "floodsub", feature = "gossipsub"))]
 impl<T> From<PubsubCommand> for Command<T> {
     fn from(cmd: PubsubCommand) -> Self {
         Command::Pubsub(cmd)
     }
 }
 
+#[cfg(feature = "kad")]
 impl<T> From<DHTCommand> for Command<T> {
     fn from(cmd: DHTCommand) -> Self {
         Command::Dht(cmd)
     }
 }
 
+#[cfg(feature = "request-response")]
 impl<T> From<RequestResponseCommand> for Command<T> {
     fn from(cmd: RequestResponseCommand) -> Self {
         Command::RequestResponse(cmd)
@@ -58,6 +69,7 @@ impl<T> From<StreamCommand> for Command<T> {
     }
 }
 
+#[cfg(feature = "rendezvous")]
 impl<T> From<RendezvousCommand> for Command<T> {
     fn from(cmd: RendezvousCommand) -> Self {
         Command::Rendezvous(cmd)
@@ -110,6 +122,7 @@ pub enum SwarmCommand {
     },
 }
 
+#[cfg(all(feature = "floodsub", feature = "gossipsub"))]
 #[derive(Debug)]
 pub enum PubsubCommand {
     //TODO: Maybe return stream?
@@ -139,6 +152,7 @@ pub enum PubsubCommand {
     Publish(PubsubPublishType),
 }
 
+#[cfg(any(feature = "floodsub", feature = "gossipsub"))]
 #[derive(Debug)]
 pub enum PubsubPublishType {
     Gossipsub {
@@ -149,6 +163,7 @@ pub enum PubsubPublishType {
     Floodsub(PubsubFloodsubPublish, oneshot::Sender<Result<()>>),
 }
 
+#[cfg(any(feature = "floodsub", feature = "gossipsub"))]
 #[derive(Debug)]
 pub enum PubsubFloodsubPublish {
     Publish { topic: String, data: Bytes },
@@ -157,6 +172,7 @@ pub enum PubsubFloodsubPublish {
     PublishManyAny { topics: Vec<String>, data: Bytes },
 }
 
+#[cfg(feature = "kad")]
 #[derive(Debug)]
 pub enum DHTCommand {
     FindPeer {
@@ -205,6 +221,7 @@ pub enum DHTCommand {
     },
 }
 
+#[cfg(feature = "request-response")]
 #[derive(Debug)]
 pub enum RequestResponseCommand {
     SendRequests {
@@ -244,6 +261,7 @@ pub enum StreamCommand {
     },
 }
 
+#[cfg(feature = "rendezvous")]
 #[derive(Debug)]
 pub enum RendezvousCommand {
     Register {
@@ -266,6 +284,7 @@ pub enum RendezvousCommand {
     },
 }
 
+#[cfg(feature = "kad")]
 #[derive(Clone, Debug)]
 pub enum DHTEvent {
     PutRecord {
@@ -277,6 +296,7 @@ pub enum DHTEvent {
     },
 }
 
+#[cfg(feature = "kad")]
 impl DHTEvent {
     pub(crate) fn set_record_confirmation(&self, ch: oneshot::Sender<Result<Record>>) -> Self {
         let mut event = self.clone();
@@ -303,6 +323,7 @@ impl DHTEvent {
     }
 }
 
+#[cfg(feature = "kad")]
 #[derive(Debug)]
 pub struct RecordHandle<R> {
     /// The underlining record, if available
@@ -312,6 +333,7 @@ pub struct RecordHandle<R> {
     pub confirm: Option<oneshot::Sender<Result<R>>>,
 }
 
+#[cfg(feature = "kad")]
 impl<R: Clone> Clone for RecordHandle<R> {
     fn clone(&self) -> Self {
         Self {
@@ -321,6 +343,7 @@ impl<R: Clone> Clone for RecordHandle<R> {
     }
 }
 
+#[cfg(any(feature = "floodsub", feature = "gossipsub"))]
 #[derive(Debug, Clone)]
 pub enum PubsubEvent<M> {
     Subscribed { peer_id: PeerId },
@@ -328,6 +351,7 @@ pub enum PubsubEvent<M> {
     Message { message: M },
 }
 
+#[cfg(feature = "gossipsub")]
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct GossipsubMessage {
@@ -339,6 +363,7 @@ pub struct GossipsubMessage {
     pub propagate_message: Option<oneshot::Sender<Result<MessageId>>>,
 }
 
+#[cfg(feature = "gossipsub")]
 impl GossipsubMessage {
     pub fn inject_channel(&self, ch: oneshot::Sender<Result<MessageId>>) -> GossipsubMessage {
         GossipsubMessage {
@@ -352,6 +377,7 @@ impl GossipsubMessage {
     }
 }
 
+#[cfg(feature = "gossipsub")]
 impl Clone for GossipsubMessage {
     fn clone(&self) -> Self {
         GossipsubMessage {
@@ -365,6 +391,7 @@ impl Clone for GossipsubMessage {
     }
 }
 
+#[cfg(feature = "floodsub")]
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct FloodsubMessage {

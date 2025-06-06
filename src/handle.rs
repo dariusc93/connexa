@@ -1,16 +1,26 @@
+#[cfg(feature = "kad")]
 mod dht;
+#[cfg(feature = "floodsub")]
 mod floodsub;
+#[cfg(feature = "gossipsub")]
 mod gossipsub;
+#[cfg(feature = "rendezvous")]
 mod rendezvous;
+#[cfg(feature = "request-response")]
 mod request_response;
 #[cfg(feature = "stream")]
 mod stream;
 mod swarm;
 
+#[cfg(feature = "kad")]
 use crate::handle::dht::ConnexaDht;
+#[cfg(feature = "floodsub")]
 use crate::handle::floodsub::ConnexaFloodsub;
+#[cfg(feature = "gossipsub")]
 use crate::handle::gossipsub::ConnexaGossipsub;
+#[cfg(feature = "rendezvous")]
 use crate::handle::rendezvous::ConnexaRendezvous;
+#[cfg(feature = "request-response")]
 use crate::handle::request_response::ConnexaRequestResponse;
 #[cfg(feature = "stream")]
 use crate::handle::stream::ConnexaStream;
@@ -63,21 +73,25 @@ where
     }
 
     /// Returns a handle for floodsub functions
+    #[cfg(feature = "floodsub")]
     pub fn floodsub(&self) -> ConnexaFloodsub<T> {
         ConnexaFloodsub::new(self)
     }
 
     /// Returns a handle for gossipsub functions   
+    #[cfg(feature = "gossipsub")]
     pub fn gossipsub(&self) -> ConnexaGossipsub<T> {
         ConnexaGossipsub::new(self)
     }
 
     /// Returns a handle for dht functions  
+    #[cfg(feature = "kad")]
     pub fn dht(&self) -> ConnexaDht<T> {
         ConnexaDht::new(self)
     }
 
     /// Returns a handle for request-response functions
+    #[cfg(feature = "request-response")]
     pub fn request_response(&self) -> ConnexaRequestResponse<T> {
         ConnexaRequestResponse::new(self)
     }
@@ -89,6 +103,7 @@ where
     }
 
     /// Returns a handle for rendezvous functions
+    #[cfg(feature = "rendezvous")]
     pub fn rendezvous(&self) -> ConnexaRendezvous<T> {
         ConnexaRendezvous::new(self)
     }

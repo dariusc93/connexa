@@ -14,6 +14,7 @@ pub mod prelude {
     pub use crate::types::*;
     pub use libp2p::{Multiaddr, PeerId, StreamProtocol, multiaddr::Protocol, swarm::*};
 
+    #[cfg(feature = "kad")]
     pub mod dht {
         pub use libp2p::kad::{Mode, Quorum};
     }
