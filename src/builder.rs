@@ -10,6 +10,7 @@ use crate::builder::transport::TransportConfig;
 use crate::handle::Connexa;
 use crate::task::ConnexaTask;
 use executor::ConnexaExecutor;
+use libp2p::Swarm;
 #[cfg(feature = "autonat")]
 use libp2p::autonat::v1::Config as AutonatV1Config;
 #[cfg(feature = "autonat")]
@@ -28,7 +29,6 @@ use libp2p::pnet::PreSharedKey;
 #[cfg(feature = "relay")]
 use libp2p::relay::Config as RelayServerConfig;
 use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
-use libp2p::Swarm;
 use libp2p_connection_limits::ConnectionLimits;
 use std::fmt::Debug;
 // Since this used for quic duration, we will feature gate it to satisfy lint
@@ -353,10 +353,10 @@ where
     pub fn with_gossipsub_with_config<F>(mut self, config: F) -> Self
     where
         F: Fn(
-            libp2p::gossipsub::ConfigBuilder,
-        )
-            -> Result<libp2p::gossipsub::Config, libp2p::gossipsub::ConfigBuilderError>
-        + 'static,
+                libp2p::gossipsub::ConfigBuilder,
+            )
+                -> Result<libp2p::gossipsub::Config, libp2p::gossipsub::ConfigBuilderError>
+            + 'static,
     {
         self.protocols.gossipsub = true;
         self.config.gossipsub_config = Box::new(config);

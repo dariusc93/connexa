@@ -14,9 +14,9 @@ use libp2p::dcutr::Behaviour as Dcutr;
 #[cfg(feature = "mdns")]
 use libp2p::identify::Behaviour as Identify;
 #[cfg(feature = "kad")]
-use libp2p::kad::store::MemoryStore;
-#[cfg(feature = "kad")]
 use libp2p::kad::Behaviour as Kademlia;
+#[cfg(feature = "kad")]
+use libp2p::kad::store::MemoryStore;
 #[cfg(feature = "mdns")]
 use libp2p::mdns::tokio::Behaviour as Mdns;
 #[cfg(feature = "ping")]
@@ -24,11 +24,11 @@ use libp2p::ping::Behaviour as Ping;
 #[cfg(feature = "relay")]
 use libp2p::relay::client::Behaviour as RelayClient;
 #[cfg(feature = "relay")]
-use libp2p::relay::{client::Transport as ClientTransport, Behaviour as RelayServer};
+use libp2p::relay::{Behaviour as RelayServer, client::Transport as ClientTransport};
 #[cfg(not(feature = "relay"))]
 type ClientTransport = ();
-use libp2p::swarm::behaviour::toggle::Toggle;
 use libp2p::StreamProtocol;
+use libp2p::swarm::behaviour::toggle::Toggle;
 
 use crate::builder::{Config, Protocols};
 use indexmap::IndexMap;
@@ -74,8 +74,12 @@ where
 
     #[cfg(feature = "identify")]
     pub identify: Toggle<Identify>,
-    #[cfg(any(feature = "gossipsub", feature = "floodsub"))]
-    pub pubsub: Either<Toggle<libp2p::gossipsub::Behaviour>, Toggle<libp2p::floodsub::Floodsub>>,
+
+    #[cfg(feature = "gossipsub")]
+    pub gossipsub: Toggle<libp2p::gossipsub::Behaviour>,
+    #[cfg(feature = "floodsub")]
+    pub floodsub: Toggle<libp2p::floodsub::Floodsub>,
+
     #[cfg(feature = "ping")]
     pub ping: Toggle<Ping>,
     #[cfg(feature = "stream")]
@@ -202,35 +206,32 @@ where
             })
             .into();
 
-        // TODO: Use `Optional<Either<bool, bool>>` in protocols instead?
-        #[cfg(any(feature = "gossipsub", feature = "floodsub"))]
-        let pubsub = match (protocols.floodsub, protocols.gossipsub) {
-            (true, true) => {
-                return Err(std::io::Error::other(
-                    "cannot support floodsub and gossipsub at the same time",
-                ));
-            }
-            (true, false) => {
-                let config_fn = config.floodsub_config;
-                let config = config_fn(libp2p::floodsub::FloodsubConfig::new(peer_id));
-
-                let behaviour = libp2p::floodsub::Floodsub::from_config(config);
-                Either::Right(Some(behaviour).into())
-            }
-            (false, true) => {
+        #[cfg(feature = "gossipsub")]
+        let gossipsub = protocols
+            .gossipsub
+            .then(|| {
                 let config_fn = config.gossipsub_config;
                 let config_builder = libp2p::gossipsub::ConfigBuilder::default();
-                let config = config_fn(config_builder).map_err(std::io::Error::other)?;
+                let config = config_fn(config_builder).expect("valid configuration");
                 // TODO: Customize message authenticity
-                let behaviour = libp2p::gossipsub::Behaviour::new(
+                libp2p::gossipsub::Behaviour::new(
                     libp2p::gossipsub::MessageAuthenticity::Signed(keypair.clone()),
                     config,
                 )
-                    .map_err(std::io::Error::other)?;
-                Either::Left(Some(behaviour).into())
-            }
-            (false, false) => Either::Left(None.into()),
-        };
+                .expect("valid configuration")
+            })
+            .into();
+
+        #[cfg(feature = "floodsub")]
+        let floodsub = protocols
+            .floodsub
+            .then(|| {
+                let config_fn = config.floodsub_config;
+                let config = config_fn(libp2p::floodsub::FloodsubConfig::new(peer_id));
+
+                libp2p::floodsub::Floodsub::from_config(config)
+            })
+            .into();
 
         #[cfg(not(target_arch = "wasm32"))]
         #[cfg(feature = "dcutr")]
@@ -310,8 +311,10 @@ where
             autonat_v2_client,
             #[cfg(feature = "autonat")]
             autonat_v2_server,
-            #[cfg(any(feature = "gossipsub", feature = "floodsub"))]
-            pubsub,
+            #[cfg(feature = "gossipsub")]
+            gossipsub,
+            #[cfg(feature = "floodsub")]
+            floodsub,
             #[cfg(not(target_arch = "wasm32"))]
             #[cfg(feature = "dcutr")]
             dcutr,

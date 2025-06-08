@@ -122,48 +122,68 @@ pub enum SwarmCommand {
     },
 }
 
-#[cfg(all(feature = "floodsub", feature = "gossipsub"))]
+#[cfg(any(feature = "floodsub", feature = "gossipsub"))]
+#[derive(Debug)]
+pub enum PubsubType {
+    #[cfg(feature = "floodsub")]
+    Floodsub,
+    #[cfg(feature = "gossipsub")]
+    Gossipsub,
+}
+
 #[derive(Debug)]
 pub enum PubsubCommand {
-    //TODO: Maybe return stream?
+    #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
     Subscribe {
+        pubsub_type: PubsubType,
         topic: String,
         resp: oneshot::Sender<Result<()>>,
     },
+    #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
     Unsubscribe {
+        pubsub_type: PubsubType,
         topic: String,
         resp: oneshot::Sender<Result<()>>,
     },
+    #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
     Subscribed {
+        pubsub_type: PubsubType,
         resp: oneshot::Sender<Result<Vec<String>>>,
     },
+    #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
     Peers {
+        pubsub_type: PubsubType,
         topic: String,
         resp: oneshot::Sender<Result<Vec<PeerId>>>,
     },
+    #[cfg(feature = "floodsub")]
     FloodsubListener {
         topic: String,
         resp: oneshot::Sender<Result<mpsc::Receiver<PubsubEvent<FloodsubMessage>>>>,
     },
+    #[cfg(feature = "gossipsub")]
     GossipsubListener {
         topic: String,
         resp: oneshot::Sender<Result<mpsc::Receiver<PubsubEvent<GossipsubMessage>>>>,
     },
+    #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
     Publish(PubsubPublishType),
 }
 
 #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
 #[derive(Debug)]
 pub enum PubsubPublishType {
+    #[cfg(feature = "gossipsub")]
     Gossipsub {
         topic: String,
         data: Bytes,
         resp: oneshot::Sender<Result<()>>,
     },
+    #[cfg(feature = "floodsub")]
     Floodsub(PubsubFloodsubPublish, oneshot::Sender<Result<()>>),
 }
 
-#[cfg(any(feature = "floodsub", feature = "gossipsub"))]
+#[cfg(feature = "floodsub")]
 #[derive(Debug)]
 pub enum PubsubFloodsubPublish {
     Publish { topic: String, data: Bytes },

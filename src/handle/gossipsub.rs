@@ -1,4 +1,5 @@
 use crate::handle::Connexa;
+use crate::prelude::PubsubType;
 use crate::types::{GossipsubMessage, PubsubCommand, PubsubEvent, PubsubPublishType};
 use bytes::Bytes;
 use futures::StreamExt;
@@ -26,7 +27,14 @@ where
         self.connexa
             .to_task
             .clone()
-            .send(PubsubCommand::Subscribe { topic, resp: tx }.into())
+            .send(
+                PubsubCommand::Subscribe {
+                    pubsub_type: PubsubType::Gossipsub,
+                    topic,
+                    resp: tx,
+                }
+                .into(),
+            )
             .await?;
 
         rx.await.map_err(std::io::Error::other)?
@@ -59,7 +67,14 @@ where
         self.connexa
             .to_task
             .clone()
-            .send(PubsubCommand::Unsubscribe { topic, resp: tx }.into())
+            .send(
+                PubsubCommand::Unsubscribe {
+                    pubsub_type: PubsubType::Gossipsub,
+                    topic,
+                    resp: tx,
+                }
+                .into(),
+            )
             .await?;
 
         rx.await.map_err(std::io::Error::other)?
@@ -73,7 +88,14 @@ where
         self.connexa
             .to_task
             .clone()
-            .send(PubsubCommand::Peers { topic, resp: tx }.into())
+            .send(
+                PubsubCommand::Peers {
+                    pubsub_type: PubsubType::Gossipsub,
+                    topic,
+                    resp: tx,
+                }
+                .into(),
+            )
             .await?;
 
         rx.await.map_err(std::io::Error::other)?

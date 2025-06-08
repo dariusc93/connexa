@@ -12,7 +12,7 @@ use crate::types::{DHTCommand, DHTEvent, RecordHandle};
 #[cfg(feature = "floodsub")]
 use crate::types::{FloodsubMessage, PubsubFloodsubPublish};
 #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
-use crate::types::{PubsubCommand, PubsubEvent, PubsubPublishType};
+use crate::types::{PubsubCommand, PubsubEvent, PubsubPublishType, PubsubType};
 
 #[cfg(feature = "stream")]
 use crate::types::StreamCommand;
@@ -113,9 +113,6 @@ where
     pub pending_dht_find_closest_peer:
         IndexMap<QueryId, oneshot::Sender<std::io::Result<Vec<PeerInfo>>>>,
 
-    #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
-    pub pubsub_event_sender: Vec<mpsc::Sender<Either<GossipsubEvent, FloodsubEvent>>>,
-
     pub pending_connection: IndexMap<ConnectionId, oneshot::Sender<std::io::Result<ConnectionId>>>,
     pub pending_disconnection_by_connection_id:
         IndexMap<ConnectionId, oneshot::Sender<std::io::Result<()>>>,
@@ -177,8 +174,6 @@ where
             pending_dht_get_provider_record: Default::default(),
             #[cfg(feature = "kad")]
             pending_dht_find_closest_peer: Default::default(),
-            #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
-            pubsub_event_sender: Vec::new(),
             cleanup_timer: Delay::new(duration),
             cleanup_interval: duration,
             pending_connection: IndexMap::new(),
@@ -310,152 +305,161 @@ where
             },
             #[cfg(any(feature = "gossipsub", feature = "floodsub"))]
             Command::Pubsub(pubsub_command) => match pubsub_command {
-                PubsubCommand::Subscribe { topic, resp } => {
-                    match swarm.behaviour_mut().pubsub.as_mut() {
-                        Either::Left(gossipsub) => {
-                            let Some(pubsub) = gossipsub.as_mut() else {
-                                let _ = resp
-                                    .send(Err(std::io::Error::other("gossipsub is not enabled")));
-                                return;
-                            };
-                            let topic = libp2p::gossipsub::IdentTopic::new(topic);
-                            match pubsub.subscribe(&topic) {
-                                Ok(true) => {
-                                    let _ = resp.send(Ok(()));
-                                }
-                                Ok(false) => {
-                                    let _ = resp.send(Err(std::io::Error::other(
-                                        "topic already subscribed",
-                                    )));
-                                }
-                                Err(e) => {
-                                    let _ = resp.send(Err(std::io::Error::other(e)));
-                                }
-                            }
+                #[cfg(feature = "gossipsub")]
+                PubsubCommand::Subscribe {
+                    pubsub_type: PubsubType::Gossipsub,
+                    topic,
+                    resp,
+                } => {
+                    let Some(pubsub) = swarm.behaviour_mut().gossipsub.as_mut() else {
+                        let _ = resp.send(Err(std::io::Error::other("gossipsub is not enabled")));
+                        return;
+                    };
+
+                    let topic = libp2p::gossipsub::IdentTopic::new(topic);
+                    match pubsub.subscribe(&topic) {
+                        Ok(true) => {
+                            let _ = resp.send(Ok(()));
                         }
-                        Either::Right(floodsub) => {
-                            let Some(pubsub) = floodsub.as_mut() else {
-                                let _ = resp
-                                    .send(Err(std::io::Error::other("floodsub is not enabled")));
-                                return;
-                            };
-                            let topic = libp2p::floodsub::Topic::new(topic);
-                            match pubsub.subscribe(topic) {
-                                true => {
-                                    let _ = resp.send(Ok(()));
-                                }
-                                false => {
-                                    let _ = resp.send(Err(std::io::Error::other(
-                                        "topic already subscribed",
-                                    )));
-                                }
-                            }
-                        }
-                    }
-                }
-                PubsubCommand::Unsubscribe { topic, resp } => {
-                    match swarm.behaviour_mut().pubsub.as_mut() {
-                        Either::Left(gossipsub) => {
-                            let Some(pubsub) = gossipsub.as_mut() else {
-                                let _ = resp
-                                    .send(Err(std::io::Error::other("gossipsub is not enabled")));
-                                return;
-                            };
-                            let topic = libp2p::gossipsub::IdentTopic::new(topic);
-                            match pubsub.unsubscribe(&topic) {
-                                true => {
-                                    let _ = resp.send(Ok(()));
-                                }
-                                false => {
-                                    let _ = resp.send(Err(std::io::Error::other(
-                                        "not subscribed to topic",
-                                    )));
-                                }
-                            }
-                        }
-                        Either::Right(floodsub) => {
-                            let Some(pubsub) = floodsub.as_mut() else {
-                                let _ = resp
-                                    .send(Err(std::io::Error::other("floodsub is not enabled")));
-                                return;
-                            };
-                            let topic = libp2p::floodsub::Topic::new(topic);
-                            match pubsub.unsubscribe(topic) {
-                                true => {
-                                    let _ = resp.send(Ok(()));
-                                }
-                                false => {
-                                    let _ = resp.send(Err(std::io::Error::other(
-                                        "not subscribed to topic",
-                                    )));
-                                }
-                            }
-                        }
-                    }
-                }
-                PubsubCommand::Subscribed { resp } => match swarm.behaviour_mut().pubsub.as_mut() {
-                    Either::Left(gossipsub) => {
-                        let Some(pubsub) = gossipsub.as_mut() else {
+                        Ok(false) => {
                             let _ =
-                                resp.send(Err(std::io::Error::other("gossipsub is not enabled")));
-                            return;
-                        };
-                        let topics = pubsub.topics().map(|topic| topic.to_string()).collect();
-
-                        let _ = resp.send(Ok(topics));
-                    }
-                    Either::Right(floodsub) => {
-                        if !floodsub.is_enabled() {
-                            let _ =
-                                resp.send(Err(std::io::Error::other("floodsub is not enabled")));
-                            return;
-                        };
-
-                        let _ = resp.send(Err(std::io::Error::other(
-                            "function is unimplemented at this time",
-                        )));
-                    }
-                },
-                PubsubCommand::Peers { topic, resp } => {
-                    match swarm.behaviour_mut().pubsub.as_mut() {
-                        Either::Left(gossipsub) => {
-                            let Some(pubsub) = gossipsub.as_mut() else {
-                                let _ = resp
-                                    .send(Err(std::io::Error::other("gossipsub is not enabled")));
-                                return;
-                            };
-                            let topic = libp2p::gossipsub::IdentTopic::new(topic).hash();
-                            let peers = pubsub.mesh_peers(&topic).copied().collect();
-
-                            let _ = resp.send(Ok(peers));
+                                resp.send(Err(std::io::Error::other("topic already subscribed")));
                         }
-                        Either::Right(floodsub) => {
-                            if !floodsub.is_enabled() {
-                                let _ = resp
-                                    .send(Err(std::io::Error::other("floodsub is not enabled")));
-                                return;
-                            };
-
-                            let _ = resp.send(Err(std::io::Error::other(
-                                "function is unimplemented at this time",
-                            )));
+                        Err(e) => {
+                            let _ = resp.send(Err(std::io::Error::other(e)));
                         }
                     }
                 }
+                #[cfg(feature = "floodsub")]
+                PubsubCommand::Subscribe {
+                    pubsub_type: PubsubType::Floodsub,
+                    topic,
+                    resp,
+                } => {
+                    let Some(pubsub) = swarm.behaviour_mut().floodsub.as_mut() else {
+                        let _ = resp.send(Err(std::io::Error::other("floodsub is not enabled")));
+                        return;
+                    };
+
+                    let topic = libp2p::floodsub::Topic::new(topic);
+                    match pubsub.subscribe(topic) {
+                        true => {
+                            let _ = resp.send(Ok(()));
+                        }
+                        false => {
+                            let _ =
+                                resp.send(Err(std::io::Error::other("topic already subscribed")));
+                        }
+                    }
+                }
+                #[cfg(feature = "floodsub")]
+                PubsubCommand::Unsubscribe {
+                    pubsub_type: PubsubType::Floodsub,
+                    topic,
+                    resp,
+                } => {
+                    let Some(pubsub) = swarm.behaviour_mut().floodsub.as_mut() else {
+                        let _ = resp.send(Err(std::io::Error::other("floodsub is not enabled")));
+                        return;
+                    };
+
+                    let topic = libp2p::floodsub::Topic::new(topic);
+                    match pubsub.unsubscribe(topic) {
+                        true => {
+                            let _ = resp.send(Ok(()));
+                        }
+                        false => {
+                            let _ =
+                                resp.send(Err(std::io::Error::other("not subscribed to topic")));
+                        }
+                    }
+                }
+                #[cfg(feature = "gossipsub")]
+                PubsubCommand::Unsubscribe {
+                    pubsub_type: PubsubType::Gossipsub,
+                    topic,
+                    resp,
+                } => {
+                    let Some(pubsub) = swarm.behaviour_mut().gossipsub.as_mut() else {
+                        let _ = resp.send(Err(std::io::Error::other("gossipsub is not enabled")));
+                        return;
+                    };
+
+                    let topic = libp2p::gossipsub::IdentTopic::new(topic);
+                    match pubsub.unsubscribe(&topic) {
+                        true => {
+                            let _ = resp.send(Ok(()));
+                        }
+                        false => {
+                            let _ =
+                                resp.send(Err(std::io::Error::other("not subscribed to topic")));
+                        }
+                    }
+                }
+                #[cfg(feature = "floodsub")]
+                PubsubCommand::Subscribed {
+                    pubsub_type: PubsubType::Floodsub,
+                    resp,
+                } => {
+                    if !swarm.behaviour_mut().floodsub.is_enabled() {
+                        let _ = resp.send(Err(std::io::Error::other("floodsub is not enabled")));
+                        return;
+                    }
+
+                    let _ = resp.send(Err(std::io::Error::other(
+                        "function is unimplemented at this time",
+                    )));
+                }
+                #[cfg(feature = "gossipsub")]
+                PubsubCommand::Subscribed {
+                    pubsub_type: PubsubType::Gossipsub,
+                    resp,
+                } => {
+                    let Some(pubsub) = swarm.behaviour_mut().gossipsub.as_mut() else {
+                        let _ = resp.send(Err(std::io::Error::other("gossipsub is not enabled")));
+                        return;
+                    };
+
+                    let topics = pubsub.topics().map(|topic| topic.to_string()).collect();
+
+                    let _ = resp.send(Ok(topics));
+                }
+                #[cfg(feature = "gossipsub")]
+                PubsubCommand::Peers {
+                    pubsub_type: PubsubType::Gossipsub,
+                    topic,
+                    resp,
+                } => {
+                    let Some(pubsub) = swarm.behaviour_mut().gossipsub.as_mut() else {
+                        let _ = resp.send(Err(std::io::Error::other("gossipsub is not enabled")));
+                        return;
+                    };
+
+                    let topic = libp2p::gossipsub::IdentTopic::new(topic).hash();
+                    let peers = pubsub.mesh_peers(&topic).copied().collect();
+
+                    let _ = resp.send(Ok(peers));
+                }
+                #[cfg(feature = "floodsub")]
+                PubsubCommand::Peers {
+                    pubsub_type: PubsubType::Floodsub,
+                    resp,
+                    ..
+                } => {
+                    if !swarm.behaviour_mut().floodsub.is_enabled() {
+                        let _ = resp.send(Err(std::io::Error::other("gossipsub is not enabled")));
+                        return;
+                    };
+
+                    let _ = resp.send(Err(std::io::Error::other(
+                        "function is unimplemented at this time",
+                    )));
+                }
+                #[cfg(feature = "gossipsub")]
                 PubsubCommand::Publish(PubsubPublishType::Gossipsub { topic, data, resp }) => {
-                    let pubsub = match swarm.behaviour_mut().pubsub.as_mut() {
-                        Either::Left(gossipsub) => {
-                            let Some(pubsub) = gossipsub.as_mut() else {
-                                let _ = resp
-                                    .send(Err(std::io::Error::other("gossipsub is not enabled")));
-                                return;
-                            };
-
-                            pubsub
-                        }
-                        Either::Right(_) => {
-                            unreachable!()
-                        }
+                    let Some(pubsub) = swarm.behaviour_mut().gossipsub.as_mut() else {
+                        let _ = resp.send(Err(std::io::Error::other("gossipsub is not enabled")));
+                        return;
                     };
 
                     let topic = libp2p::gossipsub::IdentTopic::new(topic);
@@ -466,20 +470,11 @@ where
 
                     let _ = resp.send(ret);
                 }
+                #[cfg(feature = "floodsub")]
                 PubsubCommand::Publish(PubsubPublishType::Floodsub(pubsub_type, resp)) => {
-                    let pubsub = match swarm.behaviour_mut().pubsub.as_mut() {
-                        Either::Left(_) => {
-                            unreachable!()
-                        }
-                        Either::Right(floodsub) => {
-                            let Some(pubsub) = floodsub.as_mut() else {
-                                let _ = resp
-                                    .send(Err(std::io::Error::other("floodsub is not enabled")));
-                                return;
-                            };
-
-                            pubsub
-                        }
+                    let Some(pubsub) = swarm.behaviour_mut().floodsub.as_mut() else {
+                        let _ = resp.send(Err(std::io::Error::other("floodsub is not enabled")));
+                        return;
                     };
 
                     match pubsub_type {
@@ -503,19 +498,12 @@ where
 
                     let _ = resp.send(Ok(()));
                 }
+                #[cfg(feature = "floodsub")]
                 PubsubCommand::FloodsubListener { topic, resp } => {
-                    match swarm.behaviour_mut().pubsub.as_mut() {
-                        Either::Left(_) => {
-                            unreachable!()
-                        }
-                        Either::Right(floodsub) => {
-                            if !floodsub.is_enabled() {
-                                let _ = resp
-                                    .send(Err(std::io::Error::other("floodsub is not enabled")));
-                                return;
-                            }
-                        }
-                    };
+                    if !swarm.behaviour_mut().floodsub.is_enabled() {
+                        let _ = resp.send(Err(std::io::Error::other("floodsub is not enabled")));
+                        return;
+                    }
 
                     let topic = libp2p::floodsub::Topic::new(topic);
 
@@ -525,19 +513,12 @@ where
 
                     let _ = resp.send(Ok(rx));
                 }
+                #[cfg(feature = "gossipsub")]
                 PubsubCommand::GossipsubListener { topic, resp } => {
-                    match swarm.behaviour_mut().pubsub.as_mut() {
-                        Either::Left(gossipsub) => {
-                            if !gossipsub.is_enabled() {
-                                let _ = resp
-                                    .send(Err(std::io::Error::other("gossipsub is not enabled")));
-                                return;
-                            }
-                        }
-                        Either::Right(_) => {
-                            unreachable!()
-                        }
-                    };
+                    if !swarm.behaviour_mut().gossipsub.is_enabled() {
+                        let _ = resp.send(Err(std::io::Error::other("gossipsub is not enabled")));
+                        return;
+                    }
 
                     let topic = libp2p::gossipsub::IdentTopic::new(topic).hash();
 
@@ -942,13 +923,10 @@ where
             BehaviourEvent::RendezvousServer(event) => self.process_rendezvous_server_event(event),
             #[cfg(feature = "mdns")]
             BehaviourEvent::Mdns(event) => self.process_mdns_event(event),
-            #[cfg(any(feature = "gossipsub", feature = "floodsub"))]
-            BehaviourEvent::Pubsub(ev) => match ev {
-                #[cfg(feature = "gossipsub")]
-                Either::Left(gossipsub_event) => self.process_gossipsub_event(gossipsub_event),
-                #[cfg(feature = "floodsub")]
-                Either::Right(floodsub_event) => self.process_floodsub_event(floodsub_event),
-            },
+            #[cfg(feature = "gossipsub")]
+            BehaviourEvent::Gossipsub(ev) => self.process_gossipsub_event(ev),
+            #[cfg(feature = "floodsub")]
+            BehaviourEvent::Floodsub(ev) => self.process_floodsub_event(ev),
             #[cfg(feature = "kad")]
             BehaviourEvent::Kademlia(event) => self.process_kademlia_event(event),
             #[cfg(feature = "identify")]
