@@ -2,6 +2,7 @@ mod executor;
 mod transport;
 
 use crate::behaviour;
+#[cfg(feature = "request-response")]
 use crate::behaviour::request_response::RequestResponseConfig;
 #[cfg(feature = "dns")]
 use crate::builder::transport::DnsResolver;
@@ -9,18 +10,25 @@ use crate::builder::transport::TransportConfig;
 use crate::handle::Connexa;
 use crate::task::ConnexaTask;
 use executor::ConnexaExecutor;
-use libp2p::Swarm;
+#[cfg(feature = "autonat")]
 use libp2p::autonat::v1::Config as AutonatV1Config;
+#[cfg(feature = "autonat")]
 use libp2p::autonat::v2::client::Config as AutonatV2ClientConfig;
+#[cfg(feature = "floodsub")]
 use libp2p::floodsub::FloodsubConfig;
+#[cfg(feature = "identify")]
 use libp2p::identify::Config as IdentifyConfig;
 use libp2p::identity::Keypair;
+#[cfg(feature = "kad")]
 use libp2p::kad::Config as KadConfig;
+#[cfg(feature = "ping")]
 use libp2p::ping::Config as PingConfig;
 #[cfg(feature = "pnet")]
 use libp2p::pnet::PreSharedKey;
+#[cfg(feature = "relay")]
 use libp2p::relay::Config as RelayServerConfig;
 use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
+use libp2p::Swarm;
 use libp2p_connection_limits::ConnectionLimits;
 use std::fmt::Debug;
 // Since this used for quic duration, we will feature gate it to satisfy lint
@@ -58,18 +66,27 @@ where
 }
 
 pub(crate) struct Config {
+    #[cfg(feature = "kad")]
     pub kademlia_config: (String, Box<dyn Fn(KadConfig) -> KadConfig>),
+    #[cfg(feature = "gossipsub")]
     pub gossipsub_config: Box<
         dyn Fn(
             libp2p::gossipsub::ConfigBuilder,
         ) -> Result<libp2p::gossipsub::Config, libp2p::gossipsub::ConfigBuilderError>,
     >,
+    #[cfg(feature = "floodsub")]
     pub floodsub_config: Box<dyn Fn(FloodsubConfig) -> FloodsubConfig>,
+    #[cfg(feature = "ping")]
     pub ping_config: Box<dyn Fn(PingConfig) -> PingConfig>,
+    #[cfg(feature = "autonat")]
     pub autonat_v1_config: Box<dyn Fn(AutonatV1Config) -> AutonatV1Config>,
+    #[cfg(feature = "autonat")]
     pub autonat_v2_client_config: Box<dyn Fn(AutonatV2ClientConfig) -> AutonatV2ClientConfig>,
+    #[cfg(feature = "relay")]
     pub relay_server_config: Box<dyn Fn(RelayServerConfig) -> RelayServerConfig>,
+    #[cfg(feature = "identify")]
     pub identify_config: (String, Box<dyn Fn(IdentifyConfig) -> IdentifyConfig>),
+    #[cfg(feature = "request-response")]
     pub request_response_config: Vec<RequestResponseConfig>,
     pub connection_limits: Box<dyn Fn(ConnectionLimits) -> ConnectionLimits>,
 }
@@ -77,14 +94,23 @@ pub(crate) struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            #[cfg(feature = "kad")]
             kademlia_config: ("/ipfs/kad/1.0.0".to_string(), Box::new(|config| config)),
+            #[cfg(feature = "gossipsub")]
             gossipsub_config: Box::new(|config| config.build()),
+            #[cfg(feature = "floodsub")]
             floodsub_config: Box::new(|config| config),
+            #[cfg(feature = "ping")]
             ping_config: Box::new(|config| config),
+            #[cfg(feature = "autonat")]
             autonat_v1_config: Box::new(|config| config),
+            #[cfg(feature = "autonat")]
             autonat_v2_client_config: Box::new(|config| config),
+            #[cfg(feature = "relay")]
             relay_server_config: Box::new(|config| config),
+            #[cfg(feature = "identify")]
             identify_config: (String::from("/ipfs/id"), Box::new(|config| config)),
+            #[cfg(feature = "request-response")]
             request_response_config: vec![],
             connection_limits: Box::new(|config| config),
         }
@@ -93,25 +119,41 @@ impl Default for Config {
 
 #[derive(Default)]
 pub(crate) struct Protocols {
+    #[cfg(feature = "gossipsub")]
     pub(crate) gossipsub: bool,
+    #[cfg(feature = "floodsub")]
     pub(crate) floodsub: bool,
+    #[cfg(feature = "kad")]
     pub(crate) kad: bool,
+    #[cfg(feature = "relay")]
     pub(crate) relay_client: bool,
+    #[cfg(feature = "relay")]
     pub(crate) relay_server: bool,
+    #[cfg(all(feature = "dcutr", feature = "dcutr"))]
     pub(crate) dcutr: bool,
     #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(feature = "mdns")]
     pub(crate) mdns: bool,
+    #[cfg(feature = "identify")]
     pub(crate) identify: bool,
+    #[cfg(feature = "autonat")]
     pub(crate) autonat_v1: bool,
+    #[cfg(feature = "autonat")]
     pub(crate) autonat_v2_client: bool,
+    #[cfg(feature = "autonat")]
     pub(crate) autonat_v2_server: bool,
+    #[cfg(feature = "rendezvous")]
     pub(crate) rendezvous_client: bool,
+    #[cfg(feature = "rendezvous")]
     pub(crate) rendezvous_server: bool,
     #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(feature = "upnp")]
     pub(crate) upnp: bool,
+    #[cfg(feature = "ping")]
     pub(crate) ping: bool,
     #[cfg(feature = "stream")]
     pub(crate) streams: bool,
+    #[cfg(feature = "request-response")]
     pub(crate) request_response: bool,
     pub(crate) connection_limits: bool,
 }
@@ -198,11 +240,13 @@ where
     }
 
     /// Enables kademlia
+    #[cfg(feature = "kad")]
     pub fn with_kademlia(self) -> Self {
         self.with_kademlia_with_config("/ipfs/kad/1.0.0", |config| config)
     }
 
     /// Enables kademlia
+    #[cfg(feature = "kad")]
     pub fn with_kademlia_with_config<F>(mut self, protocol: impl Into<String>, f: F) -> Self
     where
         F: Fn(KadConfig) -> KadConfig + 'static,
@@ -214,29 +258,34 @@ where
 
     /// Enable mdns
     #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(feature = "mdns")]
     pub fn with_mdns(mut self) -> Self {
         self.protocols.mdns = true;
         self
     }
 
     /// Enable relay client
+    #[cfg(feature = "relay")]
     pub fn with_relay(mut self) -> Self {
         self.protocols.relay_client = true;
         self
     }
 
     /// Enables DCuTR
+    #[cfg(all(feature = "relay", feature = "dcutr"))]
     pub fn with_dcutr(mut self) -> Self {
         self.protocols.dcutr = true;
         self
     }
 
     /// Enable relay server
+    #[cfg(feature = "relay")]
     pub fn with_relay_server(self) -> Self {
         self.with_relay_server_with_config(|config| config)
     }
 
     /// Enable relay server
+    #[cfg(feature = "relay")]
     pub fn with_relay_server_with_config<F>(mut self, config: F) -> Self
     where
         F: Fn(RelayServerConfig) -> RelayServerConfig + 'static,
@@ -248,29 +297,34 @@ where
 
     /// Enable port mapping (AKA UPnP)
     #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(feature = "upnp")]
     pub fn with_upnp(mut self) -> Self {
         self.protocols.upnp = true;
         self
     }
 
     /// Enables rendezvous server
+    #[cfg(feature = "rendezvous")]
     pub fn with_rendezvous_server(mut self) -> Self {
         self.protocols.rendezvous_server = true;
         self
     }
 
     /// Enables rendezvous client
+    #[cfg(feature = "rendezvous")]
     pub fn with_rendezvous_client(mut self) -> Self {
         self.protocols.rendezvous_client = true;
         self
     }
 
     /// Enables identify
+    #[cfg(feature = "identify")]
     pub fn with_identify(self) -> Self {
         self.with_identify_with_config("/ipfs/id", |config| config)
     }
 
     /// Enables identify
+    #[cfg(feature = "identify")]
     pub fn with_identify_with_config<F>(mut self, protocol: impl Into<String>, config: F) -> Self
     where
         F: Fn(IdentifyConfig) -> IdentifyConfig + 'static,
@@ -289,18 +343,20 @@ where
     }
 
     /// Enables gossipsub
+    #[cfg(feature = "gossipsub")]
     pub fn with_gossipsub(self) -> Self {
         self.with_gossipsub_with_config(|config| config.build())
     }
 
     /// Enables gossipsub
+    #[cfg(feature = "gossipsub")]
     pub fn with_gossipsub_with_config<F>(mut self, config: F) -> Self
     where
         F: Fn(
-                libp2p::gossipsub::ConfigBuilder,
-            )
-                -> Result<libp2p::gossipsub::Config, libp2p::gossipsub::ConfigBuilderError>
-            + 'static,
+            libp2p::gossipsub::ConfigBuilder,
+        )
+            -> Result<libp2p::gossipsub::Config, libp2p::gossipsub::ConfigBuilderError>
+        + 'static,
     {
         self.protocols.gossipsub = true;
         self.config.gossipsub_config = Box::new(config);
@@ -308,11 +364,13 @@ where
     }
 
     /// Enables floodsub
+    #[cfg(feature = "floodsub")]
     pub fn with_floodsub(self) -> Self {
         self.with_floodsub_with_config(|config| config)
     }
 
     /// Enables floodsub
+    #[cfg(feature = "floodsub")]
     pub fn with_floodsub_with_config<F>(mut self, config: F) -> Self
     where
         F: Fn(FloodsubConfig) -> FloodsubConfig + 'static,
@@ -326,6 +384,7 @@ where
     /// Note: At this time, this option will only support up to 10 request-response behaviours.
     ///       with any additional being ignored. Additionally, any duplicated protocols that are
     ///       provided will be ignored.
+    #[cfg(feature = "request-response")]
     pub fn with_request_response(mut self, mut config: Vec<RequestResponseConfig>) -> Self {
         if config.len() > 10 {
             config.truncate(10);
@@ -341,11 +400,13 @@ where
     }
 
     /// Enables autonat v1
+    #[cfg(feature = "autonat")]
     pub fn with_autonat_v1(self) -> Self {
         self.with_autonat_v1_with_config(|config| config)
     }
 
     /// Enables autonat v1
+    #[cfg(feature = "autonat")]
     pub fn with_autonat_v1_with_config<F>(mut self, config: F) -> Self
     where
         F: Fn(AutonatV1Config) -> AutonatV1Config + 'static,
@@ -356,11 +417,13 @@ where
     }
 
     /// Enables autonat v2 client
+    #[cfg(feature = "autonat")]
     pub fn with_autonat_v2_client(self) -> Self {
         self.with_autonat_v2_client_with_config(|config| config)
     }
 
     /// Enables autonat v2 client
+    #[cfg(feature = "autonat")]
     pub fn with_autonat_v2_client_with_config<F>(mut self, config: F) -> Self
     where
         F: Fn(AutonatV2ClientConfig) -> AutonatV2ClientConfig + 'static,
@@ -371,17 +434,20 @@ where
     }
 
     /// Enables autonat v2 server
+    #[cfg(feature = "autonat")]
     pub fn with_autonat_v2_server(mut self) -> Self {
         self.protocols.autonat_v2_server = true;
         self
     }
 
     /// Enables ping
+    #[cfg(feature = "ping")]
     pub fn with_ping(self) -> Self {
         self.with_ping_with_config(|config| config)
     }
 
     /// Enables ping
+    #[cfg(feature = "ping")]
     pub fn with_ping_with_config<F>(mut self, config: F) -> Self
     where
         F: Fn(PingConfig) -> PingConfig + 'static,

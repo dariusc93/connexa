@@ -1,18 +1,34 @@
+// We temporarily allow unused imports
+#![allow(unused_imports)]
 pub mod dummy;
+#[cfg(feature = "request-response")]
 pub mod request_response;
+#[cfg(feature = "request-response")]
 mod rr_man;
 
 use either::Either;
+#[cfg(feature = "autonat")]
+use libp2p::autonat;
+#[cfg(all(feature = "relay", feature = "dcutr"))]
 use libp2p::dcutr::Behaviour as Dcutr;
+#[cfg(feature = "mdns")]
 use libp2p::identify::Behaviour as Identify;
-use libp2p::kad::Behaviour as Kademlia;
+#[cfg(feature = "kad")]
 use libp2p::kad::store::MemoryStore;
+#[cfg(feature = "kad")]
+use libp2p::kad::Behaviour as Kademlia;
+#[cfg(feature = "mdns")]
 use libp2p::mdns::tokio::Behaviour as Mdns;
+#[cfg(feature = "ping")]
 use libp2p::ping::Behaviour as Ping;
+#[cfg(feature = "relay")]
 use libp2p::relay::client::Behaviour as RelayClient;
-use libp2p::relay::{Behaviour as RelayServer, client};
+#[cfg(feature = "relay")]
+use libp2p::relay::{client::Transport as ClientTransport, Behaviour as RelayServer};
+#[cfg(not(feature = "relay"))]
+type ClientTransport = ();
 use libp2p::swarm::behaviour::toggle::Toggle;
-use libp2p::{StreamProtocol, autonat, identify};
+use libp2p::StreamProtocol;
 
 use crate::builder::{Config, Protocols};
 use indexmap::IndexMap;
@@ -32,43 +48,68 @@ where
     pub block_list: libp2p_allow_block_list::Behaviour<BlockedPeers>,
     pub connection_limits: Toggle<libp2p_connection_limits::Behaviour>,
 
+    #[cfg(feature = "relay")]
     // networking
     pub relay: Toggle<RelayServer>,
+    #[cfg(feature = "relay")]
     pub relay_client: Toggle<RelayClient>,
 
     #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(feature = "upnp")]
     pub upnp: Toggle<libp2p::upnp::tokio::Behaviour>,
     #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(feature = "dcutr", feature = "relay"))]
     pub dcutr: Toggle<Dcutr>,
 
     // discovery
+    #[cfg(feature = "rendezvous")]
     pub rendezvous_client: Toggle<libp2p::rendezvous::client::Behaviour>,
+    #[cfg(feature = "rendezvous")]
     pub rendezvous_server: Toggle<libp2p::rendezvous::server::Behaviour>,
     #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(feature = "mdns")]
     pub mdns: Toggle<Mdns>,
+    #[cfg(feature = "kad")]
     pub kademlia: Toggle<Kademlia<MemoryStore>>,
 
+    #[cfg(feature = "identify")]
     pub identify: Toggle<Identify>,
+    #[cfg(any(feature = "gossipsub", feature = "floodsub"))]
     pub pubsub: Either<Toggle<libp2p::gossipsub::Behaviour>, Toggle<libp2p::floodsub::Floodsub>>,
+    #[cfg(feature = "ping")]
     pub ping: Toggle<Ping>,
     #[cfg(feature = "stream")]
     pub stream: Toggle<libp2p_stream::Behaviour>,
 
+    #[cfg(feature = "autonat")]
     pub autonat_v1: Toggle<autonat::v1::Behaviour>,
+    #[cfg(feature = "autonat")]
     pub autonat_v2_client: Toggle<autonat::v2::client::Behaviour>,
+    #[cfg(feature = "autonat")]
     pub autonat_v2_server: Toggle<autonat::v2::server::Behaviour>,
 
     // TODO: Write a macro or behaviour to support multiple request-response behaviour
+    #[cfg(feature = "request-response")]
     pub rr_man: Toggle<rr_man::Behaviour>,
+    #[cfg(feature = "request-response")]
     pub rr_1: Toggle<request_response::Behaviour>,
+    #[cfg(feature = "request-response")]
     pub rr_2: Toggle<request_response::Behaviour>,
+    #[cfg(feature = "request-response")]
     pub rr_3: Toggle<request_response::Behaviour>,
+    #[cfg(feature = "request-response")]
     pub rr_4: Toggle<request_response::Behaviour>,
+    #[cfg(feature = "request-response")]
     pub rr_5: Toggle<request_response::Behaviour>,
+    #[cfg(feature = "request-response")]
     pub rr_6: Toggle<request_response::Behaviour>,
+    #[cfg(feature = "request-response")]
     pub rr_7: Toggle<request_response::Behaviour>,
+    #[cfg(feature = "request-response")]
     pub rr_8: Toggle<request_response::Behaviour>,
+    #[cfg(feature = "request-response")]
     pub rr_9: Toggle<request_response::Behaviour>,
+    #[cfg(feature = "request-response")]
     pub rr_0: Toggle<request_response::Behaviour>,
 
     // custom behaviour
@@ -85,11 +126,12 @@ where
         custom_behaviour: Option<C>,
         config: Config,
         protocols: Protocols,
-    ) -> std::io::Result<(Self, Option<client::Transport>)> {
+    ) -> std::io::Result<(Self, Option<ClientTransport>)> {
         let peer_id = keypair.public().to_peer_id();
 
         tracing::info!("net: starting with peer id {}", peer_id);
 
+        #[cfg(feature = "mdns")]
         #[cfg(not(target_arch = "wasm32"))]
         let mdns = protocols
             .mdns
@@ -97,6 +139,7 @@ where
             .transpose()?
             .into();
 
+        #[cfg(feature = "kad")]
         let kademlia: Toggle<Kademlia<MemoryStore>> = protocols
             .kad
             .then(|| {
@@ -111,6 +154,7 @@ where
             })
             .into();
 
+        #[cfg(feature = "autonat")]
         let autonat_v1 = protocols
             .autonat_v1
             .then(|| {
@@ -120,6 +164,7 @@ where
             })
             .into();
 
+        #[cfg(feature = "autonat")]
         let autonat_v2_client = protocols
             .autonat_v2_client
             .then(|| {
@@ -130,11 +175,13 @@ where
             })
             .into();
 
+        #[cfg(feature = "autonat")]
         let autonat_v2_server = protocols
             .autonat_v2_server
             .then(|| autonat::v2::server::Behaviour::default())
             .into();
 
+        #[cfg(feature = "ping")]
         let ping = protocols
             .ping
             .then(|| {
@@ -144,17 +191,19 @@ where
             })
             .into();
 
+        #[cfg(feature = "identify")]
         let identify = protocols
             .identify
             .then(|| {
                 let pubkey = keypair.public();
                 let (protocol, config_fn) = config.identify_config;
-                let config = (config_fn)(identify::Config::new(protocol, pubkey));
+                let config = (config_fn)(libp2p::identify::Config::new(protocol, pubkey));
                 Identify::new(config)
             })
             .into();
 
         // TODO: Use `Optional<Either<bool, bool>>` in protocols instead?
+        #[cfg(any(feature = "gossipsub", feature = "floodsub"))]
         let pubsub = match (protocols.floodsub, protocols.gossipsub) {
             (true, true) => {
                 return Err(std::io::Error::other(
@@ -177,15 +226,17 @@ where
                     libp2p::gossipsub::MessageAuthenticity::Signed(keypair.clone()),
                     config,
                 )
-                .map_err(std::io::Error::other)?;
+                    .map_err(std::io::Error::other)?;
                 Either::Left(Some(behaviour).into())
             }
             (false, false) => Either::Left(None.into()),
         };
 
         #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(all(feature = "relay", feature = "dcutr"))]
         let dcutr = protocols.dcutr.then(|| Dcutr::new(peer_id)).into();
 
+        #[cfg(feature = "relay")]
         let relay = protocols
             .relay_server
             .then(|| {
@@ -196,27 +247,34 @@ where
             .into();
 
         #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(feature = "upnp")]
         let upnp = protocols
             .upnp
             .then(libp2p::upnp::tokio::Behaviour::default)
             .into();
 
+        #[cfg(feature = "relay")]
         let (transport, relay_client) = match protocols.relay_client {
             true => {
-                let (transport, client) = client::new(peer_id);
+                let (transport, client) = libp2p::relay::client::new(peer_id);
                 (Some(transport), Some(client).into())
             }
             false => (None, None.into()),
         };
 
+        #[cfg(not(feature = "relay"))]
+        let transport = None::<()>;
+
         let block_list = libp2p_allow_block_list::Behaviour::default();
         let custom = Toggle::from(custom_behaviour);
 
+        #[cfg(feature = "rendezvous")]
         let rendezvous_client = protocols
             .rendezvous_client
             .then(|| libp2p::rendezvous::client::Behaviour::new(keypair.clone()))
             .into();
 
+        #[cfg(feature = "rendezvous")]
         let rendezvous_server = protocols
             .rendezvous_server
             .then(|| libp2p::rendezvous::server::Behaviour::new(Default::default()))
@@ -234,161 +292,191 @@ where
             .map(libp2p_connection_limits::Behaviour::new)
             .into();
 
+        #[allow(unused_mut)]
         let mut behaviour = Behaviour {
             connection_limits,
             #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(feature = "mdns")]
             mdns,
+            #[cfg(feature = "kad")]
             kademlia,
+            #[cfg(feature = "ping")]
             ping,
+            #[cfg(feature = "identify")]
             identify,
+            #[cfg(feature = "autonat")]
             autonat_v1,
+            #[cfg(feature = "autonat")]
             autonat_v2_client,
+            #[cfg(feature = "autonat")]
             autonat_v2_server,
+            #[cfg(any(feature = "gossipsub", feature = "floodsub"))]
             pubsub,
             #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(any(feature = "relay", feature = "dcutr"))]
             dcutr,
+            #[cfg(feature = "relay")]
             relay,
+            #[cfg(feature = "relay")]
             relay_client,
             block_list,
             #[cfg(feature = "stream")]
             stream,
             #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(feature = "upnp")]
             upnp,
             custom,
+            #[cfg(feature = "rendezvous")]
             rendezvous_client,
+            #[cfg(feature = "rendezvous")]
             rendezvous_server,
+            #[cfg(feature = "request-response")]
             rr_man: Toggle::from(None),
+            #[cfg(feature = "request-response")]
             rr_0: Toggle::from(None),
+            #[cfg(feature = "request-response")]
             rr_1: Toggle::from(None),
+            #[cfg(feature = "request-response")]
             rr_2: Toggle::from(None),
+            #[cfg(feature = "request-response")]
             rr_3: Toggle::from(None),
+            #[cfg(feature = "request-response")]
             rr_4: Toggle::from(None),
+            #[cfg(feature = "request-response")]
             rr_5: Toggle::from(None),
+            #[cfg(feature = "request-response")]
             rr_6: Toggle::from(None),
+            #[cfg(feature = "request-response")]
             rr_7: Toggle::from(None),
+            #[cfg(feature = "request-response")]
             rr_8: Toggle::from(None),
+            #[cfg(feature = "request-response")]
             rr_9: Toggle::from(None),
         };
 
-        let mut existing_protocol: IndexMap<StreamProtocol, _> = IndexMap::new();
+        #[cfg(feature = "request-response")]
+        {
+            let mut existing_protocol: IndexMap<StreamProtocol, _> = IndexMap::new();
 
-        for (index, config) in config.request_response_config.iter().enumerate() {
-            let protocol =
-                StreamProtocol::try_from_owned(config.protocol.clone()).expect("valid protocol");
-            if existing_protocol.contains_key(&protocol) {
-                tracing::warn!(%protocol, "request-response protocol is already registered");
-                continue;
-            };
+            for (index, config) in config.request_response_config.iter().enumerate() {
+                let protocol = StreamProtocol::try_from_owned(config.protocol.clone())
+                    .expect("valid protocol");
+                if existing_protocol.contains_key(&protocol) {
+                    tracing::warn!(%protocol, "request-response protocol is already registered");
+                    continue;
+                };
 
-            match index {
-                0 => {
-                    if behaviour.rr_0.is_enabled() {
-                        continue;
+                match index {
+                    0 => {
+                        if behaviour.rr_0.is_enabled() {
+                            continue;
+                        }
+                        behaviour.rr_0 = protocols
+                            .request_response
+                            .then(|| request_response::Behaviour::new(config.clone()))
+                            .into();
                     }
-                    behaviour.rr_0 = protocols
-                        .request_response
-                        .then(|| request_response::Behaviour::new(config.clone()))
-                        .into();
-                }
-                1 => {
-                    if behaviour.rr_1.is_enabled() {
-                        continue;
+                    1 => {
+                        if behaviour.rr_1.is_enabled() {
+                            continue;
+                        }
+                        behaviour.rr_1 = protocols
+                            .request_response
+                            .then(|| request_response::Behaviour::new(config.clone()))
+                            .into();
                     }
-                    behaviour.rr_1 = protocols
-                        .request_response
-                        .then(|| request_response::Behaviour::new(config.clone()))
-                        .into();
-                }
-                2 => {
-                    if behaviour.rr_2.is_enabled() {
-                        continue;
+                    2 => {
+                        if behaviour.rr_2.is_enabled() {
+                            continue;
+                        }
+                        behaviour.rr_2 = protocols
+                            .request_response
+                            .then(|| request_response::Behaviour::new(config.clone()))
+                            .into();
                     }
-                    behaviour.rr_2 = protocols
-                        .request_response
-                        .then(|| request_response::Behaviour::new(config.clone()))
-                        .into();
-                }
-                3 => {
-                    if behaviour.rr_3.is_enabled() {
-                        continue;
+                    3 => {
+                        if behaviour.rr_3.is_enabled() {
+                            continue;
+                        }
+                        behaviour.rr_3 = protocols
+                            .request_response
+                            .then(|| request_response::Behaviour::new(config.clone()))
+                            .into();
                     }
-                    behaviour.rr_3 = protocols
-                        .request_response
-                        .then(|| request_response::Behaviour::new(config.clone()))
-                        .into();
-                }
-                4 => {
-                    if behaviour.rr_4.is_enabled() {
-                        continue;
+                    4 => {
+                        if behaviour.rr_4.is_enabled() {
+                            continue;
+                        }
+                        behaviour.rr_4 = protocols
+                            .request_response
+                            .then(|| request_response::Behaviour::new(config.clone()))
+                            .into();
                     }
-                    behaviour.rr_4 = protocols
-                        .request_response
-                        .then(|| request_response::Behaviour::new(config.clone()))
-                        .into();
-                }
-                5 => {
-                    if behaviour.rr_5.is_enabled() {
-                        continue;
+                    5 => {
+                        if behaviour.rr_5.is_enabled() {
+                            continue;
+                        }
+                        behaviour.rr_5 = protocols
+                            .request_response
+                            .then(|| request_response::Behaviour::new(config.clone()))
+                            .into();
                     }
-                    behaviour.rr_5 = protocols
-                        .request_response
-                        .then(|| request_response::Behaviour::new(config.clone()))
-                        .into();
-                }
-                6 => {
-                    if behaviour.rr_6.is_enabled() {
-                        continue;
+                    6 => {
+                        if behaviour.rr_6.is_enabled() {
+                            continue;
+                        }
+                        behaviour.rr_6 = protocols
+                            .request_response
+                            .then(|| request_response::Behaviour::new(config.clone()))
+                            .into();
                     }
-                    behaviour.rr_6 = protocols
-                        .request_response
-                        .then(|| request_response::Behaviour::new(config.clone()))
-                        .into();
-                }
-                7 => {
-                    if behaviour.rr_7.is_enabled() {
-                        continue;
+                    7 => {
+                        if behaviour.rr_7.is_enabled() {
+                            continue;
+                        }
+                        behaviour.rr_7 = protocols
+                            .request_response
+                            .then(|| request_response::Behaviour::new(config.clone()))
+                            .into();
                     }
-                    behaviour.rr_7 = protocols
-                        .request_response
-                        .then(|| request_response::Behaviour::new(config.clone()))
-                        .into();
-                }
-                8 => {
-                    if behaviour.rr_8.is_enabled() {
-                        continue;
+                    8 => {
+                        if behaviour.rr_8.is_enabled() {
+                            continue;
+                        }
+                        behaviour.rr_8 = protocols
+                            .request_response
+                            .then(|| request_response::Behaviour::new(config.clone()))
+                            .into();
                     }
-                    behaviour.rr_8 = protocols
-                        .request_response
-                        .then(|| request_response::Behaviour::new(config.clone()))
-                        .into();
-                }
-                9 => {
-                    if behaviour.rr_9.is_enabled() {
-                        continue;
+                    9 => {
+                        if behaviour.rr_9.is_enabled() {
+                            continue;
+                        }
+                        behaviour.rr_9 = protocols
+                            .request_response
+                            .then(|| request_response::Behaviour::new(config.clone()))
+                            .into();
                     }
-                    behaviour.rr_9 = protocols
-                        .request_response
-                        .then(|| request_response::Behaviour::new(config.clone()))
-                        .into();
+                    _ => {
+                        tracing::warn!(
+                            "local node can only support up to 10 request-response protocols at this time."
+                        );
+                        break;
+                    }
                 }
-                _ => {
-                    tracing::warn!(
-                        "local node can only support up to 10 request-response protocols at this time."
-                    );
-                    break;
-                }
+
+                existing_protocol.insert(protocol, index);
             }
 
-            existing_protocol.insert(protocol, index);
-        }
-
-        if !existing_protocol.is_empty() {
-            behaviour.rr_man = Toggle::from(Some(rr_man::Behaviour::new(existing_protocol)))
+            if !existing_protocol.is_empty() {
+                behaviour.rr_man = Toggle::from(Some(rr_man::Behaviour::new(existing_protocol)))
+            }
         }
 
         Ok((behaviour, transport))
     }
 
+    #[cfg(feature = "request-response")]
     pub(crate) fn request_response(
         &mut self,
         protocol: Option<StreamProtocol>,
