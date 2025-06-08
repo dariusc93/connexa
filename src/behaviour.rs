@@ -9,7 +9,7 @@ mod rr_man;
 use either::Either;
 #[cfg(feature = "autonat")]
 use libp2p::autonat;
-#[cfg(all(feature = "relay", feature = "dcutr"))]
+#[cfg(feature = "dcutr")]
 use libp2p::dcutr::Behaviour as Dcutr;
 #[cfg(feature = "mdns")]
 use libp2p::identify::Behaviour as Identify;
@@ -58,7 +58,7 @@ where
     #[cfg(feature = "upnp")]
     pub upnp: Toggle<libp2p::upnp::tokio::Behaviour>,
     #[cfg(not(target_arch = "wasm32"))]
-    #[cfg(all(feature = "dcutr", feature = "relay"))]
+    #[cfg(feature = "dcutr")]
     pub dcutr: Toggle<Dcutr>,
 
     // discovery
@@ -233,7 +233,7 @@ where
         };
 
         #[cfg(not(target_arch = "wasm32"))]
-        #[cfg(all(feature = "relay", feature = "dcutr"))]
+        #[cfg(feature = "dcutr")]
         let dcutr = protocols.dcutr.then(|| Dcutr::new(peer_id)).into();
 
         #[cfg(feature = "relay")]
@@ -313,7 +313,7 @@ where
             #[cfg(any(feature = "gossipsub", feature = "floodsub"))]
             pubsub,
             #[cfg(not(target_arch = "wasm32"))]
-            #[cfg(any(feature = "relay", feature = "dcutr"))]
+            #[cfg(feature = "dcutr")]
             dcutr,
             #[cfg(feature = "relay")]
             relay,
