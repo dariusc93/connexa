@@ -713,7 +713,7 @@ where
                     let _ = resp.send(Ok(stream.new_control()));
                 }
             },
-            #[cfg(feature = "rendezvous")]
+            #[cfg(feature = "request-response")]
             Command::RequestResponse(request_response_command) => match request_response_command {
                 RequestResponseCommand::SendRequests {
                     protocol,
