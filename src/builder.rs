@@ -10,15 +10,12 @@ use crate::builder::transport::TransportConfig;
 use crate::handle::Connexa;
 use crate::task::ConnexaTask;
 use executor::ConnexaExecutor;
-use libp2p::Swarm;
 #[cfg(feature = "autonat")]
 use libp2p::autonat::v1::Config as AutonatV1Config;
 #[cfg(feature = "autonat")]
 use libp2p::autonat::v2::client::Config as AutonatV2ClientConfig;
 #[cfg(feature = "floodsub")]
 use libp2p::floodsub::FloodsubConfig;
-#[cfg(feature = "gossipsub")]
-use libp2p::gossipsub::Config as GossipsubConfig;
 #[cfg(feature = "identify")]
 use libp2p::identify::Config as IdentifyConfig;
 use libp2p::identity::Keypair;
@@ -31,6 +28,7 @@ use libp2p::pnet::PreSharedKey;
 #[cfg(feature = "relay")]
 use libp2p::relay::Config as RelayServerConfig;
 use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
+use libp2p::Swarm;
 use libp2p_connection_limits::ConnectionLimits;
 use std::fmt::Debug;
 // Since this used for quic duration, we will feature gate it to satisfy lint
@@ -54,7 +52,7 @@ where
 {
     keypair: Keypair,
     context: X,
-    custom_behaviour: Option<C>,
+    custom_behaviour: Option<Box<dyn Fn(Keypair) -> C>>,
     file_descriptor_limits: Option<FileDescLimit>,
     custom_task_callback:
         Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, T) + 'static + Send>,
@@ -67,31 +65,56 @@ where
     protocols: Protocols,
 }
 
-// TODO: Instead of providing the optional configuration,
-//       we should instead use a Fn pointer to pass the default configuration
-//       and allow changes there instead, which would be used when constructing
-//       the behaviour
-#[derive(Default)]
 pub(crate) struct Config {
     #[cfg(feature = "kad")]
-    pub kademlia_config: Option<(String, Box<dyn Fn(KadConfig) -> KadConfig>)>,
+    pub kademlia_config: (String, Box<dyn Fn(KadConfig) -> KadConfig>),
     #[cfg(feature = "gossipsub")]
-    pub gossipsub_config: Option<GossipsubConfig>,
+    pub gossipsub_config: Box<
+        dyn Fn(
+            libp2p::gossipsub::ConfigBuilder,
+        ) -> Result<libp2p::gossipsub::Config, libp2p::gossipsub::ConfigBuilderError>,
+    >,
     #[cfg(feature = "floodsub")]
-    pub floodsub_config: Option<FloodsubConfig>,
+    pub floodsub_config: Box<dyn Fn(FloodsubConfig) -> FloodsubConfig>,
     #[cfg(feature = "ping")]
-    pub ping_config: Option<PingConfig>,
+    pub ping_config: Box<dyn Fn(PingConfig) -> PingConfig>,
     #[cfg(feature = "autonat")]
-    pub autonat_v1_config: Option<AutonatV1Config>,
+    pub autonat_v1_config: Box<dyn Fn(AutonatV1Config) -> AutonatV1Config>,
     #[cfg(feature = "autonat")]
-    pub autonat_v2_client_config: Option<AutonatV2ClientConfig>,
+    pub autonat_v2_client_config: Box<dyn Fn(AutonatV2ClientConfig) -> AutonatV2ClientConfig>,
     #[cfg(feature = "relay")]
-    pub relay_server_config: RelayServerConfig,
+    pub relay_server_config: Box<dyn Fn(RelayServerConfig) -> RelayServerConfig>,
     #[cfg(feature = "identify")]
-    pub identify_config: Option<IdentifyConfig>,
+    pub identify_config: (String, Box<dyn Fn(IdentifyConfig) -> IdentifyConfig>),
     #[cfg(feature = "request-response")]
     pub request_response_config: Vec<RequestResponseConfig>,
-    pub connection_limits: Option<ConnectionLimits>,
+    pub connection_limits: Box<dyn Fn(ConnectionLimits) -> ConnectionLimits>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            #[cfg(feature = "kad")]
+            kademlia_config: ("/ipfs/kad/1.0.0".to_string(), Box::new(|config| config)),
+            #[cfg(feature = "gossipsub")]
+            gossipsub_config: Box::new(|config| config.build()),
+            #[cfg(feature = "floodsub")]
+            floodsub_config: Box::new(|config| config),
+            #[cfg(feature = "ping")]
+            ping_config: Box::new(|config| config),
+            #[cfg(feature = "autonat")]
+            autonat_v1_config: Box::new(|config| config),
+            #[cfg(feature = "autonat")]
+            autonat_v2_client_config: Box::new(|config| config),
+            #[cfg(feature = "relay")]
+            relay_server_config: Box::new(|config| config),
+            #[cfg(feature = "identify")]
+            identify_config: (String::from("/ipfs/id"), Box::new(|config| config)),
+            #[cfg(feature = "request-response")]
+            request_response_config: vec![],
+            connection_limits: Box::new(|config| config),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -229,7 +252,7 @@ where
         F: Fn(KadConfig) -> KadConfig + 'static,
     {
         self.protocols.kad = true;
-        self.config.kademlia_config = Some((protocol.into(), Box::new(f)));
+        self.config.kademlia_config = (protocol.into(), Box::new(f));
         self
     }
 
@@ -257,9 +280,18 @@ where
 
     /// Enable relay server
     #[cfg(feature = "relay")]
-    pub fn with_relay_server(mut self, config: RelayServerConfig) -> Self {
+    pub fn with_relay_server(self) -> Self {
+        self.with_relay_server_with_config(|config| config)
+    }
+
+    /// Enable relay server
+    #[cfg(feature = "relay")]
+    pub fn with_relay_server_with_config<F>(mut self, config: F) -> Self
+    where
+        F: Fn(RelayServerConfig) -> RelayServerConfig + 'static,
+    {
         self.protocols.relay_server = true;
-        self.config.relay_server_config = config;
+        self.config.relay_server_config = Box::new(config);
         self
     }
 
@@ -287,9 +319,19 @@ where
 
     /// Enables identify
     #[cfg(feature = "identify")]
-    pub fn with_identify(mut self, config: IdentifyConfig) -> Self {
+    pub fn with_identify(self) -> Self {
+        self.with_identify_with_config("/ipfs/id", |config| config)
+    }
+
+    /// Enables identify
+    #[cfg(feature = "identify")]
+    pub fn with_identify_with_config<F>(mut self, protocol: impl Into<String>, config: F) -> Self
+    where
+        F: Fn(IdentifyConfig) -> IdentifyConfig + 'static,
+    {
+        let protocol = protocol.into();
         self.protocols.identify = true;
-        self.config.identify_config.replace(config);
+        self.config.identify_config = (protocol, Box::new(config));
         self
     }
 
@@ -301,18 +343,40 @@ where
     }
 
     /// Enables gossipsub
-    #[cfg(feature = "floodsub")]
-    pub fn with_gossipsub(mut self, config: GossipsubConfig) -> Self {
+    #[cfg(feature = "gossipsub")]
+    pub fn with_gossipsub(self) -> Self {
+        self.with_gossipsub_with_config(|config| config.build())
+    }
+
+    /// Enables gossipsub
+    #[cfg(feature = "gossipsub")]
+    pub fn with_gossipsub_with_config<F>(mut self, config: F) -> Self
+    where
+        F: Fn(
+            libp2p::gossipsub::ConfigBuilder,
+        )
+            -> Result<libp2p::gossipsub::Config, libp2p::gossipsub::ConfigBuilderError>
+        + 'static,
+    {
         self.protocols.gossipsub = true;
-        self.config.gossipsub_config.replace(config);
+        self.config.gossipsub_config = Box::new(config);
         self
     }
 
     /// Enables floodsub
     #[cfg(feature = "floodsub")]
-    pub fn with_floodsub(mut self, config: FloodsubConfig) -> Self {
+    pub fn with_floodsub(self) -> Self {
+        self.with_floodsub_with_config(|config| config)
+    }
+
+    /// Enables floodsub
+    #[cfg(feature = "floodsub")]
+    pub fn with_floodsub_with_config<F>(mut self, config: F) -> Self
+    where
+        F: Fn(FloodsubConfig) -> FloodsubConfig + 'static,
+    {
         self.protocols.floodsub = true;
-        self.config.floodsub_config.replace(config);
+        self.config.floodsub_config = Box::new(config);
         self
     }
 
@@ -337,17 +401,35 @@ where
 
     /// Enables autonat v1
     #[cfg(feature = "autonat")]
-    pub fn with_autonat_v1(mut self, config: AutonatV1Config) -> Self {
+    pub fn with_autonat_v1(self) -> Self {
+        self.with_autonat_v1_with_config(|config| config)
+    }
+
+    /// Enables autonat v1
+    #[cfg(feature = "autonat")]
+    pub fn with_autonat_v1_with_config<F>(mut self, config: F) -> Self
+    where
+        F: Fn(AutonatV1Config) -> AutonatV1Config + 'static,
+    {
         self.protocols.autonat_v1 = true;
-        self.config.autonat_v1_config.replace(config);
+        self.config.autonat_v1_config = Box::new(config);
         self
     }
 
     /// Enables autonat v2 client
     #[cfg(feature = "autonat")]
-    pub fn with_autonat_v2_client(mut self, config: AutonatV2ClientConfig) -> Self {
+    pub fn with_autonat_v2_client(self) -> Self {
+        self.with_autonat_v2_client_with_config(|config| config)
+    }
+
+    /// Enables autonat v2 client
+    #[cfg(feature = "autonat")]
+    pub fn with_autonat_v2_client_with_config<F>(mut self, config: F) -> Self
+    where
+        F: Fn(AutonatV2ClientConfig) -> AutonatV2ClientConfig + 'static,
+    {
         self.protocols.autonat_v2_client = true;
-        self.config.autonat_v2_client_config.replace(config);
+        self.config.autonat_v2_client_config = Box::new(config);
         self
     }
 
@@ -360,17 +442,29 @@ where
 
     /// Enables ping
     #[cfg(feature = "ping")]
-    pub fn with_ping(mut self, config: PingConfig) -> Self {
+    pub fn with_ping(self) -> Self {
+        self.with_ping_with_config(|config| config)
+    }
+
+    /// Enables ping
+    #[cfg(feature = "ping")]
+    pub fn with_ping_with_config<F>(mut self, config: F) -> Self
+    where
+        F: Fn(PingConfig) -> PingConfig + 'static,
+    {
         self.protocols.ping = true;
-        self.config.ping_config.replace(config);
+        self.config.ping_config = Box::new(config);
         self
     }
 
     /// Set a custom behaviour
     /// Note that if you want to communicate or interact with the behaviour that you would need to set a callback via
     /// `custom_event_callback` and `custom_task_callback`.
-    pub fn with_custom_behaviour(mut self, behaviour: C) -> Self {
-        self.custom_behaviour = Some(behaviour);
+    pub fn with_custom_behaviour<F>(mut self, behaviour: F) -> Self
+    where
+        F: Fn(Keypair) -> C + 'static,
+    {
+        self.custom_behaviour = Some(Box::new(behaviour));
         self
     }
 
@@ -507,7 +601,7 @@ where
         let peer_id = keypair.public().to_peer_id();
 
         let swarm_config = swarm_config(libp2p::swarm::Config::with_executor(ConnexaExecutor));
-
+        let custom_behaviour = custom_behaviour.map(|custom_fn| custom_fn(keypair.clone()));
         let (behaviour, relay_transport) =
             behaviour::Behaviour::new(&keypair, custom_behaviour, config, protocols)?;
 

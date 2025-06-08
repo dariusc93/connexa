@@ -14,9 +14,9 @@ use libp2p::dcutr::Behaviour as Dcutr;
 #[cfg(feature = "mdns")]
 use libp2p::identify::Behaviour as Identify;
 #[cfg(feature = "kad")]
-use libp2p::kad::Behaviour as Kademlia;
-#[cfg(feature = "kad")]
 use libp2p::kad::store::MemoryStore;
+#[cfg(feature = "kad")]
+use libp2p::kad::Behaviour as Kademlia;
 #[cfg(feature = "mdns")]
 use libp2p::mdns::tokio::Behaviour as Mdns;
 #[cfg(feature = "ping")]
@@ -24,11 +24,11 @@ use libp2p::ping::Behaviour as Ping;
 #[cfg(feature = "relay")]
 use libp2p::relay::client::Behaviour as RelayClient;
 #[cfg(feature = "relay")]
-use libp2p::relay::{Behaviour as RelayServer, client::Transport as ClientTransport};
+use libp2p::relay::{client::Transport as ClientTransport, Behaviour as RelayServer};
 #[cfg(not(feature = "relay"))]
 type ClientTransport = ();
-use libp2p::StreamProtocol;
 use libp2p::swarm::behaviour::toggle::Toggle;
+use libp2p::StreamProtocol;
 
 use crate::builder::{Config, Protocols};
 use indexmap::IndexMap;
@@ -140,38 +140,38 @@ where
             .into();
 
         #[cfg(feature = "kad")]
-        let store = { MemoryStore::with_config(peer_id, Default::default()) };
-
-        #[cfg(feature = "kad")]
-        let kad_config = config
-            .kademlia_config
-            .map(|(protocol, config_cb)| {
-                let protocol = StreamProtocol::try_from_owned(protocol).expect("valid protocol");
-                let config = libp2p::kad::Config::new(protocol);
-                config_cb(config)
-            })
-            .unwrap_or_else(|| libp2p::kad::Config::new(libp2p::kad::PROTOCOL_NAME));
-
-        #[cfg(feature = "kad")]
         let kademlia: Toggle<Kademlia<MemoryStore>> = protocols
             .kad
-            .then(|| Kademlia::with_config(peer_id, store, kad_config))
+            .then(|| {
+                let (protocol, config_fn) = config.kademlia_config;
+                let protocol = StreamProtocol::try_from_owned(protocol).expect("valid protocol");
+                let config = config_fn(libp2p::kad::Config::new(protocol));
+                Kademlia::with_config(
+                    peer_id,
+                    MemoryStore::with_config(peer_id, Default::default()),
+                    config,
+                )
+            })
             .into();
 
         #[cfg(feature = "autonat")]
         let autonat_v1 = protocols
             .autonat_v1
-            .then(|| autonat::Behaviour::new(peer_id, Default::default()))
+            .then(|| {
+                let config_fn = config.autonat_v1_config;
+                let config = config_fn(Default::default());
+                autonat::Behaviour::new(peer_id, config)
+            })
             .into();
 
         #[cfg(feature = "autonat")]
         let autonat_v2_client = protocols
             .autonat_v2_client
             .then(|| {
-                autonat::v2::client::Behaviour::new(
-                    OsRng,
-                    config.autonat_v2_client_config.unwrap_or_default(),
-                )
+                let config_fn = config.autonat_v2_client_config;
+                let config = config_fn(Default::default());
+
+                autonat::v2::client::Behaviour::new(OsRng, config)
             })
             .into();
 
@@ -184,16 +184,21 @@ where
         #[cfg(feature = "ping")]
         let ping = protocols
             .ping
-            .then(|| Ping::new(config.ping_config.unwrap_or_default()))
+            .then(|| {
+                let config_fn = config.ping_config;
+                let config = config_fn(Default::default());
+                Ping::new(config)
+            })
             .into();
 
         #[cfg(feature = "identify")]
         let identify = protocols
             .identify
             .then(|| {
-                Identify::new(config.identify_config.unwrap_or_else(|| {
-                    libp2p::identify::Config::new("/ipfs/id".into(), keypair.public())
-                }))
+                let pubkey = keypair.public();
+                let (protocol, config_fn) = config.identify_config;
+                let config = (config_fn)(libp2p::identify::Config::new(protocol, pubkey));
+                Identify::new(config)
             })
             .into();
 
@@ -206,20 +211,22 @@ where
                 ));
             }
             (true, false) => {
-                let config = config
-                    .floodsub_config
-                    .unwrap_or_else(|| libp2p::floodsub::FloodsubConfig::new(peer_id));
+                let config_fn = config.floodsub_config;
+                let config = config_fn(libp2p::floodsub::FloodsubConfig::new(peer_id));
+
                 let behaviour = libp2p::floodsub::Floodsub::from_config(config);
                 Either::Right(Some(behaviour).into())
             }
             (false, true) => {
-                let config = config.gossipsub_config.unwrap_or_default();
+                let config_fn = config.gossipsub_config;
+                let config_builder = libp2p::gossipsub::ConfigBuilder::default();
+                let config = config_fn(config_builder).map_err(std::io::Error::other)?;
                 // TODO: Customize message authenticity
                 let behaviour = libp2p::gossipsub::Behaviour::new(
                     libp2p::gossipsub::MessageAuthenticity::Signed(keypair.clone()),
                     config,
                 )
-                .map_err(std::io::Error::other)?;
+                    .map_err(std::io::Error::other)?;
                 Either::Left(Some(behaviour).into())
             }
             (false, false) => Either::Left(None.into()),
@@ -232,7 +239,11 @@ where
         #[cfg(feature = "relay")]
         let relay = protocols
             .relay_server
-            .then(|| RelayServer::new(peer_id, config.relay_server_config))
+            .then(|| {
+                let config_fn = config.relay_server_config;
+                let config = config_fn(Default::default());
+                RelayServer::new(peer_id, config)
+            })
             .into();
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -274,7 +285,10 @@ where
 
         let connection_limits = protocols
             .connection_limits
-            .then(|| config.connection_limits.unwrap_or_default())
+            .then(|| {
+                let config_fn = config.connection_limits;
+                config_fn(Default::default())
+            })
             .map(libp2p_connection_limits::Behaviour::new)
             .into();
 
