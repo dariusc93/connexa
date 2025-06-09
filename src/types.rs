@@ -182,7 +182,9 @@ impl PubsubCommand {
             PubsubCommand::Unsubscribe { pubsub_type, .. } => *pubsub_type,
             PubsubCommand::Subscribed { pubsub_type, .. } => *pubsub_type,
             PubsubCommand::Peers { pubsub_type, .. } => *pubsub_type,
+            #[cfg(feature = "gossipsub")]
             PubsubCommand::Publish(PubsubPublishType::Gossipsub { .. }) => PubsubType::Gossipsub,
+            #[cfg(feature = "floodsub")]
             PubsubCommand::Publish(PubsubPublishType::Floodsub { .. }) => PubsubType::Floodsub,
         }
     }
