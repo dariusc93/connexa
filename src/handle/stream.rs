@@ -53,7 +53,8 @@ where
         let mut control = self.control_handle().await?;
         let stream = control
             .open_stream(peer_id, protocol)
-            .await.map_err(std::io::Error::other)?;
+            .await
+            .map_err(std::io::Error::other)?;
         Ok(stream)
     }
 }

@@ -353,7 +353,7 @@ pub(crate) fn build_transport(
     ) -> io::Result<libp2p_webrtc::tokio::Transport> {
         let cert = match pem {
             Some(pem) => {
-                libp2p_webrtc::tokio::Certificate::from_pem(&pem).map_err(io::Error::other)?
+                libp2p_webrtc::tokio::Certificate::from_pem(pem).map_err(io::Error::other)?
             }
             None => {
                 let mut rng = rand::thread_rng();

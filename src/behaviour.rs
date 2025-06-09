@@ -182,7 +182,7 @@ where
         #[cfg(feature = "autonat")]
         let autonat_v2_server = protocols
             .autonat_v2_server
-            .then(|| autonat::v2::server::Behaviour::default())
+            .then(autonat::v2::server::Behaviour::default)
             .into();
 
         #[cfg(feature = "ping")]

@@ -1,6 +1,8 @@
 use clap::Parser;
 use connexa::handle::Connexa;
-use connexa::prelude::{DefaultConnexaBuilder, Multiaddr, PeerId, Protocol, Stream, StreamProtocol};
+use connexa::prelude::{
+    DefaultConnexaBuilder, Multiaddr, PeerId, Protocol, Stream, StreamProtocol,
+};
 use futures::StreamExt;
 use futures::{AsyncReadExt, AsyncWriteExt};
 use rand::RngCore;
@@ -81,13 +83,14 @@ async fn main() -> io::Result<()> {
         println!("new address - {}", addr);
     }
 
-    let protocol = opt.protocol.map(StreamProtocol::from).unwrap_or_else(|| StreamProtocol::new("/echo/1.0.0"));
+    let protocol = opt
+        .protocol
+        .map(StreamProtocol::from)
+        .unwrap_or_else(|| StreamProtocol::new("/echo/1.0.0"));
 
     let data_size = opt.data_size.unwrap_or(256);
 
-    let mut incoming_streams = connexa
-        .stream()
-        .new_stream(protocol.clone()).await?;
+    let mut incoming_streams = connexa.stream().new_stream(protocol.clone()).await?;
 
     tokio::spawn(async move {
         while let Some((peer, stream)) = incoming_streams.next().await {
@@ -167,9 +170,7 @@ async fn send(mut stream: Stream) -> io::Result<()> {
     stream.read_exact(&mut buf).await?;
 
     if bytes != buf {
-        return Err(io::Error::other(
-            "incorrect echo",
-        ));
+        return Err(io::Error::other("incorrect echo"));
     }
 
     stream.close().await?;
