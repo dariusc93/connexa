@@ -1,0 +1,171 @@
+use crate::behaviour;
+use crate::behaviour::BehaviourEvent;
+use crate::prelude::{NetworkBehaviour, SwarmEvent};
+use crate::task::ConnexaTask;
+use std::fmt::Debug;
+
+impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>
+where
+    X: Default + Send + 'static,
+    C: Send,
+    C::ToSwarm: Debug,
+{
+    pub fn process_swarm_event(&mut self, event: SwarmEvent<BehaviourEvent<C>>) {
+        (self.swarm_event_callback)(&event);
+        match event {
+            SwarmEvent::Behaviour(event) => self.process_swarm_behaviour_event(event),
+            SwarmEvent::ConnectionEstablished {
+                peer_id,
+                connection_id,
+                endpoint,
+                num_established,
+                concurrent_dial_errors: _,
+                established_in,
+            } => {
+                tracing::info!(%peer_id, %connection_id, ?endpoint, %num_established, ?established_in, "connection established");
+                if let Some(sender) = self.pending_connection.shift_remove(&connection_id) {
+                    let _ = sender.send(Ok(connection_id));
+                }
+            }
+            SwarmEvent::ConnectionClosed {
+                peer_id,
+                connection_id,
+                endpoint,
+                num_established,
+                cause,
+            } => {
+                tracing::info!(%peer_id, %connection_id, ?endpoint, %num_established, ?cause, "connection closed");
+                let pending_ch_by_connection_id = self
+                    .pending_disconnection_by_connection_id
+                    .shift_remove(&connection_id);
+                let pending_ch_by_peer_id =
+                    self.pending_disconnection_by_peer_id.shift_remove(&peer_id);
+                let ret = match cause {
+                    Some(e) => Err(std::io::Error::other(e)),
+                    None => Ok(()),
+                };
+
+                match (pending_ch_by_connection_id, pending_ch_by_peer_id) {
+                    (Some(ch), None) => {
+                        let _ = ch.send(ret);
+                    }
+                    (None, Some(ch)) => {
+                        let _ = ch.send(ret);
+                    }
+                    (Some(ch_left), Some(ch_right)) => {
+                        // Since there is an attempt to disconnect the peer as well, we will respond to both pending request with the peer containing the "cause", if any.
+                        let _ = ch_left.send(Ok(()));
+                        let _ = ch_right.send(ret);
+                    }
+                    (None, None) => {}
+                }
+            }
+            SwarmEvent::IncomingConnection { .. } => {}
+            SwarmEvent::IncomingConnectionError { .. } => {}
+            SwarmEvent::OutgoingConnectionError {
+                connection_id,
+                peer_id,
+                error,
+            } => {
+                tracing::error!(%connection_id, ?peer_id, error=%error, "outgoing connection error");
+                if let Some(sender) = self.pending_connection.shift_remove(&connection_id) {
+                    let _ = sender.send(Err(std::io::Error::other(error)));
+                }
+            }
+            SwarmEvent::NewListenAddr {
+                listener_id,
+                address,
+            } => {
+                tracing::info!(%listener_id, %address, "new listen address");
+                if let Some(ch) = self.pending_listen_on.shift_remove(&listener_id) {
+                    let _ = ch.send(Ok(listener_id));
+                }
+            }
+            SwarmEvent::ExpiredListenAddr {
+                listener_id,
+                address,
+            } => {
+                // TODO: Determine if we should remove the address from external addresses
+                tracing::info!(%listener_id, %address, "expired listen address");
+            }
+            SwarmEvent::ListenerClosed {
+                listener_id,
+                addresses,
+                reason,
+            } => {
+                tracing::info!(%listener_id, ?addresses, ?reason, "listener closed");
+                if let Some(ch) = self.pending_remove_listener.shift_remove(&listener_id) {
+                    let _ = ch.send(reason.map_err(std::io::Error::other));
+                }
+            }
+            SwarmEvent::ListenerError { listener_id, error } => {
+                tracing::error!(%listener_id, error=%error, "listener error");
+                if let Some(ch) = self.pending_listen_on.shift_remove(&listener_id) {
+                    let _ = ch.send(Err(std::io::Error::other(error)));
+                }
+            }
+            SwarmEvent::Dialing { .. } => {}
+            SwarmEvent::NewExternalAddrCandidate { .. } => {}
+            SwarmEvent::ExternalAddrConfirmed { address } => {
+                tracing::debug!(%address, "external address confirmed");
+            }
+            SwarmEvent::ExternalAddrExpired { address } => {
+                if let Some(ch) = self.pending_remove_external_address.shift_remove(&address) {
+                    let _ = ch.send(Ok(()));
+                }
+            }
+            SwarmEvent::NewExternalAddrOfPeer { peer_id, address } => {
+                if let Some(ch) = self
+                    .pending_add_peer_address
+                    .shift_remove(&(peer_id, address))
+                {
+                    let _ = ch.send(Ok(()));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    pub fn process_swarm_behaviour_event(&mut self, event: BehaviourEvent<C>) {
+        let Some(swarm) = self.swarm.as_mut() else {
+            return;
+        };
+
+        match event {
+            #[cfg(feature = "relay")]
+            BehaviourEvent::Relay(event) => self.process_relay_server_event(event),
+            #[cfg(feature = "relay")]
+            BehaviourEvent::RelayClient(event) => self.process_relay_client_event(event),
+            #[cfg(feature = "upnp")]
+            BehaviourEvent::Upnp(event) => self.process_upnp_event(event),
+            #[cfg(all(feature = "dcutr", feature = "relay"))]
+            BehaviourEvent::Dcutr(event) => self.process_dcutr_event(event),
+            #[cfg(feature = "rendezvous")]
+            BehaviourEvent::RendezvousClient(event) => self.process_rendezvous_client_event(event),
+            #[cfg(feature = "rendezvous")]
+            BehaviourEvent::RendezvousServer(event) => self.process_rendezvous_server_event(event),
+            #[cfg(feature = "mdns")]
+            BehaviourEvent::Mdns(event) => self.process_mdns_event(event),
+            #[cfg(feature = "gossipsub")]
+            BehaviourEvent::Gossipsub(ev) => self.process_gossipsub_event(ev),
+            #[cfg(feature = "floodsub")]
+            BehaviourEvent::Floodsub(ev) => self.process_floodsub_event(ev),
+            #[cfg(feature = "kad")]
+            BehaviourEvent::Kademlia(event) => self.process_kademlia_event(event),
+            #[cfg(feature = "identify")]
+            BehaviourEvent::Identify(event) => self.process_identify_event(event),
+            #[cfg(feature = "ping")]
+            BehaviourEvent::Ping(event) => self.process_ping_event(event),
+            #[cfg(feature = "autonat")]
+            BehaviourEvent::AutonatV1(event) => self.process_autonat_v1_event(event),
+            #[cfg(feature = "autonat")]
+            BehaviourEvent::AutonatV2Client(event) => self.process_autonat_v2_client_event(event),
+            #[cfg(feature = "autonat")]
+            BehaviourEvent::AutonatV2Server(event) => self.process_autonat_v2_server_event(event),
+            BehaviourEvent::Custom(custom_event) => {
+                (self.custom_event_callback)(swarm, &mut self.context, custom_event)
+            }
+            _ => unreachable!(),
+        }
+    }
+}
