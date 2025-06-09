@@ -123,7 +123,7 @@ pub enum SwarmCommand {
 }
 
 #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum PubsubType {
     #[cfg(feature = "floodsub")]
     Floodsub,
@@ -168,6 +168,24 @@ pub enum PubsubCommand {
     },
     #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
     Publish(PubsubPublishType),
+}
+
+#[cfg(any(feature = "floodsub", feature = "gossipsub"))]
+impl PubsubCommand {
+    pub(crate) fn pubsub_type(&self) -> PubsubType {
+        match self {
+            #[cfg(feature = "floodsub")]
+            PubsubCommand::FloodsubListener { .. } => PubsubType::Floodsub,
+            #[cfg(feature = "gossipsub")]
+            PubsubCommand::GossipsubListener { .. } => PubsubType::Gossipsub,
+            PubsubCommand::Subscribe { pubsub_type, .. } => *pubsub_type,
+            PubsubCommand::Unsubscribe { pubsub_type, .. } => *pubsub_type,
+            PubsubCommand::Subscribed { pubsub_type, .. } => *pubsub_type,
+            PubsubCommand::Peers { pubsub_type, .. } => *pubsub_type,
+            PubsubCommand::Publish(PubsubPublishType::Gossipsub { .. }) => PubsubType::Gossipsub,
+            PubsubCommand::Publish(PubsubPublishType::Floodsub { .. }) => PubsubType::Floodsub,
+        }
+    }
 }
 
 #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
