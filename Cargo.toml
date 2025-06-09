@@ -47,7 +47,7 @@ websocket = ["libp2p/websocket", "libp2p/websocket-websys"]
 webtransport = ["libp2p/webtransport-websys"]
 
 [workspace]
-members = ["examples/custom-behaviour-and-context", "examples/distributed-key-value-store", "examples/file-sharing", "examples/gossipsub"]
+members = ["examples/custom-behaviour-and-context", "examples/distributed-key-value-store", "examples/file-sharing", "examples/gossipsub", "examples/stream"]
 
 [workspace.dependencies]
 async-rt = "0.1.8"

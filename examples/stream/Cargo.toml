@@ -1,0 +1,13 @@
+[package]
+name = "stream"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio.workspace = true
+futures.workspace = true
+connexa = { path = "../../" }
+clap = { version = "4.5.39", features = ["derive"] }
+rand = "0.8.5"
+tracing = "0.1.41"
+tracing-subscriber = "0.3.19"
