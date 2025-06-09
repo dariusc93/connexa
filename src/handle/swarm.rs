@@ -7,6 +7,7 @@ use libp2p::swarm::ConnectionId;
 use libp2p::swarm::dial_opts::DialOpts;
 use libp2p::{Multiaddr, PeerId};
 
+#[derive(Copy, Clone)]
 pub struct ConnexaSwarm<'a, T> {
     connexa: &'a Connexa<T>,
 }

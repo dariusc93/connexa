@@ -8,6 +8,7 @@ use libp2p::kad::{Mode, PeerInfo, PeerRecord, Quorum, RecordKey};
 use libp2p::{Multiaddr, PeerId};
 use std::collections::HashSet;
 
+#[derive(Copy, Clone)]
 pub struct ConnexaDht<'a, T> {
     connexa: &'a Connexa<T>,
 }

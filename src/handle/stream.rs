@@ -3,6 +3,7 @@ use crate::types::StreamCommand;
 use futures::channel::oneshot;
 use libp2p::{PeerId, StreamProtocol};
 
+#[derive(Copy, Clone)]
 pub struct ConnexaStream<'a, T> {
     connexa: &'a Connexa<T>,
 }

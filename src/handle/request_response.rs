@@ -8,6 +8,7 @@ use indexmap::IndexSet;
 use libp2p::request_response::InboundRequestId;
 use libp2p::{PeerId, StreamProtocol};
 
+#[derive(Copy, Clone)]
 pub struct ConnexaRequestResponse<'a, T> {
     connexa: &'a Connexa<T>,
 }

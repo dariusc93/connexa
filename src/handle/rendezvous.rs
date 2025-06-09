@@ -2,6 +2,7 @@ use crate::handle::Connexa;
 
 // TODO
 #[allow(dead_code)]
+#[derive(Copy, Clone)]
 pub struct ConnexaRendezvous<'a, T> {
     connexa: &'a Connexa<T>,
 }

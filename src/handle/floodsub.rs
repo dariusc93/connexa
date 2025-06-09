@@ -9,6 +9,7 @@ use futures::channel::oneshot;
 use futures::stream::BoxStream;
 use libp2p::PeerId;
 
+#[derive(Copy, Clone)]
 pub struct ConnexaFloodsub<'a, T = ()> {
     connexa: &'a Connexa<T>,
 }
