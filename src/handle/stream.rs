@@ -1,7 +1,7 @@
 use crate::handle::Connexa;
 use crate::types::StreamCommand;
 use futures::channel::oneshot;
-use libp2p::StreamProtocol;
+use libp2p::{PeerId, StreamProtocol};
 
 pub struct ConnexaStream<'a, T> {
     connexa: &'a Connexa<T>,
@@ -40,5 +40,42 @@ where
             .await?;
 
         rx.await.map_err(std::io::Error::other)?
+    }
+
+    /// Opens a stream with the specified protocol
+    pub async fn open_stream(
+        &self,
+        peer_id: PeerId,
+        protocol: impl IntoStreamProtocol,
+    ) -> std::io::Result<libp2p::Stream> {
+        let protocol: StreamProtocol = protocol.into_protocol()?;
+
+        let mut control = self.control_handle().await?;
+        let stream = control
+            .open_stream(peer_id, protocol)
+            .await.map_err(std::io::Error::other)?;
+        Ok(stream)
+    }
+}
+
+pub trait IntoStreamProtocol {
+    fn into_protocol(self) -> std::io::Result<StreamProtocol>;
+}
+
+impl IntoStreamProtocol for StreamProtocol {
+    fn into_protocol(self) -> std::io::Result<StreamProtocol> {
+        Ok(self)
+    }
+}
+
+impl IntoStreamProtocol for String {
+    fn into_protocol(self) -> std::io::Result<StreamProtocol> {
+        StreamProtocol::try_from_owned(self).map_err(std::io::Error::other)
+    }
+}
+
+impl IntoStreamProtocol for &'static str {
+    fn into_protocol(self) -> std::io::Result<StreamProtocol> {
+        Ok(StreamProtocol::new(self))
     }
 }
