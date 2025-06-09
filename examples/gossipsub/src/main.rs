@@ -22,7 +22,7 @@ async fn main() -> std::io::Result<()> {
     let connexa = DefaultConnexaBuilder::new_identity()
         .enable_tcp()
         .enable_quic()
-        .with_gossipsub_with_config(|mut config| config.do_px().build())
+        .with_gossipsub()
         .start()?;
 
     let addrs = match opt.listener.is_empty() {
