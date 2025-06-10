@@ -20,6 +20,8 @@ mod ping;
 mod relay;
 #[cfg(feature = "rendezvous")]
 mod rendezvous;
+#[cfg(feature = "stream")]
+mod stream;
 mod swarm;
 #[cfg(feature = "upnp")]
 mod upnp;
@@ -340,31 +342,7 @@ where
             #[cfg(feature = "kad")]
             Command::Dht(dht_command) => self.process_kademlia_command(dht_command),
             #[cfg(feature = "stream")]
-            Command::Stream(stream_command) => match stream_command {
-                StreamCommand::NewStream { protocol, resp } => {
-                    let Some(stream) = swarm.behaviour_mut().stream.as_mut() else {
-                        let _ =
-                            resp.send(Err(std::io::Error::other("stream protocol is not enabled")));
-                        return;
-                    };
-
-                    let _ = resp.send(
-                        stream
-                            .new_control()
-                            .accept(protocol)
-                            .map_err(std::io::Error::other),
-                    );
-                }
-                StreamCommand::ControlHandle { resp } => {
-                    let Some(stream) = swarm.behaviour_mut().stream.as_mut() else {
-                        let _ =
-                            resp.send(Err(std::io::Error::other("stream protocol is not enabled")));
-                        return;
-                    };
-
-                    let _ = resp.send(Ok(stream.new_control()));
-                }
-            },
+            Command::Stream(stream_command) => self.process_stream_command(stream_command),
             #[cfg(feature = "request-response")]
             Command::RequestResponse(request_response_command) => match request_response_command {
                 RequestResponseCommand::SendRequests {
