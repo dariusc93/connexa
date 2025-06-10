@@ -1,9 +1,10 @@
 use crate::prelude::{DHTEvent, NetworkBehaviour, RecordHandle};
 use crate::task::ConnexaTask;
-use futures::channel::oneshot;
+use crate::types::DHTCommand;
+use futures::channel::{mpsc, oneshot};
 use libp2p::kad::{
     AddProviderOk, BootstrapError, BootstrapOk, Event as KademliaEvent, GetClosestPeersOk,
-    GetProvidersOk, GetRecordOk, InboundRequest, PutRecordOk, QueryResult,
+    GetProvidersOk, GetRecordOk, InboundRequest, PutRecordOk, QueryResult, Record, RoutingUpdate,
 };
 use std::fmt::Debug;
 
@@ -13,6 +14,167 @@ where
     C: Send,
     C::ToSwarm: Debug,
 {
+    pub fn process_kademlia_command(&mut self, command: DHTCommand) {
+        let swarm = self.swarm.as_mut().unwrap();
+        match command {
+            DHTCommand::FindPeer { peer_id, resp } => {
+                let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    return;
+                };
+
+                let id = kad.get_closest_peers(peer_id);
+
+                self.pending_dht_find_closest_peer.insert(id, resp);
+            }
+            DHTCommand::Provide { key, resp } => {
+                let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    return;
+                };
+
+                let id = match kad.start_providing(key.clone()) {
+                    Ok(id) => id,
+                    Err(e) => {
+                        let _ = resp.send(Err(std::io::Error::other(e)));
+                        return;
+                    }
+                };
+
+                self.pending_dht_put_provider_record.insert(id, resp);
+            }
+            DHTCommand::StopProviding { key, resp } => {
+                let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    return;
+                };
+
+                kad.stop_providing(&key);
+
+                let _ = resp.send(Ok(()));
+            }
+            DHTCommand::GetProviders { key, resp } => {
+                let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    return;
+                };
+
+                let id = kad.get_providers(key);
+
+                let (tx, rx) = mpsc::channel(10);
+
+                self.pending_dht_get_provider_record.insert(id, tx);
+
+                let _ = resp.send(Ok(rx));
+            }
+            DHTCommand::Listener {
+                key: Some(key),
+                resp,
+            } => {
+                if !swarm.behaviour_mut().kademlia.is_enabled() {
+                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    return;
+                }
+
+                let (tx, rx) = mpsc::channel(10);
+
+                self.dht_event_sender.entry(key).or_default().push(tx);
+
+                let _ = resp.send(Ok(rx));
+            }
+
+            DHTCommand::Listener { key: _, resp } => {
+                if !swarm.behaviour_mut().kademlia.is_enabled() {
+                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    return;
+                }
+
+                let (tx, rx) = mpsc::channel(10);
+
+                self.dht_event_global_sender.push(tx);
+
+                let _ = resp.send(Ok(rx));
+            }
+            DHTCommand::SetDHTMode { mode, resp } => {
+                let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    return;
+                };
+
+                //TODO: Maybe check for mode change that is emitted?
+                kad.set_mode(mode);
+
+                let _ = resp.send(Ok(()));
+            }
+            DHTCommand::DHTMode { resp } => {
+                let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    return;
+                };
+
+                let _ = resp.send(Ok(kad.mode()));
+            }
+            DHTCommand::AddAddress {
+                peer_id,
+                addr,
+                resp,
+            } => {
+                let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    return;
+                };
+
+                let routing = kad.add_address(&peer_id, addr);
+                // TODO: If its pending then maybe we should wait until there is some status update?
+                let ret = match routing {
+                    RoutingUpdate::Success | RoutingUpdate::Pending => Ok(()),
+                    RoutingUpdate::Failed => {
+                        Err(std::io::Error::other("failed to add peer to routing table"))
+                    }
+                };
+
+                let _ = resp.send(ret);
+            }
+            DHTCommand::Get { key, resp } => {
+                let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    return;
+                };
+
+                let id = kad.get_record(key);
+
+                let (tx, rx) = mpsc::channel(10);
+
+                self.pending_dht_get_record.insert(id, tx);
+
+                let _ = resp.send(Ok(rx));
+            }
+            DHTCommand::Put {
+                key,
+                data,
+                quorum,
+                resp,
+            } => {
+                let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    return;
+                };
+
+                let record = Record::new(key, data.into());
+
+                let id = match kad.put_record(record, quorum) {
+                    Ok(id) => id,
+                    Err(e) => {
+                        let _ = resp.send(Err(std::io::Error::other(e)));
+                        return;
+                    }
+                };
+
+                self.pending_dht_put_record.insert(id, resp);
+            }
+        }
+    }
+
     pub fn process_kademlia_event(&mut self, event: KademliaEvent) {
         match event {
             KademliaEvent::InboundRequest { request } => match request {
