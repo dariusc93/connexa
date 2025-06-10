@@ -20,6 +20,8 @@ mod ping;
 mod relay;
 #[cfg(feature = "rendezvous")]
 mod rendezvous;
+#[cfg(feature = "request-response")]
+mod request_response;
 #[cfg(feature = "stream")]
 mod stream;
 mod swarm;
@@ -344,68 +346,9 @@ where
             #[cfg(feature = "stream")]
             Command::Stream(stream_command) => self.process_stream_command(stream_command),
             #[cfg(feature = "request-response")]
-            Command::RequestResponse(request_response_command) => match request_response_command {
-                RequestResponseCommand::SendRequests {
-                    protocol,
-                    peers,
-                    request,
-                    resp,
-                } => {
-                    let Some(rr) = swarm.behaviour_mut().request_response(protocol) else {
-                        let _ = resp.send(Err(std::io::Error::other(
-                            "request response protocol is not enabled",
-                        )));
-                        return;
-                    };
-
-                    let st = rr.send_requests(peers, request);
-                    let _ = resp.send(Ok(st));
-                }
-                RequestResponseCommand::SendRequest {
-                    protocol,
-                    peer_id,
-                    request,
-                    resp,
-                } => {
-                    let Some(rr) = swarm.behaviour_mut().request_response(protocol) else {
-                        let _ = resp.send(Err(std::io::Error::other(
-                            "request response protocol is not enabled",
-                        )));
-                        return;
-                    };
-
-                    let fut = rr.send_request(peer_id, request);
-                    let _ = resp.send(Ok(fut));
-                }
-                RequestResponseCommand::SendResponse {
-                    protocol,
-                    peer_id,
-                    request_id,
-                    response,
-                    resp,
-                } => {
-                    let Some(rr) = swarm.behaviour_mut().request_response(protocol) else {
-                        let _ = resp.send(Err(std::io::Error::other(
-                            "request response protocol is not enabled",
-                        )));
-                        return;
-                    };
-
-                    let ret = rr.send_response(peer_id, request_id, response);
-
-                    let _ = resp.send(ret);
-                }
-                RequestResponseCommand::ListenForRequests { protocol, resp } => {
-                    let Some(rr) = swarm.behaviour_mut().request_response(protocol) else {
-                        let _ = resp.send(Err(std::io::Error::other(
-                            "request response protocol is not enabled",
-                        )));
-                        return;
-                    };
-                    let rx = rr.subscribe();
-                    let _ = resp.send(Ok(rx));
-                }
-            },
+            Command::RequestResponse(request_response_command) => {
+                self.process_request_response_command(request_response_command)
+            }
             #[cfg(feature = "rendezvous")]
             Command::Rendezvous(rendezvous_command) => {
                 // TODO
