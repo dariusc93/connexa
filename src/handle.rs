@@ -1,3 +1,5 @@
+#[cfg(feature = "autonat")]
+mod autonat;
 #[cfg(feature = "kad")]
 mod dht;
 #[cfg(feature = "floodsub")]
@@ -12,6 +14,8 @@ mod request_response;
 mod stream;
 mod swarm;
 
+#[cfg(feature = "autonat")]
+use crate::handle::autonat::ConnexaAutonat;
 #[cfg(feature = "kad")]
 use crate::handle::dht::ConnexaDht;
 #[cfg(feature = "floodsub")]
@@ -70,6 +74,12 @@ where
     /// Returns a handle for swarm functions
     pub fn swarm(&self) -> ConnexaSwarm<T> {
         ConnexaSwarm::new(self)
+    }
+
+    /// Returns a handle for autonat functions
+    #[cfg(feature = "autonat")]
+    pub fn autonat(&self) -> ConnexaAutonat<T> {
+        ConnexaAutonat::new(self)
     }
 
     /// Returns a handle for floodsub functions

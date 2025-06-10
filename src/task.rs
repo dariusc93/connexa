@@ -335,6 +335,8 @@ where
                 #[cfg(feature = "floodsub")]
                 PubsubType::Floodsub => self.process_floodsub_command(pubsub_command),
             },
+            #[cfg(feature = "autonat")]
+            Command::Autonat(autonat_command) => self.process_autonat_v1_command(autonat_command),
             #[cfg(feature = "kad")]
             Command::Dht(dht_command) => match dht_command {
                 DHTCommand::FindPeer { peer_id, resp } => {

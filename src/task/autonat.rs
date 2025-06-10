@@ -1,9 +1,13 @@
+use crate::behaviour;
 use crate::prelude::NetworkBehaviour;
 use crate::task::ConnexaTask;
+use crate::types::AutonatCommand;
+use libp2p::Swarm;
 use libp2p::autonat::v1::Event as AutonatV1Event;
 use libp2p::autonat::v2::client::Event as AutonatV2ClientEvent;
 use libp2p::autonat::v2::server::Event as AutonatV2ServerEvent;
 use std::fmt::Debug;
+use std::io;
 
 impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>
 where
@@ -11,6 +15,66 @@ where
     C: Send,
     C::ToSwarm: Debug,
 {
+    pub fn process_autonat_v1_command(&mut self, command: AutonatCommand) {
+        let Some(swarm) = self.swarm.as_mut() else {
+            return;
+        };
+        match command {
+            AutonatCommand::PublicAddress { resp } => {
+                let Some(autonat) = swarm.behaviour_mut().autonat_v1.as_mut() else {
+                    let _ = resp.send(Err(io::Error::other("autonat v1 not enabled")));
+                    return;
+                };
+
+                let addr = autonat.public_address().cloned();
+
+                let _ = resp.send(Ok(addr));
+            }
+            AutonatCommand::NatStatus { resp } => {
+                let Some(autonat) = swarm.behaviour_mut().autonat_v1.as_mut() else {
+                    let _ = resp.send(Err(io::Error::other("autonat v1 not enabled")));
+                    return;
+                };
+
+                let status = autonat.nat_status();
+
+                let _ = resp.send(Ok(status));
+            }
+            AutonatCommand::AddServer {
+                peer,
+                address,
+                resp,
+            } => {
+                let Some(autonat) = swarm.behaviour_mut().autonat_v1.as_mut() else {
+                    let _ = resp.send(Err(io::Error::other("autonat v1 not enabled")));
+                    return;
+                };
+
+                autonat.add_server(peer, address);
+                let _ = resp.send(Ok(()));
+            }
+            AutonatCommand::RemoveServer { peer, resp } => {
+                let Some(autonat) = swarm.behaviour_mut().autonat_v1.as_mut() else {
+                    let _ = resp.send(Err(io::Error::other("autonat v1 not enabled")));
+                    return;
+                };
+
+                autonat.remove_server(&peer);
+
+                let _ = resp.send(Ok(()));
+            }
+            AutonatCommand::Probe { address, resp } => {
+                let Some(autonat) = swarm.behaviour_mut().autonat_v1.as_mut() else {
+                    let _ = resp.send(Err(io::Error::other("autonat v1 not enabled")));
+                    return;
+                };
+
+                autonat.probe_address(address);
+
+                let _ = resp.send(Ok(()));
+            }
+        }
+    }
     pub fn process_autonat_v1_event(&mut self, event: AutonatV1Event) {
         match event {
             AutonatV1Event::InboundProbe(_) => {}

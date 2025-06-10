@@ -32,12 +32,21 @@ pub enum Command<T = ()> {
     Stream(StreamCommand),
     #[cfg(feature = "rendezvous")]
     Rendezvous(RendezvousCommand),
+    #[cfg(feature = "autonat")]
+    Autonat(AutonatCommand),
     Custom(T),
 }
 
 impl<T> From<SwarmCommand> for Command<T> {
     fn from(cmd: SwarmCommand) -> Self {
         Command::Swarm(cmd)
+    }
+}
+
+#[cfg(feature = "autonat")]
+impl<T> From<AutonatCommand> for Command<T> {
+    fn from(cmd: AutonatCommand) -> Self {
+        Command::Autonat(cmd)
     }
 }
 
@@ -210,6 +219,30 @@ pub enum PubsubFloodsubPublish {
     PublishAny { topic: String, data: Bytes },
     PublishMany { topics: Vec<String>, data: Bytes },
     PublishManyAny { topics: Vec<String>, data: Bytes },
+}
+
+#[cfg(feature = "autonat")]
+#[derive(Debug)]
+pub enum AutonatCommand {
+    PublicAddress {
+        resp: oneshot::Sender<Result<Option<Multiaddr>>>,
+    },
+    NatStatus {
+        resp: oneshot::Sender<Result<libp2p::autonat::NatStatus>>,
+    },
+    AddServer {
+        peer: PeerId,
+        address: Option<Multiaddr>,
+        resp: oneshot::Sender<Result<()>>,
+    },
+    RemoveServer {
+        peer: PeerId,
+        resp: oneshot::Sender<Result<()>>,
+    },
+    Probe {
+        address: Multiaddr,
+        resp: oneshot::Sender<Result<()>>,
+    },
 }
 
 #[cfg(feature = "kad")]
