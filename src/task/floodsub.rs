@@ -129,6 +129,7 @@ where
 
                 let _ = resp.send(Ok(rx));
             }
+            #[cfg(feature = "gossipsub")]
             _ => unreachable!(),
         }
     }

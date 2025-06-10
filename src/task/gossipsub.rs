@@ -116,6 +116,7 @@ where
 
                 let _ = resp.send(Ok(rx));
             }
+            #[cfg(feature = "floodsub")]
             _ => unreachable!(),
         }
     }
