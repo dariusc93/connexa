@@ -10,4 +10,4 @@ release = false
 [dependencies]
 tokio.workspace = true
 futures.workspace = true
-connexa = { path = "../../" }
+connexa = { path = "../../", default-features = false, features = ["ed25519", "tcp", "quic", "yamux", "noise"] }

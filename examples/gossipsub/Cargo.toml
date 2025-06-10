@@ -10,6 +10,6 @@ release = false
 [dependencies]
 tokio.workspace = true
 futures.workspace = true
-connexa = { path = "../../" }
+connexa = { path = "../../", default-features = false, features = ["ed25519", "tcp", "quic", "yamux", "noise", "gossipsub"] }
 clap = { version = "4.5.39", features = ["derive"] }
 rustyline-async = { version = "0.4.6" }

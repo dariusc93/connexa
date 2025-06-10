@@ -11,6 +11,6 @@ release = false
 tokio.workspace = true
 futures.workspace = true
 pollable-map = "0.1.7"
-connexa = { path = "../../" }
+connexa = { path = "../../", default-features = false, features = ["ed25519", "tcp", "quic", "yamux", "noise", "kad"] }
 clap = { version = "4.5.39", features = ["derive"] }
 rustyline-async = { version = "0.4.6" }
