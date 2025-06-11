@@ -16,7 +16,7 @@ pub mod prelude {
 
     #[cfg(feature = "kad")]
     pub mod dht {
-        pub use libp2p::kad::{Mode, Quorum};
+        pub use libp2p::kad::*;
     }
 
     pub type DefaultConnexaBuilder = ConnexaBuilder<(), super::dummy::Behaviour, ()>;
