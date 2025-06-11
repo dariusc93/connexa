@@ -257,8 +257,8 @@ where
                         let event = match record.is_some() {
                             true => {
                                 let (tx, rx) = oneshot::channel();
-                                self.dht_provider_record_global_receiver.insert(rx);
-                                event.set_provider_confirmation(tx)
+                                self.dht_put_record_global_receiver.insert(rx);
+                                event.set_record_confirmation(tx)
                             }
                             false => event.clone(),
                         };
