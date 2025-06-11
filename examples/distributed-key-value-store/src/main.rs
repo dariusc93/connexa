@@ -1,12 +1,15 @@
 use clap::Parser;
-use connexa::prelude::dht::Quorum;
-use connexa::prelude::{DHTEvent, DefaultConnexaBuilder, Multiaddr, PeerId, Protocol};
+use connexa::prelude::dht::{ProviderRecord, Quorum, Record, StoreInserts};
+use connexa::prelude::{
+    DHTEvent, DefaultConnexaBuilder, Multiaddr, PeerId, Protocol, RecordHandle,
+};
 use futures::StreamExt;
 use futures::stream::BoxStream;
 use futures::{FutureExt, Stream};
 use pollable_map::stream::StreamMap;
 use rustyline_async::Readline;
 use std::collections::HashSet;
+use std::io;
 use std::io::Write;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -18,6 +21,8 @@ struct Opt {
     peer: Vec<Multiaddr>,
     #[clap(long)]
     listener: Vec<Multiaddr>,
+    #[clap(long)]
+    enable_filtering: bool,
 }
 
 #[tokio::main]
@@ -26,7 +31,12 @@ async fn main() -> std::io::Result<()> {
     let connexa = DefaultConnexaBuilder::new_identity()
         .enable_tcp()
         .enable_quic()
-        .with_kademlia()
+        .with_kademlia_with_config("/ipfs/kad/1.0.0", move |mut config| {
+            if opt.enable_filtering {
+                config.set_record_filtering(StoreInserts::FilterBoth);
+            }
+            config
+        })
         .start()?;
 
     let addrs = match opt.listener.is_empty() {
@@ -83,11 +93,13 @@ async fn main() -> std::io::Result<()> {
         tokio::select! {
             Some(event) = listener.next() => {
                 match event {
-                    DHTEvent::PutRecord{ .. } => {
+                    DHTEvent::PutRecord {source,record } => {
                         writeln!(stdout, ">>> received a record")?;
+                        record_to_writer(&mut stdout, record)?;
                     }
-                    DHTEvent::ProvideRecord{ .. } => {
+                    DHTEvent::ProvideRecord { record } => {
                         writeln!(stdout, ">>> received a provider record")?;
+                        provider_record_to_writer(&mut stdout, record)?;
                     }
                 }
             },
@@ -247,4 +259,53 @@ impl Stream for ProviderStream {
             None => Poll::Ready(None),
         }
     }
+}
+
+fn provider_record_to_writer<W: Write>(
+    writer: &mut W,
+    record: RecordHandle<ProviderRecord>,
+) -> io::Result<()> {
+    if let RecordHandle {
+        record: Some(record),
+        confirm: Some(ch),
+    } = record
+    {
+        writeln!(
+            writer,
+            ">>> record key: {}",
+            String::from_utf8_lossy(record.key.as_ref())
+        )?;
+        writeln!(writer, ">>> record provider: {}", record.provider)?;
+        writeln!(
+            writer,
+            ">>> record provider address: {:?}",
+            record.addresses
+        )?;
+        let _ = ch.send(Ok(record));
+    }
+    Ok(())
+}
+
+fn record_to_writer<W: Write>(writer: &mut W, record: RecordHandle<Record>) -> io::Result<()> {
+    if let RecordHandle {
+        record: Some(record),
+        confirm: Some(ch),
+    } = record
+    {
+        writeln!(
+            writer,
+            ">>> record key: {}",
+            String::from_utf8_lossy(record.key.as_ref())
+        )?;
+        writeln!(
+            writer,
+            ">>> record value: {:?}",
+            String::from_utf8_lossy(record.value.as_ref())
+        )?;
+        if let Some(publisher) = record.publisher {
+            writeln!(writer, ">>> record publisher: {}", publisher)?;
+        }
+        let _ = ch.send(Ok(record));
+    }
+    Ok(())
 }
