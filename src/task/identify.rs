@@ -26,7 +26,7 @@ where
                     ..
                 } = info;
 
-                #[cfg(feature = "identify")]
+                #[cfg(feature = "kad")]
                 if let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() {
                     if protocols.iter().any(|p| libp2p::kad::PROTOCOL_NAME.eq(p)) {
                         for addr in listen_addrs {
