@@ -12,7 +12,7 @@ pub mod dummy {
 pub mod prelude {
     use crate::builder::ConnexaBuilder;
     pub use crate::types::*;
-    pub use libp2p::{Multiaddr, PeerId, StreamProtocol, multiaddr::Protocol, swarm::*};
+    pub use libp2p::{Multiaddr, PeerId, StreamProtocol, multiaddr::Protocol, swarm::*, identity::*};
 
     #[cfg(feature = "kad")]
     pub mod dht {
