@@ -11,7 +11,7 @@ use either::Either;
 use libp2p::autonat;
 #[cfg(feature = "dcutr")]
 use libp2p::dcutr::Behaviour as Dcutr;
-#[cfg(feature = "mdns")]
+#[cfg(feature = "identify")]
 use libp2p::identify::Behaviour as Identify;
 #[cfg(feature = "kad")]
 use libp2p::kad::Behaviour as Kademlia;
