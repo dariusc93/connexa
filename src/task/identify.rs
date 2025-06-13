@@ -10,6 +10,7 @@ where
     C::ToSwarm: Debug,
 {
     pub fn process_identify_event(&mut self, event: IdentifyEvent) {
+        #[allow(unused_variables)]
         let Some(swarm) = self.swarm.as_mut() else {
             return;
         };
