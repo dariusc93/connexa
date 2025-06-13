@@ -1,0 +1,15 @@
+[package]
+name = "relay"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[package.metadata.release]
+release = false
+
+[dependencies]
+tokio.workspace = true
+futures.workspace = true
+connexa = { path = "../../", default-features = false, features = ["ed25519", "tcp", "quic", "yamux", "noise", "relay", "ping", "identify"] }
+clap = { version = "4.5.39", features = ["derive"] }
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
