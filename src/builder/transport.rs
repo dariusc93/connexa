@@ -238,7 +238,7 @@ pub(crate) fn build_transport(
         None => Either::Right(transport),
     };
 
-    #[cfg(any(feature = "noise", feature = "tls"))]
+    #[cfg(all(feature = "yamux", any(feature = "noise", feature = "tls")))]
     let transport = {
         let config = {
             #[cfg(all(feature = "noise", feature = "tls"))]
@@ -343,7 +343,7 @@ pub(crate) fn build_transport(
             .boxed()
     };
 
-    #[cfg(not(all(feature = "noise", feature = "tls")))]
+    #[cfg(not(feature = "yamux"))]
     let transport = DummyTransport::<(PeerId, StreamMuxerBox)>::new().boxed();
 
     #[cfg(feature = "webrtc")]
