@@ -69,11 +69,8 @@ pub(crate) struct Config {
     #[cfg(feature = "kad")]
     pub kademlia_config: (String, Box<dyn Fn(KadConfig) -> KadConfig>),
     #[cfg(feature = "gossipsub")]
-    pub gossipsub_config: Box<
-        dyn Fn(
-            libp2p::gossipsub::ConfigBuilder,
-        ) -> Result<libp2p::gossipsub::Config, libp2p::gossipsub::ConfigBuilderError>,
-    >,
+    pub gossipsub_config:
+        Box<dyn Fn(libp2p::gossipsub::ConfigBuilder) -> libp2p::gossipsub::ConfigBuilder>,
     #[cfg(feature = "floodsub")]
     pub floodsub_config: Box<dyn Fn(FloodsubConfig) -> FloodsubConfig>,
     #[cfg(feature = "ping")]
@@ -97,7 +94,7 @@ impl Default for Config {
             #[cfg(feature = "kad")]
             kademlia_config: ("/ipfs/kad/1.0.0".to_string(), Box::new(|config| config)),
             #[cfg(feature = "gossipsub")]
-            gossipsub_config: Box::new(|config| config.build()),
+            gossipsub_config: Box::new(|config| config),
             #[cfg(feature = "floodsub")]
             floodsub_config: Box::new(|config| config),
             #[cfg(feature = "ping")]
@@ -345,18 +342,14 @@ where
     /// Enables gossipsub
     #[cfg(feature = "gossipsub")]
     pub fn with_gossipsub(self) -> Self {
-        self.with_gossipsub_with_config(|config| config.build())
+        self.with_gossipsub_with_config(|config| config)
     }
 
     /// Enables gossipsub
     #[cfg(feature = "gossipsub")]
     pub fn with_gossipsub_with_config<F>(mut self, config: F) -> Self
     where
-        F: Fn(
-                libp2p::gossipsub::ConfigBuilder,
-            )
-                -> Result<libp2p::gossipsub::Config, libp2p::gossipsub::ConfigBuilderError>
-            + 'static,
+        F: Fn(libp2p::gossipsub::ConfigBuilder) -> libp2p::gossipsub::ConfigBuilder + 'static,
     {
         self.protocols.gossipsub = true;
         self.config.gossipsub_config = Box::new(config);
