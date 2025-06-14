@@ -93,8 +93,8 @@ async fn main() -> std::io::Result<()> {
         tokio::select! {
             Some(event) = listener.next() => {
                 match event {
-                    DHTEvent::PutRecord {source,record } => {
-                        writeln!(stdout, ">>> received a record")?;
+                    DHTEvent::PutRecord { source, record } => {
+                        writeln!(stdout, ">>> received a record from {}", source)?;
                         record_to_writer(&mut stdout, record)?;
                     }
                     DHTEvent::ProvideRecord { record } => {
