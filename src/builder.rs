@@ -187,7 +187,7 @@ where
         }
     }
 
-    /// Set timeout for idle connections
+    /// Configuration for the swarm.
     pub fn set_swarm_config<F>(mut self, f: F) -> Self
     where
         F: Fn(libp2p::swarm::Config) -> libp2p::swarm::Config + 'static,
@@ -242,7 +242,7 @@ where
         self.with_kademlia_with_config("/ipfs/kad/1.0.0", |config| config)
     }
 
-    /// Enables kademlia
+    /// Enables kademlia with custom configuration
     #[cfg(feature = "kad")]
     pub fn with_kademlia_with_config<F>(mut self, protocol: impl Into<String>, f: F) -> Self
     where
@@ -281,7 +281,7 @@ where
         self.with_relay_server_with_config(|config| config)
     }
 
-    /// Enable relay server
+    /// Enable relay server with custom configuration
     #[cfg(feature = "relay")]
     pub fn with_relay_server_with_config<F>(mut self, config: F) -> Self
     where
@@ -320,7 +320,7 @@ where
         self.with_identify_with_config("/ipfs/id", |config| config)
     }
 
-    /// Enables identify
+    /// Enables identify with custom configuration
     #[cfg(feature = "identify")]
     pub fn with_identify_with_config<F>(mut self, protocol: impl Into<String>, config: F) -> Self
     where
@@ -345,7 +345,7 @@ where
         self.with_gossipsub_with_config(|config| config)
     }
 
-    /// Enables gossipsub
+    /// Enables gossipsub with custom configuration
     #[cfg(feature = "gossipsub")]
     pub fn with_gossipsub_with_config<F>(mut self, config: F) -> Self
     where
@@ -362,7 +362,7 @@ where
         self.with_floodsub_with_config(|config| config)
     }
 
-    /// Enables floodsub
+    /// Enables floodsub with custom configuration
     #[cfg(feature = "floodsub")]
     pub fn with_floodsub_with_config<F>(mut self, config: F) -> Self
     where
@@ -398,7 +398,7 @@ where
         self.with_autonat_v1_with_config(|config| config)
     }
 
-    /// Enables autonat v1
+    /// Enables autonat v1 with custom configuration
     #[cfg(feature = "autonat")]
     pub fn with_autonat_v1_with_config<F>(mut self, config: F) -> Self
     where
@@ -415,7 +415,7 @@ where
         self.with_autonat_v2_client_with_config(|config| config)
     }
 
-    /// Enables autonat v2 client
+    /// Enables autonat v2 client with custom configuration
     #[cfg(feature = "autonat")]
     pub fn with_autonat_v2_client_with_config<F>(mut self, config: F) -> Self
     where
@@ -439,7 +439,7 @@ where
         self.with_ping_with_config(|config| config)
     }
 
-    /// Enables ping
+    /// Enables ping with custom configuration
     #[cfg(feature = "ping")]
     pub fn with_ping_with_config<F>(mut self, config: F) -> Self
     where
