@@ -60,8 +60,21 @@ where
                     (None, None) => {}
                 }
             }
-            SwarmEvent::IncomingConnection { .. } => {}
-            SwarmEvent::IncomingConnectionError { .. } => {}
+            SwarmEvent::IncomingConnection {
+                connection_id,
+                local_addr,
+                send_back_addr,
+            } => {
+                tracing::info!(%connection_id, ?local_addr, ?send_back_addr, "incoming connection");
+            }
+            SwarmEvent::IncomingConnectionError {
+                connection_id,
+                local_addr,
+                send_back_addr,
+                error,
+            } => {
+                tracing::error!(%connection_id, ?local_addr, ?send_back_addr, error=%error, "incoming connection error");
+            }
             SwarmEvent::OutgoingConnectionError {
                 connection_id,
                 peer_id,
@@ -104,7 +117,12 @@ where
                     let _ = ch.send(Err(std::io::Error::other(error)));
                 }
             }
-            SwarmEvent::Dialing { .. } => {}
+            SwarmEvent::Dialing {
+                peer_id,
+                connection_id,
+            } => {
+                tracing::trace!(?peer_id, %connection_id, "dialing");
+            }
             SwarmEvent::NewExternalAddrCandidate { .. } => {}
             SwarmEvent::ExternalAddrConfirmed { address } => {
                 tracing::debug!(%address, "external address confirmed");
