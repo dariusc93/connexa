@@ -28,9 +28,9 @@ mod swarm;
 #[cfg(feature = "upnp")]
 mod upnp;
 
-use crate::behaviour;
 use crate::behaviour::BehaviourEvent;
 use crate::types::{Command, SwarmCommand};
+use crate::{TEventCallback, TPollableCallback, TSwarmEventCallback, TTaskCallback, behaviour};
 
 #[cfg(feature = "gossipsub")]
 use crate::types::GossipsubMessage;
@@ -106,11 +106,10 @@ where
     pub swarm: Optional<Swarm<behaviour::Behaviour<C>>>,
     pub command_receiver: Optional<mpsc::Receiver<Command<T>>>,
     pub context: X,
-    pub custom_task_callback:
-        Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, T) + 'static + Send>,
-    pub custom_event_callback:
-        Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, C::ToSwarm) + 'static + Send>,
-    pub swarm_event_callback: Box<dyn Fn(&SwarmEvent<BehaviourEvent<C>>) + 'static + Send>,
+    pub custom_task_callback: TTaskCallback<C, X, T>,
+    pub custom_event_callback: TEventCallback<C, X, C::ToSwarm>,
+    pub swarm_event_callback: TSwarmEventCallback<C>,
+    pub custom_pollable_callback: TPollableCallback<C, X>,
 
     /// A listener for sending dht events
     #[cfg(feature = "kad")]
@@ -180,6 +179,7 @@ where
             command_receiver: Optional::default(),
             custom_event_callback: Box::new(|_, _, _| ()),
             custom_task_callback: Box::new(|_, _, _| ()),
+            custom_pollable_callback: Box::new(|_, _, _| Poll::Pending),
             swarm_event_callback: Box::new(|_| ()),
             #[cfg(feature = "kad")]
             dht_event_sender: Default::default(),
@@ -246,6 +246,15 @@ where
         F: Fn(&SwarmEvent<BehaviourEvent<C>>) + Send + 'static,
     {
         self.swarm_event_callback = Box::new(callback);
+    }
+
+    pub fn set_pollable_callback<F>(&mut self, callback: F)
+    where
+        F: Fn(&mut Context<'_>, &mut Swarm<behaviour::Behaviour<C>>, &mut X) -> Poll<()>
+            + Send
+            + 'static,
+    {
+        self.custom_pollable_callback = Box::new(callback);
     }
 
     pub fn process_command(&mut self, command: Command<T>) {
@@ -371,6 +380,11 @@ where
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        // We should terminate the future if swarm stream is done being polled
+        if self.swarm.is_none() {
+            return Poll::Ready(());
+        }
+
         if self.cleanup_timer.poll_unpin(cx).is_ready() {
             let interval = self.cleanup_interval;
             self.cleanup_timer.reset(interval);
@@ -406,6 +420,13 @@ where
                 Poll::Ready(Some(event)) => self.process_swarm_event(event),
                 Poll::Ready(None) => return Poll::Ready(()),
                 Poll::Pending => break,
+            }
+        }
+
+        {
+            let this = &mut *self;
+            if let Some(swarm) = this.swarm.as_mut() {
+                let _ = (this.custom_pollable_callback)(cx, swarm, &mut this.context);
             }
         }
 

@@ -5,6 +5,20 @@ pub mod handle;
 pub mod task;
 pub(crate) mod types;
 
+use crate::behaviour::BehaviourEvent;
+use crate::prelude::{Swarm, SwarmEvent};
+use std::task::{Context, Poll};
+
+pub(crate) type TTaskCallback<C, X, T> =
+    Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, T) + 'static + Send>;
+pub(crate) type TEventCallback<C, X, CEvent> =
+    Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, CEvent) + 'static + Send>;
+pub(crate) type TPollableCallback<C, X> = Box<
+    dyn Fn(&mut Context, &mut Swarm<behaviour::Behaviour<C>>, &mut X) -> Poll<()> + 'static + Send,
+>;
+pub(crate) type TSwarmEventCallback<C> =
+    Box<dyn Fn(&SwarmEvent<BehaviourEvent<C>>) + 'static + Send>;
+
 pub mod dummy {
     pub use crate::behaviour::dummy::{Behaviour, DummyHandler};
 }

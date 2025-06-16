@@ -1,7 +1,6 @@
 mod executor;
 mod transport;
 
-use crate::behaviour;
 #[cfg(feature = "request-response")]
 use crate::behaviour::request_response::RequestResponseConfig;
 #[cfg(feature = "dns")]
@@ -9,6 +8,7 @@ use crate::builder::transport::DnsResolver;
 use crate::builder::transport::TransportConfig;
 use crate::handle::Connexa;
 use crate::task::ConnexaTask;
+use crate::{TEventCallback, TPollableCallback, TSwarmEventCallback, TTaskCallback, behaviour};
 use executor::ConnexaExecutor;
 use libp2p::Swarm;
 #[cfg(feature = "autonat")]
@@ -31,6 +31,7 @@ use libp2p::relay::Config as RelayServerConfig;
 use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 use libp2p_connection_limits::ConnectionLimits;
 use std::fmt::Debug;
+use std::task::Poll;
 // Since this used for quic duration, we will feature gate it to satisfy lint
 #[cfg(feature = "quic")]
 use std::time::Duration;
@@ -54,11 +55,10 @@ where
     context: X,
     custom_behaviour: Option<Box<dyn Fn(Keypair) -> C>>,
     file_descriptor_limits: Option<FileDescLimit>,
-    custom_task_callback:
-        Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, T) + 'static + Send>,
-    custom_event_callback:
-        Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, C::ToSwarm) + 'static + Send>,
-    swarm_event_callback: Box<dyn Fn(&SwarmEvent<behaviour::BehaviourEvent<C>>) + 'static + Send>,
+    custom_task_callback: TTaskCallback<C, X, T>,
+    custom_event_callback: TEventCallback<C, X, C::ToSwarm>,
+    swarm_event_callback: TSwarmEventCallback<C>,
+    custom_pollable_callback: TPollableCallback<C, X>,
     config: Config,
     swarm_config: Box<dyn Fn(libp2p::swarm::Config) -> libp2p::swarm::Config>,
     transport_config: TransportConfig,
@@ -180,6 +180,7 @@ where
             custom_task_callback: Box::new(|_, _, _| ()),
             custom_event_callback: Box::new(|_, _, _| ()),
             swarm_event_callback: Box::new(|_| ()),
+            custom_pollable_callback: Box::new(|_, _, _| Poll::Pending),
             config: Config::default(),
             protocols: Protocols::default(),
             swarm_config: Box::new(|config| config),
@@ -558,6 +559,7 @@ where
             custom_task_callback,
             custom_event_callback,
             swarm_event_callback,
+            custom_pollable_callback,
             config,
             protocols,
             swarm_config,
@@ -611,14 +613,16 @@ where
                 custom_task_callback,
                 custom_event_callback,
                 swarm_event_callback,
+                custom_pollable_callback,
                 connexa_task,
             ),
-            |(context, tcb, ecb, scb, mut ctx), rx| async move {
+            |(context, tcb, ecb, scb, pcb, mut ctx), rx| async move {
                 ctx.set_context(context);
                 ctx.set_task_callback(tcb);
                 ctx.set_event_callback(ecb);
                 ctx.set_command_receiver(rx);
                 ctx.set_swarm_event_callback(scb);
+                ctx.set_pollable_callback(pcb);
 
                 ctx.await
             },
