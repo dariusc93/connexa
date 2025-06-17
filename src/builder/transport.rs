@@ -11,7 +11,6 @@ use libp2p::core::transport::upgrade::Version;
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "dns")]
 use libp2p::dns::{ResolverConfig, ResolverOpts};
-use libp2p::identity;
 use std::fmt::{Debug, Formatter};
 
 use libp2p::PeerId;
@@ -165,10 +164,8 @@ impl From<UpgradeVersion> for Version {
     }
 }
 
-pub(crate) fn build_transport_with_other<F, M, T, R>(
+pub(crate) fn build_other_transport<F, M, T, R>(
     keypair: &Keypair,
-    relay: Option<ClientTransport>,
-    config: TransportConfig,
     other: F,
 ) -> io::Result<TTransport>
 where
@@ -180,16 +177,11 @@ where
     T::Dial: Send,
     T::ListenerUpgrade: Send,
     R: TryIntoTransport<T>,
-    F: for<'a> FnOnce(&'a Keypair) -> R,
+    F: FnOnce(&Keypair) -> R,
 {
-    let transport = build_transport(keypair, relay, config)?;
-    let transport = transport
-        .or_transport(
-            other(&keypair)
-                .try_into_transport()?
-                .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn))),
-        )
-        .map(|either, _| either.into_inner())
+    let transport = other(keypair)
+        .try_into_transport()?
+        .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
         .boxed();
 
     Ok(transport)
@@ -379,7 +371,7 @@ pub(crate) fn build_transport(
 
     #[cfg(feature = "webrtc")]
     fn generate_webrtc_transport(
-        keypair: &identity::Keypair,
+        keypair: &Keypair,
         pem: &Option<String>,
     ) -> io::Result<libp2p_webrtc::tokio::Transport> {
         let cert = match pem {
