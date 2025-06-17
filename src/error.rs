@@ -1,7 +1,7 @@
 #[cfg(feature = "rendezvous")]
 pub mod rendezvous {
     // Note: this for creating an Error representing `ErrorCode` since `ErrorCode` does not impl `Error`.
-    // Ideally, this is to provide context for the error response, but may be used in the future for 
+    // Ideally, this is to provide context for the error response, but may be used in the future for
     // a custom Error implementation
 
     use libp2p::rendezvous::ErrorCode;
