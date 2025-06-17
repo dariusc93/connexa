@@ -107,7 +107,7 @@ where
     pub command_receiver: Optional<mpsc::Receiver<Command<T>>>,
     pub context: X,
     pub custom_task_callback: TTaskCallback<C, X, T>,
-    pub custom_event_callback: TEventCallback<C, X, C::ToSwarm>,
+    pub custom_event_callback: TEventCallback<C, X>,
     pub swarm_event_callback: TSwarmEventCallback<C>,
     pub custom_pollable_callback: TPollableCallback<C, X>,
 

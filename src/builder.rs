@@ -56,7 +56,7 @@ where
     custom_behaviour: Option<Box<dyn Fn(Keypair) -> C>>,
     file_descriptor_limits: Option<FileDescLimit>,
     custom_task_callback: TTaskCallback<C, X, T>,
-    custom_event_callback: TEventCallback<C, X, C::ToSwarm>,
+    custom_event_callback: TEventCallback<C, X>,
     swarm_event_callback: TSwarmEventCallback<C>,
     custom_pollable_callback: TPollableCallback<C, X>,
     config: Config,

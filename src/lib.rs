@@ -7,12 +7,16 @@ pub(crate) mod types;
 
 use crate::behaviour::BehaviourEvent;
 use crate::prelude::{Swarm, SwarmEvent};
+use libp2p::swarm::NetworkBehaviour;
 use std::task::{Context, Poll};
 
 pub(crate) type TTaskCallback<C, X, T> =
     Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, T) + 'static + Send>;
-pub(crate) type TEventCallback<C, X, CEvent> =
-    Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, CEvent) + 'static + Send>;
+pub(crate) type TEventCallback<C, X> = Box<
+    dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, <C as NetworkBehaviour>::ToSwarm)
+        + 'static
+        + Send,
+>;
 pub(crate) type TPollableCallback<C, X> = Box<
     dyn Fn(&mut Context, &mut Swarm<behaviour::Behaviour<C>>, &mut X) -> Poll<()> + 'static + Send,
 >;
