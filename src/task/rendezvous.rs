@@ -67,10 +67,7 @@ where
 
                 rz.unregister(namespace.clone(), peer_id);
 
-                self.pending_rendezvous_unregister
-                    .entry((peer_id, namespace))
-                    .or_default()
-                    .push(resp);
+                let _ = resp.send(Ok(()));
             }
             RendezvousCommand::Discover {
                 namespace,

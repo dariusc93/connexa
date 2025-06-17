@@ -163,10 +163,6 @@ where
         IndexMap<(PeerId, Namespace), Vec<oneshot::Sender<std::io::Result<()>>>>,
 
     #[cfg(feature = "rendezvous")]
-    pub pending_rendezvous_unregister:
-        IndexMap<(PeerId, Namespace), Vec<oneshot::Sender<std::io::Result<()>>>>,
-
-    #[cfg(feature = "rendezvous")]
     pub pending_rendezvous_discover: IndexMap<
         PeerId,
         IndexMap<
@@ -247,8 +243,6 @@ where
             pending_rendezvous_discover: Default::default(),
             #[cfg(feature = "rendezvous")]
             pending_rendezvous_register: Default::default(),
-            #[cfg(feature = "rendezvous")]
-            pending_rendezvous_unregister: Default::default(),
             #[cfg(feature = "rendezvous")]
             pending_rendezvous_discover_any: Default::default(),
         }
