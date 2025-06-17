@@ -9,6 +9,8 @@ use indexmap::IndexSet;
 use libp2p::gossipsub::MessageId;
 #[cfg(feature = "kad")]
 use libp2p::kad::{Mode, PeerInfo, PeerRecord, ProviderRecord, Quorum, Record, RecordKey};
+#[cfg(feature = "rendezvous")]
+use libp2p::rendezvous::Cookie;
 #[cfg(feature = "request-response")]
 use libp2p::request_response::InboundRequestId;
 use libp2p::swarm::ConnectionId;
@@ -340,7 +342,7 @@ pub enum RendezvousCommand {
     Register {
         namespace: String,
         peer_id: PeerId,
-        ttl: Option<i64>,
+        ttl: Option<u64>,
         resp: oneshot::Sender<Result<()>>,
     },
     Unregister {
@@ -351,9 +353,9 @@ pub enum RendezvousCommand {
     Discover {
         namespace: Option<String>,
         peer_id: PeerId,
-        use_cookie: bool,
-        ttl: Option<i64>,
-        resp: oneshot::Sender<Result<mpsc::UnboundedReceiver<(PeerId, Vec<Multiaddr>)>>>,
+        cookie: Option<Cookie>,
+        ttl: Option<u64>,
+        resp: oneshot::Sender<Result<(Cookie, Vec<(PeerId, Vec<Multiaddr>)>)>>,
     },
 }
 

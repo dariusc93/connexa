@@ -81,9 +81,9 @@ use libp2p::relay::Event as RelayServerEvent;
 #[cfg(feature = "relay")]
 use libp2p::relay::client::Event as RelayClientEvent;
 #[cfg(feature = "rendezvous")]
-use libp2p::rendezvous::client::Event as RendezvousClientEvent;
-#[cfg(feature = "rendezvous")]
 use libp2p::rendezvous::server::Event as RendezvousServerEvent;
+#[cfg(feature = "rendezvous")]
+use libp2p::rendezvous::{Namespace, client::Event as RendezvousClientEvent};
 use libp2p::swarm::derive_prelude::ListenerId;
 use libp2p::swarm::{ConnectionId, NetworkBehaviour, SwarmEvent};
 #[cfg(feature = "upnp")]
@@ -158,6 +158,37 @@ where
     pub floodsub_listener:
         IndexMap<libp2p::floodsub::Topic, Vec<mpsc::Sender<PubsubEvent<FloodsubMessage>>>>,
 
+    #[cfg(feature = "rendezvous")]
+    pub pending_rendezvous_register:
+        IndexMap<(PeerId, Namespace), Vec<oneshot::Sender<std::io::Result<()>>>>,
+
+    #[cfg(feature = "rendezvous")]
+    pub pending_rendezvous_unregister:
+        IndexMap<(PeerId, Namespace), Vec<oneshot::Sender<std::io::Result<()>>>>,
+
+    #[cfg(feature = "rendezvous")]
+    pub pending_rendezvous_discover: IndexMap<
+        PeerId,
+        IndexMap<
+            Namespace,
+            Vec<
+                oneshot::Sender<
+                    std::io::Result<(libp2p::rendezvous::Cookie, Vec<(PeerId, Vec<Multiaddr>)>)>,
+                >,
+            >,
+        >,
+    >,
+
+    #[cfg(feature = "rendezvous")]
+    pub pending_rendezvous_discover_any: IndexMap<
+        PeerId,
+        Vec<
+            oneshot::Sender<
+                std::io::Result<(libp2p::rendezvous::Cookie, Vec<(PeerId, Vec<Multiaddr>)>)>,
+            >,
+        >,
+    >,
+
     pub cleanup_timer: Delay,
     pub cleanup_interval: Duration,
 }
@@ -212,6 +243,14 @@ where
             floodsub_listener: Default::default(),
             #[cfg(feature = "gossipsub")]
             gossipsub_listener: Default::default(),
+            #[cfg(feature = "rendezvous")]
+            pending_rendezvous_discover: Default::default(),
+            #[cfg(feature = "rendezvous")]
+            pending_rendezvous_register: Default::default(),
+            #[cfg(feature = "rendezvous")]
+            pending_rendezvous_unregister: Default::default(),
+            #[cfg(feature = "rendezvous")]
+            pending_rendezvous_discover_any: Default::default(),
         }
     }
 
@@ -353,8 +392,7 @@ where
             }
             #[cfg(feature = "rendezvous")]
             Command::Rendezvous(rendezvous_command) => {
-                // TODO
-                let _ = rendezvous_command;
+                self.process_rendezvous_command(rendezvous_command)
             }
             Command::Custom(custom_command) => {
                 (self.custom_task_callback)(swarm, &mut self.context, custom_command);

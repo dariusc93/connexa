@@ -1,0 +1,12 @@
+[package]
+name = "rendezvous"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio.workspace = true
+futures.workspace = true
+connexa = { path = "../../", default-features = false, features = ["ed25519", "tcp", "quic", "yamux", "noise", "rendezvous"] }
+clap = { version = "4.5.39", features = ["derive"] }
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+rustyline-async = { version = "0.4.6" }
