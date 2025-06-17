@@ -27,6 +27,8 @@ where
                     ..
                 } = info;
 
+                // TODO: Debate on if we should leave this in place or rely on the user to add the addresses manually
+                //       or as needed using the callback to check this event.
                 #[cfg(feature = "kad")]
                 if let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() {
                     if protocols.iter().any(|p| libp2p::kad::PROTOCOL_NAME.eq(p)) {
