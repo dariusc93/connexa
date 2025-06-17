@@ -23,6 +23,7 @@ use libp2p::relay::client::Transport as ClientTransport;
 #[cfg(not(feature = "relay"))]
 type ClientTransport = ();
 
+use libp2p::identity::Keypair;
 use std::io;
 use std::time::Duration;
 #[allow(unused_imports)]
@@ -164,11 +165,41 @@ impl From<UpgradeVersion> for Version {
     }
 }
 
+pub(crate) fn build_transport_with_other<F, M, T, R>(
+    keypair: &Keypair,
+    relay: Option<ClientTransport>,
+    config: TransportConfig,
+    other: F,
+) -> io::Result<TTransport>
+where
+    M: libp2p::core::muxing::StreamMuxer + Send + 'static,
+    M::Substream: Send,
+    M::Error: Send + Sync,
+    T: Transport<Output = (PeerId, M)> + Send + Unpin + 'static,
+    T::Error: Send + Sync + 'static,
+    T::Dial: Send,
+    T::ListenerUpgrade: Send,
+    R: TryIntoTransport<T>,
+    F: for<'a> FnOnce(&'a Keypair) -> R,
+{
+    let transport = build_transport(keypair, relay, config)?;
+    let transport = transport
+        .or_transport(
+            other(&keypair)
+                .try_into_transport()?
+                .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn))),
+        )
+        .map(|either, _| either.into_inner())
+        .boxed();
+
+    Ok(transport)
+}
+
 /// Builds the transport that serves as a common ground for all connections.
 #[cfg(not(target_arch = "wasm32"))]
 #[allow(unused_variables)]
 pub(crate) fn build_transport(
-    keypair: identity::Keypair,
+    keypair: &Keypair,
     relay: Option<ClientTransport>,
     TransportConfig {
         #[cfg(feature = "tcp")]
@@ -243,8 +274,8 @@ pub(crate) fn build_transport(
         let config = {
             #[cfg(all(feature = "noise", feature = "tls"))]
             {
-                let noise_config = noise::Config::new(&keypair).map_err(io::Error::other)?;
-                let tls_config = tls::Config::new(&keypair).map_err(io::Error::other)?;
+                let noise_config = noise::Config::new(keypair).map_err(io::Error::other)?;
+                let tls_config = tls::Config::new(keypair).map_err(io::Error::other)?;
 
                 //TODO: Make configurable
                 let config: SelectSecurityUpgrade<noise::Config, tls::Config> =
@@ -253,11 +284,11 @@ pub(crate) fn build_transport(
             }
             #[cfg(all(feature = "noise", not(feature = "tls")))]
             {
-                noise::Config::new(&keypair).map_err(io::Error::other)?
+                noise::Config::new(keypair).map_err(io::Error::other)?
             }
             #[cfg(all(not(feature = "noise"), feature = "tls"))]
             {
-                tls::Config::new(&keypair).map_err(io::Error::other)?
+                tls::Config::new(keypair).map_err(io::Error::other)?
             }
         };
 
@@ -494,6 +525,22 @@ pub(crate) fn build_transport(
     };
 
     Ok(transport.boxed())
+}
+
+pub trait TryIntoTransport<T> {
+    fn try_into_transport(self) -> io::Result<T>;
+}
+
+impl<T: Transport> TryIntoTransport<T> for T {
+    fn try_into_transport(self) -> io::Result<T> {
+        Ok(self)
+    }
+}
+
+impl<T: Transport> TryIntoTransport<T> for Result<T, Box<dyn std::error::Error + Send + Sync>> {
+    fn try_into_transport(self) -> io::Result<T> {
+        self.map_err(io::Error::other)
+    }
 }
 
 // borrow from libp2p SwarmBuilder

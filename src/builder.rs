@@ -600,8 +600,7 @@ where
         let (behaviour, relay_transport) =
             behaviour::Behaviour::new(&keypair, custom_behaviour, config, protocols)?;
 
-        let transport =
-            transport::build_transport(keypair.clone(), relay_transport, transport_config)?;
+        let transport = transport::build_transport(&keypair, relay_transport, transport_config)?;
 
         let swarm = Swarm::new(transport, behaviour, peer_id, swarm_config);
 
