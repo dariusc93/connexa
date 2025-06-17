@@ -151,9 +151,6 @@ where
 
     pub pending_remove_external_address: IndexMap<Multiaddr, oneshot::Sender<std::io::Result<()>>>,
 
-    pub pending_add_peer_address:
-        IndexMap<(PeerId, Multiaddr), oneshot::Sender<std::io::Result<()>>>,
-
     #[cfg(feature = "gossipsub")]
     pub gossipsub_listener:
         IndexMap<libp2p::gossipsub::TopicHash, Vec<mpsc::Sender<PubsubEvent<GossipsubMessage>>>>,
@@ -211,7 +208,6 @@ where
             pending_listen_on: IndexMap::new(),
             pending_remove_listener: IndexMap::new(),
             pending_remove_external_address: IndexMap::new(),
-            pending_add_peer_address: IndexMap::new(),
             #[cfg(feature = "floodsub")]
             floodsub_listener: Default::default(),
             #[cfg(feature = "gossipsub")]
@@ -314,9 +310,7 @@ where
                     self.pending_remove_listener.insert(listener_id, resp);
                 }
                 SwarmCommand::AddExternalAddress { address, resp } => {
-                    // let addr = address.clone();
                     swarm.add_external_address(address);
-                    // self.pending_add_external_address.insert(addr, resp);
                     let _ = resp.send(Ok(()));
                 }
                 SwarmCommand::RemoveExternalAddress { address, resp } => {
@@ -336,9 +330,8 @@ where
                     address,
                     resp,
                 } => {
-                    let addr = address.clone();
                     swarm.add_peer_address(peer_id, address);
-                    self.pending_add_peer_address.insert((peer_id, addr), resp);
+                    let _ = resp.send(Ok(()));
                 }
             },
             #[cfg(any(feature = "gossipsub", feature = "floodsub"))]

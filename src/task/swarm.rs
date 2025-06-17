@@ -133,12 +133,7 @@ where
                 }
             }
             SwarmEvent::NewExternalAddrOfPeer { peer_id, address } => {
-                if let Some(ch) = self
-                    .pending_add_peer_address
-                    .shift_remove(&(peer_id, address))
-                {
-                    let _ = ch.send(Ok(()));
-                }
+                tracing::debug!(%peer_id, %address, "new external address of peer");
             }
             _ => {}
         }
