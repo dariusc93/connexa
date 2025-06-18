@@ -11,7 +11,6 @@ use libp2p::core::transport::upgrade::Version;
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "dns")]
 use libp2p::dns::{ResolverConfig, ResolverOpts};
-use libp2p::identity;
 use std::fmt::{Debug, Formatter};
 
 use libp2p::PeerId;
@@ -23,6 +22,7 @@ use libp2p::relay::client::Transport as ClientTransport;
 #[cfg(not(feature = "relay"))]
 type ClientTransport = ();
 
+use libp2p::identity::Keypair;
 use std::io;
 use std::time::Duration;
 #[allow(unused_imports)]
@@ -168,7 +168,7 @@ impl From<UpgradeVersion> for Version {
 #[cfg(not(target_arch = "wasm32"))]
 #[allow(unused_variables)]
 pub(crate) fn build_transport(
-    keypair: identity::Keypair,
+    keypair: &Keypair,
     relay: Option<ClientTransport>,
     TransportConfig {
         #[cfg(feature = "tcp")]
@@ -243,8 +243,8 @@ pub(crate) fn build_transport(
         let config = {
             #[cfg(all(feature = "noise", feature = "tls"))]
             {
-                let noise_config = noise::Config::new(&keypair).map_err(io::Error::other)?;
-                let tls_config = tls::Config::new(&keypair).map_err(io::Error::other)?;
+                let noise_config = noise::Config::new(keypair).map_err(io::Error::other)?;
+                let tls_config = tls::Config::new(keypair).map_err(io::Error::other)?;
 
                 //TODO: Make configurable
                 let config: SelectSecurityUpgrade<noise::Config, tls::Config> =
@@ -253,11 +253,11 @@ pub(crate) fn build_transport(
             }
             #[cfg(all(feature = "noise", not(feature = "tls")))]
             {
-                noise::Config::new(&keypair).map_err(io::Error::other)?
+                noise::Config::new(keypair).map_err(io::Error::other)?
             }
             #[cfg(all(not(feature = "noise"), feature = "tls"))]
             {
-                tls::Config::new(&keypair).map_err(io::Error::other)?
+                tls::Config::new(keypair).map_err(io::Error::other)?
             }
         };
 
@@ -348,7 +348,7 @@ pub(crate) fn build_transport(
 
     #[cfg(feature = "webrtc")]
     fn generate_webrtc_transport(
-        keypair: &identity::Keypair,
+        keypair: &Keypair,
         pem: &Option<String>,
     ) -> io::Result<libp2p_webrtc::tokio::Transport> {
         let cert = match pem {
