@@ -58,7 +58,7 @@ impl From<RequestResponseDirection> for ProtocolSupport {
 impl Default for RequestResponseConfig {
     fn default() -> Self {
         Self {
-            protocol: "/ipfs/request-response".into(),
+            protocol: "/libp2p/request-response".into(),
             timeout: None,
             max_request_size: 512 * 1024,
             max_response_size: 2 * 1024 * 1024,
