@@ -57,14 +57,14 @@ async fn main() -> io::Result<()> {
             .with_ping()
             .with_identify()
             .with_relay_server()
-            .start()?,
+            .build()?,
         Mode::Dial | Mode::Listen => DefaultConnexaBuilder::with_existing_identity(&keypair)
             .enable_tcp()
             .enable_quic()
             .with_ping()
             .with_identify()
             .with_relay()
-            .start()?,
+            .build()?,
     };
 
     let peer_id = keypair.public().to_peer_id();

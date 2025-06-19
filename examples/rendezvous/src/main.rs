@@ -56,13 +56,13 @@ async fn main() -> io::Result<()> {
             .enable_quic()
             .with_rendezvous_server()
             .set_swarm_config(|config| config.with_idle_connection_timeout(Duration::from_secs(60)))
-            .start()?,
+            .build()?,
         Mode::Client => DefaultConnexaBuilder::with_existing_identity(&keypair)
             .enable_tcp()
             .enable_quic()
             .with_rendezvous_client()
             .set_swarm_config(|config| config.with_idle_connection_timeout(Duration::from_secs(60)))
-            .start()?,
+            .build()?,
     };
 
     let base_addr = Multiaddr::empty().with(Protocol::Ip4(Ipv4Addr::new(0, 0, 0, 0)));
