@@ -37,12 +37,21 @@ use tracing::Span;
 
 type Result<T> = std::io::Result<T>;
 
-#[derive(Clone)]
 pub struct Connexa<T = ()> {
     #[allow(dead_code)]
     span: Span,
     keypair: Keypair,
     to_task: CommunicationTask<Command<T>>,
+}
+
+impl<T> Clone for Connexa<T> {
+    fn clone(&self) -> Self {
+        Self {
+            span: self.span.clone(),
+            keypair: self.keypair.clone(),
+            to_task: self.to_task.clone(),
+        }
+    }   
 }
 
 impl<T> Connexa<T> {
