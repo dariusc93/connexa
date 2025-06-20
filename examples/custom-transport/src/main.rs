@@ -22,7 +22,7 @@ async fn create_node(port: impl Into<Option<u64>>) -> io::Result<Connexa> {
                 .boxed();
             Ok(transport)
         })?
-        .start()?;
+        .build()?;
 
     let port = port.into().unwrap_or_default();
 
