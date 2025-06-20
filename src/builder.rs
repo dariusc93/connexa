@@ -555,8 +555,7 @@ where
         self
     }
 
-    /// Implements a custom transport to use either on top of the existing transports
-    /// or by itself if no transport is enabled or used.
+    /// Implements custom transport that will override the existing transport construction.
     pub fn with_custom_transport<F, M, TP, R>(mut self, f: F) -> std::io::Result<Self>
     where
         M: libp2p::core::muxing::StreamMuxer + Send + 'static,
@@ -625,14 +624,9 @@ where
         let (behaviour, relay_transport) =
             behaviour::Behaviour::new(&keypair, custom_behaviour, config, protocols)?;
 
-        let transport = transport::build_transport(&keypair, relay_transport, transport_config)?;
-
         let transport = match custom_transport {
-            Some(custom_transport) => transport
-                .or_transport(custom_transport)
-                .map(|either, _| either.into_inner())
-                .boxed(),
-            None => transport,
+            Some(custom_transport) => custom_transport.boxed(),
+            None => transport::build_transport(&keypair, relay_transport, transport_config)?,
         };
 
         let swarm = Swarm::new(transport, behaviour, peer_id, swarm_config);
