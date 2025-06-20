@@ -39,8 +39,11 @@ pub struct RequestResponseConfig {
 
 #[derive(Debug, Clone, Default)]
 pub enum RequestResponseDirection {
+    /// Support inbound requests
     In,
+    /// Support outbound requests
     Out,
+    /// Support both inbound and outbound requests
     #[default]
     Both,
 }
@@ -58,7 +61,7 @@ impl From<RequestResponseDirection> for ProtocolSupport {
 impl Default for RequestResponseConfig {
     fn default() -> Self {
         Self {
-            protocol: "/ipfs/request-response".into(),
+            protocol: "/libp2p/request-response".into(),
             timeout: None,
             max_request_size: 512 * 1024,
             max_response_size: 2 * 1024 * 1024,
@@ -66,6 +69,51 @@ impl Default for RequestResponseConfig {
             channel_buffer: 128,
             protocol_direction: RequestResponseDirection::default(),
         }
+    }
+}
+
+impl RequestResponseConfig {
+    pub fn new(protocol: impl Into<String>) -> Self {
+        let protocol = protocol.into();
+        RequestResponseConfig {
+            protocol,
+            ..Default::default()
+        }
+    }
+
+    /// Set a duration which would indicate on how long it should take for a response before the request times out.
+    pub fn set_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
+    /// Set the maximum size of a request.
+    pub fn set_max_request_size(mut self, size: usize) -> Self {
+        self.max_request_size = size;
+        self
+    }
+
+    /// Set the maximum size of a response.
+    pub fn set_max_response_size(mut self, size: usize) -> Self {
+        self.max_response_size = size;
+        self
+    }
+
+    /// Set the upper bound of inbound and outbound streams.
+    pub fn set_concurrent_streams(mut self, size: usize) -> Self {
+        self.concurrent_streams = Some(size);
+        self
+    }
+
+    /// Set the max slot available to send requests over channels.
+    pub fn set_channel_buffer(mut self, size: usize) -> Self {
+        self.channel_buffer = size;
+        self
+    }
+
+    pub fn set_protocol_direction(mut self, direction: RequestResponseDirection) -> Self {
+        self.protocol_direction = direction;
+        self
     }
 }
 
@@ -121,9 +169,8 @@ impl Behaviour {
         request: Bytes,
     ) -> BoxFuture<'static, std::io::Result<Bytes>> {
         // Since we are only requesting from a single peer, we will only accept one response, if any, from the stream
-        let st = self.send_requests([peer_id], request);
+        let mut st = self.send_requests([peer_id], request);
         Box::pin(async move {
-            pin_mut!(st);
             match st.next().await {
                 // Since we are accepting from a single peer, thus would be tracking the peer,
                 // we can exclude the peer id from the result.
@@ -192,11 +239,13 @@ impl Behaviour {
         request: Bytes,
         response_channel: ResponseChannel<Bytes>,
     ) {
+        // TODO: Determine if this would have some performance impact on doing this on every request
+        // the node receives. If so, then we should create a timer that would cleanup the vector
         self.broadcast_request.retain(|tx| !tx.is_closed());
 
         if self.broadcast_request.is_empty() {
-            // If the node is not listening in to requests then we should drop the response so it would timeout
-            _ = request;
+            // If the node is not listening to the requests, then we should drop the response so it would time out
+            tracing::warn!(%peer_id, request_id=%id, "no subscribers listening to request. dropping request");
             return;
         }
 
@@ -206,8 +255,8 @@ impl Behaviour {
             .insert(id, response_channel);
 
         for tx in self.broadcast_request.iter_mut() {
-            if let Err(_e) = tx.try_send((peer_id, id, request.clone())) {
-                // TODO: channel is full or closed
+            if let Err(e) = tx.try_send((peer_id, id, request.clone())) {
+                tracing::warn!(%peer_id, request_id=%id, error=%e, "unable to send request to subscriber");
                 continue;
             }
         }
@@ -218,10 +267,13 @@ impl Behaviour {
             return;
         };
 
-        let ch = list.remove(&id);
+        let Some(ch) = list.remove(&id) else {
+            tracing::warn!(%peer_id, request_id=%id, "no pending request available that is awaiting for a response. dropping response");
+            return;
+        };
 
-        if let Some(ch) = ch {
-            let _ = ch.send(Ok(response));
+        if ch.send(Ok(response)).is_err() {
+            tracing::warn!(%peer_id, request_id=%id, "unable to send response");
         }
     }
 
@@ -231,6 +283,8 @@ impl Behaviour {
         peer_id: PeerId,
         error: OutboundFailure,
     ) {
+        tracing::error!(%peer_id, request_id=%id, %error, "outbound failure");
+
         if let Entry::Occupied(mut entry) = self.pending_response.entry(peer_id) {
             let list = entry.get_mut();
 
@@ -251,8 +305,9 @@ impl Behaviour {
         &mut self,
         id: InboundRequestId,
         peer_id: PeerId,
-        _: InboundFailure,
+        inbound_failure: InboundFailure,
     ) {
+        tracing::error!(%peer_id, request_id=%id, error=%inbound_failure, "inbound failure");
         if let Entry::Occupied(mut entry) = self.pending_request.entry(peer_id) {
             let list = entry.get_mut();
             list.remove(&id);

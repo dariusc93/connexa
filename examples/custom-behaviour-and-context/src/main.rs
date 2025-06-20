@@ -49,7 +49,7 @@ async fn main() -> std::io::Result<()> {
                 }
             }
         })
-        .start()?;
+        .build()?;
 
     {
         let (tx, rx) = oneshot::channel();

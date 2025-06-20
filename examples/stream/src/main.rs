@@ -56,7 +56,7 @@ async fn main() -> io::Result<()> {
         .enable_tcp()
         .enable_quic()
         .with_streams()
-        .start()?;
+        .build()?;
 
     let addrs = match opt.listen_addr.is_empty() {
         true => vec![

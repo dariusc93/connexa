@@ -573,7 +573,7 @@ where
         Ok(self)
     }
 
-    pub fn start(self) -> std::io::Result<Connexa<T>> {
+    pub fn build(self) -> std::io::Result<Connexa<T>> {
         let ConnexaBuilder {
             keypair,
             context,
