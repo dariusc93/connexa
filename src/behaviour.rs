@@ -34,7 +34,7 @@ use crate::builder::{Config, Protocols};
 use indexmap::IndexMap;
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkBehaviour;
-use libp2p_allow_block_list::BlockedPeers;
+use libp2p_allow_block_list::{AllowedPeers, BlockedPeers};
 use rand::rngs::OsRng;
 use std::fmt::Debug;
 
@@ -45,7 +45,8 @@ where
     <C as NetworkBehaviour>::ToSwarm: Debug + Send,
 {
     // connection management
-    pub block_list: libp2p_allow_block_list::Behaviour<BlockedPeers>,
+    pub allow_list: Toggle<libp2p_allow_block_list::Behaviour<AllowedPeers>>,
+    pub deny_list: Toggle<libp2p_allow_block_list::Behaviour<BlockedPeers>>,
     pub connection_limits: Toggle<libp2p_connection_limits::Behaviour>,
 
     #[cfg(feature = "relay")]
@@ -131,6 +132,13 @@ where
         config: Config,
         protocols: Protocols,
     ) -> std::io::Result<(Self, Option<ClientTransport>)> {
+        if protocols.allow_list && protocols.deny_list {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Interrupted,
+                "blocklist and whitelist cannot be enabled at the same time",
+            ));
+        }
+
         let peer_id = keypair.public().to_peer_id();
 
         tracing::info!("net: starting with peer id {}", peer_id);
@@ -268,7 +276,6 @@ where
         #[cfg(not(feature = "relay"))]
         let transport = None::<()>;
 
-        let block_list = libp2p_allow_block_list::Behaviour::default();
         let custom = Toggle::from(custom_behaviour);
 
         #[cfg(feature = "rendezvous")]
@@ -295,8 +302,32 @@ where
             .map(libp2p_connection_limits::Behaviour::new)
             .into();
 
+        let allow_list = protocols
+            .allow_list
+            .then(|| {
+                let mut behaviour = libp2p_allow_block_list::Behaviour::<AllowedPeers>::default();
+                for peer_id in config.allow_list {
+                    behaviour.allow_peer(peer_id);
+                }
+                behaviour
+            })
+            .into();
+
+        let deny_list = protocols
+            .deny_list
+            .then(|| {
+                let mut behaviour = libp2p_allow_block_list::Behaviour::<BlockedPeers>::default();
+                for peer_id in config.deny_list {
+                    behaviour.block_peer(peer_id);
+                }
+                behaviour
+            })
+            .into();
+
         #[allow(unused_mut)]
         let mut behaviour = Behaviour {
+            allow_list,
+            deny_list,
             connection_limits,
             #[cfg(not(target_arch = "wasm32"))]
             #[cfg(feature = "mdns")]
@@ -324,7 +355,6 @@ where
             relay,
             #[cfg(feature = "relay")]
             relay_client,
-            block_list,
             #[cfg(feature = "stream")]
             stream,
             #[cfg(not(target_arch = "wasm32"))]

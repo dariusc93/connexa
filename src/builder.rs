@@ -9,6 +9,7 @@ use crate::builder::transport::{
     TTransport, TransportConfig, TryIntoTransport, build_other_transport,
 };
 use crate::handle::Connexa;
+use crate::prelude::PeerId;
 use crate::task::ConnexaTask;
 use crate::{TEventCallback, TPollableCallback, TSwarmEventCallback, TTaskCallback, behaviour};
 use executor::ConnexaExecutor;
@@ -35,7 +36,6 @@ use libp2p_connection_limits::ConnectionLimits;
 use std::fmt::Debug;
 use std::task::Poll;
 // Since this used for quic duration, we will feature gate it to satisfy lint
-use crate::prelude::PeerId;
 #[cfg(feature = "quic")]
 use std::time::Duration;
 use tracing::Span;
@@ -89,6 +89,8 @@ pub(crate) struct Config {
     pub identify_config: (String, Box<dyn Fn(IdentifyConfig) -> IdentifyConfig>),
     #[cfg(feature = "request-response")]
     pub request_response_config: Vec<RequestResponseConfig>,
+    pub allow_list: Vec<PeerId>,
+    pub deny_list: Vec<PeerId>,
     pub connection_limits: Box<dyn Fn(ConnectionLimits) -> ConnectionLimits>,
 }
 
@@ -113,6 +115,8 @@ impl Default for Config {
             identify_config: (String::from("/ipfs/id"), Box::new(|config| config)),
             #[cfg(feature = "request-response")]
             request_response_config: vec![],
+            allow_list: Vec::new(),
+            deny_list: Vec::new(),
             connection_limits: Box::new(|config| config),
         }
     }
@@ -157,6 +161,8 @@ pub(crate) struct Protocols {
     #[cfg(feature = "request-response")]
     pub(crate) request_response: bool,
     pub(crate) connection_limits: bool,
+    pub(crate) allow_list: bool,
+    pub(crate) deny_list: bool,
 }
 
 impl<X, C, T> ConnexaBuilder<X, C, T>
@@ -453,6 +459,26 @@ where
     {
         self.protocols.ping = true;
         self.config.ping_config = Box::new(config);
+        self
+    }
+
+    pub fn with_whitelist(self) -> Self {
+        self.with_whitelist_with_list([])
+    }
+
+    pub fn with_whitelist_with_list(mut self, list: impl IntoIterator<Item = PeerId>) -> Self {
+        self.config.allow_list = list.into_iter().collect();
+        self.protocols.allow_list = true;
+        self
+    }
+
+    pub fn with_blacklist(self) -> Self {
+        self.with_blacklist_with_list([])
+    }
+
+    pub fn with_blacklist_with_list(mut self, list: impl IntoIterator<Item = PeerId>) -> Self {
+        self.protocols.deny_list = true;
+        self.config.deny_list = list.into_iter().collect();
         self
     }
 

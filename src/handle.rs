@@ -1,5 +1,6 @@
 #[cfg(feature = "autonat")]
 mod autonat;
+mod blacklist;
 #[cfg(feature = "kad")]
 mod dht;
 #[cfg(feature = "floodsub")]
@@ -13,9 +14,11 @@ mod request_response;
 #[cfg(feature = "stream")]
 mod stream;
 mod swarm;
+mod whitelist;
 
 #[cfg(feature = "autonat")]
 use crate::handle::autonat::ConnexaAutonat;
+use crate::handle::blacklist::ConnexaBlacklist;
 #[cfg(feature = "kad")]
 use crate::handle::dht::ConnexaDht;
 #[cfg(feature = "floodsub")]
@@ -29,6 +32,7 @@ use crate::handle::request_response::ConnexaRequestResponse;
 #[cfg(feature = "stream")]
 use crate::handle::stream::ConnexaStream;
 use crate::handle::swarm::ConnexaSwarm;
+use crate::handle::whitelist::ConnexaWhitelist;
 use crate::types::Command;
 use async_rt::CommunicationTask;
 use libp2p::identity::Keypair;
@@ -51,7 +55,7 @@ impl<T> Clone for Connexa<T> {
             keypair: self.keypair.clone(),
             to_task: self.to_task.clone(),
         }
-    }   
+    }
 }
 
 impl<T> Connexa<T> {
@@ -125,6 +129,16 @@ where
     #[cfg(feature = "rendezvous")]
     pub fn rendezvous(&self) -> ConnexaRendezvous<T> {
         ConnexaRendezvous::new(self)
+    }
+
+    /// Returns a handle to manage peer whitelist functionality
+    pub fn whitelist(&self) -> ConnexaWhitelist<T> {
+        ConnexaWhitelist::new(self)
+    }
+
+    /// Returns a handle to manage peer blacklist functionality  
+    pub fn blacklist(&self) -> ConnexaBlacklist<T> {
+        ConnexaBlacklist::new(self)
     }
 
     /// Keypair that was used during initialization

@@ -43,6 +43,7 @@ use crate::types::{FloodsubMessage, PubsubFloodsubPublish};
 #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
 use crate::types::{PubsubCommand, PubsubEvent, PubsubPublishType, PubsubType};
 
+use crate::prelude::{BlacklistCommand, WhitelistCommand};
 #[cfg(feature = "stream")]
 use crate::types::StreamCommand;
 use either::Either;
@@ -365,6 +366,86 @@ where
                 } => {
                     swarm.add_peer_address(peer_id, address);
                     let _ = resp.send(Ok(()));
+                }
+            },
+            Command::Whitelist(command) => match command {
+                WhitelistCommand::Add { peer_id, resp } => {
+                    let Some(whitelist) = swarm.behaviour_mut().allow_list.as_mut() else {
+                        let _ = resp.send(Err(std::io::Error::other("whitelist not enabled")));
+                        return;
+                    };
+
+                    if !whitelist.allow_peer(peer_id) {
+                        let _ =
+                            resp.send(Err(std::io::Error::other("peer is already whitelisted")));
+                        return;
+                    }
+
+                    let _ = resp.send(Ok(()));
+                }
+                WhitelistCommand::Remove { peer_id, resp } => {
+                    let Some(whitelist) = swarm.behaviour_mut().allow_list.as_mut() else {
+                        let _ = resp.send(Err(std::io::Error::other("whitelist not enabled")));
+                        return;
+                    };
+
+                    if !whitelist.disallow_peer(peer_id) {
+                        let _ = resp.send(Err(std::io::Error::other("peer is not whitelisted")));
+                        return;
+                    }
+
+                    let _ = resp.send(Ok(()));
+                }
+                WhitelistCommand::List { resp } => {
+                    let Some(whitelist) = swarm.behaviour_mut().allow_list.as_mut() else {
+                        let _ = resp.send(Err(std::io::Error::other("whitelist not enabled")));
+                        return;
+                    };
+
+                    let list = whitelist.allowed_peers();
+                    let list = list.iter().cloned().collect();
+
+                    let _ = resp.send(Ok(list));
+                }
+            },
+            Command::Blacklist(command) => match command {
+                BlacklistCommand::Add { peer_id, resp } => {
+                    let Some(blacklist) = swarm.behaviour_mut().deny_list.as_mut() else {
+                        let _ = resp.send(Err(std::io::Error::other("blacklist not enabled")));
+                        return;
+                    };
+
+                    if !blacklist.block_peer(peer_id) {
+                        let _ =
+                            resp.send(Err(std::io::Error::other("peer is already blacklisted")));
+                        return;
+                    }
+
+                    let _ = resp.send(Ok(()));
+                }
+                BlacklistCommand::Remove { peer_id, resp } => {
+                    let Some(blacklist) = swarm.behaviour_mut().deny_list.as_mut() else {
+                        let _ = resp.send(Err(std::io::Error::other("blacklist not enabled")));
+                        return;
+                    };
+
+                    if !blacklist.unblock_peer(peer_id) {
+                        let _ = resp.send(Err(std::io::Error::other("peer is not blacklisted")));
+                        return;
+                    }
+
+                    let _ = resp.send(Ok(()));
+                }
+                BlacklistCommand::List { resp } => {
+                    let Some(blacklist) = swarm.behaviour_mut().deny_list.as_mut() else {
+                        let _ = resp.send(Err(std::io::Error::other("blacklist not enabled")));
+                        return;
+                    };
+
+                    let list = blacklist.blocked_peers();
+                    let list = list.iter().cloned().collect();
+
+                    let _ = resp.send(Ok(list));
                 }
             },
             #[cfg(any(feature = "gossipsub", feature = "floodsub"))]

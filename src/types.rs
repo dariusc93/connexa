@@ -36,6 +36,8 @@ pub enum Command<T = ()> {
     Rendezvous(RendezvousCommand),
     #[cfg(feature = "autonat")]
     Autonat(AutonatCommand),
+    Whitelist(WhitelistCommand),
+    Blacklist(BlacklistCommand),
     Custom(T),
 }
 
@@ -84,6 +86,18 @@ impl<T> From<StreamCommand> for Command<T> {
 impl<T> From<RendezvousCommand> for Command<T> {
     fn from(cmd: RendezvousCommand) -> Self {
         Command::Rendezvous(cmd)
+    }
+}
+
+impl<T> From<WhitelistCommand> for Command<T> {
+    fn from(cmd: WhitelistCommand) -> Self {
+        Command::Whitelist(cmd)
+    }
+}
+
+impl<T> From<BlacklistCommand> for Command<T> {
+    fn from(cmd: BlacklistCommand) -> Self {
+        Command::Blacklist(cmd)
     }
 }
 
@@ -473,4 +487,34 @@ pub struct FloodsubMessage {
     pub source: PeerId,
     pub data: Bytes,
     pub sequence_number: Vec<u8>,
+}
+
+#[derive(Debug)]
+pub enum WhitelistCommand {
+    Add {
+        peer_id: PeerId,
+        resp: oneshot::Sender<Result<()>>,
+    },
+    Remove {
+        peer_id: PeerId,
+        resp: oneshot::Sender<Result<()>>,
+    },
+    List {
+        resp: oneshot::Sender<Result<Vec<PeerId>>>,
+    },
+}
+
+#[derive(Debug)]
+pub enum BlacklistCommand {
+    Add {
+        peer_id: PeerId,
+        resp: oneshot::Sender<Result<()>>,
+    },
+    Remove {
+        peer_id: PeerId,
+        resp: oneshot::Sender<Result<()>>,
+    },
+    List {
+        resp: oneshot::Sender<Result<Vec<PeerId>>>,
+    },
 }
