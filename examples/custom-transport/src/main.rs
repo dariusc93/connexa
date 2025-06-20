@@ -40,7 +40,7 @@ async fn main() -> std::io::Result<()> {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
-    let (node_a, node_b) = tokio::try_join!(create_node(4410), create_node(4411))?;
+    let (node_a, node_b) = tokio::try_join!(create_node(None), create_node(None))?;
 
     let addr_a = node_a
         .swarm()
