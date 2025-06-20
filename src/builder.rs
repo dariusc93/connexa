@@ -5,12 +5,13 @@ mod transport;
 use crate::behaviour::request_response::RequestResponseConfig;
 #[cfg(feature = "dns")]
 use crate::builder::transport::DnsResolver;
-use crate::builder::transport::TransportConfig;
+use crate::builder::transport::{
+    TTransport, TransportConfig, TryIntoTransport, build_other_transport,
+};
 use crate::handle::Connexa;
 use crate::task::ConnexaTask;
 use crate::{TEventCallback, TPollableCallback, TSwarmEventCallback, TTaskCallback, behaviour};
 use executor::ConnexaExecutor;
-use libp2p::Swarm;
 #[cfg(feature = "autonat")]
 use libp2p::autonat::v1::Config as AutonatV1Config;
 #[cfg(feature = "autonat")]
@@ -29,10 +30,12 @@ use libp2p::pnet::PreSharedKey;
 #[cfg(feature = "relay")]
 use libp2p::relay::Config as RelayServerConfig;
 use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
+use libp2p::{Swarm, Transport};
 use libp2p_connection_limits::ConnectionLimits;
 use std::fmt::Debug;
 use std::task::Poll;
 // Since this used for quic duration, we will feature gate it to satisfy lint
+use crate::prelude::PeerId;
 #[cfg(feature = "quic")]
 use std::time::Duration;
 use tracing::Span;
@@ -62,6 +65,7 @@ where
     config: Config,
     swarm_config: Box<dyn Fn(libp2p::swarm::Config) -> libp2p::swarm::Config>,
     transport_config: TransportConfig,
+    custom_transport: Option<TTransport>,
     protocols: Protocols,
 }
 
@@ -185,6 +189,7 @@ where
             protocols: Protocols::default(),
             swarm_config: Box::new(|config| config),
             transport_config: TransportConfig::default(),
+            custom_transport: None,
         }
     }
 
@@ -550,6 +555,24 @@ where
         self
     }
 
+    /// Implements custom transport that will override the existing transport construction.
+    pub fn with_custom_transport<F, M, TP, R>(mut self, f: F) -> std::io::Result<Self>
+    where
+        M: libp2p::core::muxing::StreamMuxer + Send + 'static,
+        M::Substream: Send,
+        M::Error: Send + Sync,
+        TP: Transport<Output = (PeerId, M)> + Send + Unpin + 'static,
+        TP::Error: Send + Sync + 'static,
+        TP::Dial: Send,
+        TP::ListenerUpgrade: Send,
+        R: TryIntoTransport<TP>,
+        F: FnOnce(&Keypair) -> R,
+    {
+        let transport = build_other_transport(&self.keypair, f)?;
+        self.custom_transport = Some(transport);
+        Ok(self)
+    }
+
     pub fn build(self) -> std::io::Result<Connexa<T>> {
         let ConnexaBuilder {
             keypair,
@@ -564,6 +587,7 @@ where
             protocols,
             swarm_config,
             transport_config,
+            custom_transport,
         } = self;
 
         let span = Span::current();
@@ -600,7 +624,10 @@ where
         let (behaviour, relay_transport) =
             behaviour::Behaviour::new(&keypair, custom_behaviour, config, protocols)?;
 
-        let transport = transport::build_transport(&keypair, relay_transport, transport_config)?;
+        let transport = match custom_transport {
+            Some(custom_transport) => custom_transport.boxed(),
+            None => transport::build_transport(&keypair, relay_transport, transport_config)?,
+        };
 
         let swarm = Swarm::new(transport, behaviour, peer_id, swarm_config);
 

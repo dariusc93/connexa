@@ -39,5 +39,13 @@ pub mod prelude {
         pub use libp2p::kad::*;
     }
 
+    pub mod transport {
+        pub use libp2p::core::muxing;
+        pub use libp2p::core::transport;
+        pub use libp2p::core::upgrade;
+        pub use libp2p::noise;
+        pub use libp2p::yamux;
+    }
+
     pub type DefaultConnexaBuilder = ConnexaBuilder<(), super::dummy::Behaviour, ()>;
 }
