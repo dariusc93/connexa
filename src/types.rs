@@ -5,6 +5,7 @@ use futures::channel::{mpsc, oneshot};
 use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use indexmap::IndexSet;
+use libp2p::core::ConnectedPoint;
 #[cfg(feature = "gossipsub")]
 use libp2p::gossipsub::MessageId;
 #[cfg(feature = "kad")]
@@ -152,6 +153,25 @@ pub enum SwarmCommand {
         peer_id: PeerId,
         address: Multiaddr,
         resp: oneshot::Sender<Result<()>>,
+    },
+    Listener {
+        resp: oneshot::Sender<mpsc::Receiver<ConnectionEvent>>,
+    },
+}
+
+#[derive(Debug)]
+pub enum ConnectionEvent {
+    ConnectionEstablished {
+        peer_id: PeerId,
+        connection_id: ConnectionId,
+        endpoint: ConnectedPoint,
+        established: u32,
+    },
+    ConnectionClosed {
+        peer_id: PeerId,
+        connection_id: ConnectionId,
+        endpoint: ConnectedPoint,
+        num_established: u32,
     },
 }
 

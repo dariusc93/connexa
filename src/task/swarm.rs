@@ -1,6 +1,6 @@
 use crate::behaviour;
 use crate::behaviour::BehaviourEvent;
-use crate::prelude::{NetworkBehaviour, SwarmEvent};
+use crate::prelude::{ConnectionEvent, NetworkBehaviour, SwarmEvent};
 use crate::task::ConnexaTask;
 use std::fmt::Debug;
 
@@ -25,6 +25,18 @@ where
                 tracing::info!(%peer_id, %connection_id, ?endpoint, %num_established, ?established_in, "connection established");
                 if let Some(sender) = self.pending_connection.shift_remove(&connection_id) {
                     let _ = sender.send(Ok(connection_id));
+                }
+                self.connection_listeners.retain(|ch| !ch.is_closed());
+
+                for ch in self.connection_listeners.iter_mut() {
+                    if let Err(e) = ch.try_send(ConnectionEvent::ConnectionEstablished {
+                        peer_id,
+                        connection_id,
+                        endpoint: endpoint.clone(),
+                        established: num_established.get(),
+                    }) {
+                        tracing::warn!(%peer_id, %connection_id, ?endpoint, %num_established, error=%e, "failed to send connection established event");
+                    }
                 }
             }
             SwarmEvent::ConnectionClosed {
@@ -58,6 +70,19 @@ where
                         let _ = ch_right.send(ret);
                     }
                     (None, None) => {}
+                }
+
+                self.connection_listeners.retain(|ch| !ch.is_closed());
+
+                for ch in self.connection_listeners.iter_mut() {
+                    if let Err(e) = ch.try_send(ConnectionEvent::ConnectionClosed {
+                        peer_id,
+                        connection_id,
+                        endpoint: endpoint.clone(),
+                        num_established,
+                    }) {
+                        tracing::warn!(%peer_id, %connection_id, ?endpoint, %num_established, error=%e, "failed to send connection closed event");
+                    }
                 }
             }
             SwarmEvent::IncomingConnection {

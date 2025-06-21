@@ -29,7 +29,7 @@ mod swarm;
 mod upnp;
 
 use crate::behaviour::BehaviourEvent;
-use crate::types::{Command, SwarmCommand};
+use crate::types::{Command, ConnectionEvent, SwarmCommand};
 use crate::{TEventCallback, TPollableCallback, TSwarmEventCallback, TTaskCallback, behaviour};
 
 #[cfg(feature = "gossipsub")]
@@ -111,6 +111,8 @@ where
     pub custom_event_callback: TEventCallback<C, X>,
     pub swarm_event_callback: TSwarmEventCallback<C>,
     pub custom_pollable_callback: TPollableCallback<C, X>,
+
+    pub connection_listeners: Vec<mpsc::Sender<ConnectionEvent>>,
 
     /// A listener for sending dht events
     #[cfg(feature = "kad")]
@@ -206,6 +208,7 @@ where
             custom_task_callback: Box::new(|_, _, _| ()),
             custom_pollable_callback: Box::new(|_, _, _| Poll::Pending),
             swarm_event_callback: Box::new(|_| ()),
+            connection_listeners: Vec::new(),
             #[cfg(feature = "kad")]
             dht_event_sender: Default::default(),
             #[cfg(feature = "kad")]
@@ -293,6 +296,11 @@ where
         };
         match command {
             Command::Swarm(swarm_command) => match swarm_command {
+                SwarmCommand::Listener { resp } => {
+                    let (tx, rx) = mpsc::channel(50);
+                    self.connection_listeners.push(tx);
+                    let _ = resp.send(rx);
+                }
                 SwarmCommand::Dial { opt, resp } => {
                     let connection_id = opt.connection_id();
                     if let Err(e) = swarm.dial(opt) {

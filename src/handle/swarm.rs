@@ -1,7 +1,9 @@
 use crate::handle::Connexa;
-use crate::types::SwarmCommand;
+use crate::types::{ConnectionEvent, SwarmCommand};
 use either::Either;
+use futures::StreamExt;
 use futures::channel::oneshot;
+use futures::stream::BoxStream;
 use libp2p::core::transport::ListenerId;
 use libp2p::swarm::ConnectionId;
 use libp2p::swarm::dial_opts::DialOpts;
@@ -184,5 +186,17 @@ where
             .await?;
 
         rx.await.map_err(std::io::Error::other)?
+    }
+
+    /// Subscribes to swarm connection events.
+    pub async fn listener(&self) -> std::io::Result<BoxStream<'static, ConnectionEvent>> {
+        let (tx, rx) = oneshot::channel();
+        self.connexa
+            .to_task
+            .clone()
+            .send(SwarmCommand::Listener { resp: tx }.into())
+            .await?;
+
+        rx.await.map_err(std::io::Error::other).map(|rx| rx.boxed())
     }
 }
