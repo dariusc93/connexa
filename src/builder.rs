@@ -482,6 +482,21 @@ where
         self
     }
 
+    /// Enables connection limits.
+    pub fn with_connection_limits(self) -> Self {
+        self.with_connection_limits_with_config(|config| config)
+    }
+
+    /// Enables connection limits with custom configuration.
+    pub fn with_connection_limits_with_config<F>(mut self, f: F) -> Self
+    where
+        F: Fn(ConnectionLimits) -> ConnectionLimits + 'static,
+    {
+        self.protocols.connection_limits = true;
+        self.config.connection_limits = Box::new(f);
+        self
+    }
+
     /// Set a custom behaviour
     /// Note that if you want to communicate or interact with the behaviour that you would need to set a callback via
     /// `custom_event_callback` and `custom_task_callback`.

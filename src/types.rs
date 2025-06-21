@@ -17,6 +17,7 @@ use libp2p::swarm::ConnectionId;
 use libp2p::swarm::derive_prelude::ListenerId;
 use libp2p::swarm::dial_opts::DialOpts;
 use libp2p::{Multiaddr, PeerId, StreamProtocol};
+use libp2p_connection_limits::ConnectionLimits;
 use std::collections::HashSet;
 
 type Result<T> = std::io::Result<T>;
@@ -38,6 +39,7 @@ pub enum Command<T = ()> {
     Autonat(AutonatCommand),
     Whitelist(WhitelistCommand),
     Blacklist(BlacklistCommand),
+    ConnectionLimits(ConnectionLimitsCommand),
     Custom(T),
 }
 
@@ -98,6 +100,12 @@ impl<T> From<WhitelistCommand> for Command<T> {
 impl<T> From<BlacklistCommand> for Command<T> {
     fn from(cmd: BlacklistCommand) -> Self {
         Command::Blacklist(cmd)
+    }
+}
+
+impl<T> From<ConnectionLimitsCommand> for Command<T> {
+    fn from(cmd: ConnectionLimitsCommand) -> Self {
+        Command::ConnectionLimits(cmd)
     }
 }
 
@@ -193,6 +201,17 @@ pub enum PubsubCommand {
     },
     #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
     Publish(PubsubPublishType),
+}
+
+#[derive(Debug)]
+pub enum ConnectionLimitsCommand {
+    Get {
+        resp: oneshot::Sender<Result<ConnectionLimits>>,
+    },
+    Set {
+        limits: ConnectionLimits,
+        resp: oneshot::Sender<Result<()>>,
+    },
 }
 
 #[cfg(any(feature = "floodsub", feature = "gossipsub"))]

@@ -43,9 +43,9 @@ use crate::types::{FloodsubMessage, PubsubFloodsubPublish};
 #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
 use crate::types::{PubsubCommand, PubsubEvent, PubsubPublishType, PubsubType};
 
-use crate::prelude::{BlacklistCommand, WhitelistCommand};
 #[cfg(feature = "stream")]
 use crate::types::StreamCommand;
+use crate::types::{BlacklistCommand, ConnectionLimitsCommand, WhitelistCommand};
 use either::Either;
 use futures::channel::{mpsc, oneshot};
 use futures::{FutureExt, StreamExt};
@@ -446,6 +446,31 @@ where
                     let list = list.iter().cloned().collect();
 
                     let _ = resp.send(Ok(list));
+                }
+            },
+            Command::ConnectionLimits(command) => match command {
+                ConnectionLimitsCommand::Get { resp } => {
+                    let Some(connection_limits) = swarm.behaviour_mut().connection_limits.as_mut()
+                    else {
+                        let _ =
+                            resp.send(Err(std::io::Error::other("connection limits not enabled")));
+                        return;
+                    };
+
+                    let limits = connection_limits.limits_mut();
+                    let _ = resp.send(Ok(limits.clone()));
+                }
+                ConnectionLimitsCommand::Set { limits, resp } => {
+                    let Some(connection_limits) = swarm.behaviour_mut().connection_limits.as_mut()
+                    else {
+                        let _ =
+                            resp.send(Err(std::io::Error::other("connection limits not enabled")));
+                        return;
+                    };
+
+                    *connection_limits.limits_mut() = limits;
+
+                    let _ = resp.send(Ok(()));
                 }
             },
             #[cfg(any(feature = "gossipsub", feature = "floodsub"))]
