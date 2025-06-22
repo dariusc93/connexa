@@ -10,6 +10,7 @@ use either::Either;
 #[cfg(feature = "autonat")]
 use libp2p::autonat;
 #[cfg(feature = "dcutr")]
+#[cfg(not(target_arch = "wasm32"))]
 use libp2p::dcutr::Behaviour as Dcutr;
 #[cfg(feature = "identify")]
 use libp2p::identify::Behaviour as Identify;
@@ -18,6 +19,7 @@ use libp2p::kad::Behaviour as Kademlia;
 #[cfg(feature = "kad")]
 use libp2p::kad::store::MemoryStore;
 #[cfg(feature = "mdns")]
+#[cfg(not(target_arch = "wasm32"))]
 use libp2p::mdns::tokio::Behaviour as Mdns;
 #[cfg(feature = "ping")]
 use libp2p::ping::Behaviour as Ping;

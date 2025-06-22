@@ -27,6 +27,7 @@ use libp2p::kad::Config as KadConfig;
 #[cfg(feature = "ping")]
 use libp2p::ping::Config as PingConfig;
 #[cfg(feature = "pnet")]
+#[cfg(not(target_arch = "wasm32"))]
 use libp2p::pnet::PreSharedKey;
 #[cfg(feature = "relay")]
 use libp2p::relay::Config as RelayServerConfig;
@@ -37,6 +38,7 @@ use std::fmt::Debug;
 use std::task::Poll;
 // Since this used for quic duration, we will feature gate it to satisfy lint
 #[cfg(feature = "quic")]
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 use tracing::Span;
 
@@ -134,7 +136,8 @@ pub(crate) struct Protocols {
     pub(crate) relay_client: bool,
     #[cfg(feature = "relay")]
     pub(crate) relay_server: bool,
-    #[cfg(all(feature = "dcutr", feature = "dcutr"))]
+    #[cfg(feature = "dcutr")]
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) dcutr: bool,
     #[cfg(not(target_arch = "wasm32"))]
     #[cfg(feature = "mdns")]
@@ -282,6 +285,7 @@ where
 
     /// Enables DCuTR
     #[cfg(all(feature = "relay", feature = "dcutr"))]
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn with_dcutr(mut self) -> Self {
         self.protocols.dcutr = true;
         self
@@ -510,6 +514,7 @@ where
 
     /// Enables quic transport
     #[cfg(feature = "quic")]
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn enable_quic(self) -> Self {
         //Note: It might be wise to set the timeout and keepalive low on
         //      quic transport since its not properly resetting connection state when reconnecting before connection timeout
@@ -524,6 +529,7 @@ where
 
     /// Enables quic transport with custom configuration
     #[cfg(feature = "quic")]
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn enable_quic_with_config<F>(mut self, f: F) -> Self
     where
         F: FnMut(&mut libp2p::quic::Config) + 'static,
@@ -536,12 +542,14 @@ where
 
     /// Enables tcp transport
     #[cfg(feature = "tcp")]
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn enable_tcp(self) -> Self {
         self.enable_tcp_with_config(|config| config.nodelay(true))
     }
 
     /// Enables tcp transport with custom configuration
     #[cfg(feature = "tcp")]
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn enable_tcp_with_config<F>(mut self, f: F) -> Self
     where
         F: FnOnce(libp2p::tcp::Config) -> libp2p::tcp::Config + 'static,
@@ -554,6 +562,7 @@ where
 
     /// Enables pnet transport
     #[cfg(feature = "pnet")]
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn enable_pnet(mut self, psk: PreSharedKey) -> Self {
         self.transport_config.enable_pnet = true;
         self.transport_config.pnet_psk = Some(psk);
@@ -569,6 +578,7 @@ where
 
     /// Enables secure websocket transport
     #[cfg(feature = "websocket")]
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn enable_secure_websocket(mut self, pem: Option<(Vec<String>, String)>) -> Self {
         self.transport_config.enable_secure_websocket = true;
         self.transport_config.enable_websocket = true;

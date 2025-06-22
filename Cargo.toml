@@ -43,7 +43,7 @@ yamux = ["libp2p/yamux"]
 
 
 webrtc = ["dep:libp2p-webrtc", "dep:libp2p-webrtc-websys"]
-websocket = ["libp2p/websocket", "libp2p/websocket-websys"]
+websocket = ["libp2p/websocket", "rcgen", "libp2p/websocket-websys"]
 webtransport = ["libp2p/webtransport-websys"]
 
 [workspace]
@@ -78,8 +78,6 @@ serde-wasm-bindgen = "0.6.5"
 tracing = { version = "0.1.41" }
 
 tokio = { default-features = false, version = "1.45.1" }
-tokio-stream = { default-features = false, version = "0.1.17" }
-tokio-util = { default-features = false, version = "0.7.15" }
 wasm-bindgen-futures = { version = "0.4.50" }
 
 
@@ -96,7 +94,6 @@ libp2p-stream = { workspace = true, optional = true }
 pem.workspace = true
 pollable-map.workspace = true
 rand.workspace = true
-rcgen.workspace = true
 serde = { features = ["derive"], workspace = true }
 tracing = { workspace = true }
 
@@ -108,8 +105,6 @@ hickory-resolver.workspace = true
 rcgen = { workspace = true, optional = true }
 rlimit.workspace = true
 tokio = { features = ["full"], workspace = true }
-tokio-stream = { workspace = true, features = ["fs"] }
-tokio-util = { workspace = true, features = ["full"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 futures-timer = { workspace = true, features = ["wasm-bindgen"] }
@@ -120,6 +115,4 @@ libp2p-webrtc-websys = { workspace = true, optional = true }
 send_wrapper.workspace = true
 serde-wasm-bindgen.workspace = true
 tokio = { default-features = false, features = ["sync", "macros"], workspace = true }
-tokio-stream = { workspace = true, default-features = false }
-tokio-util = { workspace = true, default-features = false }
 wasm-bindgen-futures.workspace = true

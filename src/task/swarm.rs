@@ -174,14 +174,17 @@ where
             BehaviourEvent::Relay(event) => self.process_relay_server_event(event),
             #[cfg(feature = "relay")]
             BehaviourEvent::RelayClient(event) => self.process_relay_client_event(event),
+            #[cfg(not(target_arch = "wasm32"))]
             #[cfg(feature = "upnp")]
             BehaviourEvent::Upnp(event) => self.process_upnp_event(event),
+            #[cfg(not(target_arch = "wasm32"))]
             #[cfg(all(feature = "dcutr", feature = "relay"))]
             BehaviourEvent::Dcutr(event) => self.process_dcutr_event(event),
             #[cfg(feature = "rendezvous")]
             BehaviourEvent::RendezvousClient(event) => self.process_rendezvous_client_event(event),
             #[cfg(feature = "rendezvous")]
             BehaviourEvent::RendezvousServer(event) => self.process_rendezvous_server_event(event),
+            #[cfg(not(target_arch = "wasm32"))]
             #[cfg(feature = "mdns")]
             BehaviourEvent::Mdns(event) => self.process_mdns_event(event),
             #[cfg(feature = "gossipsub")]

@@ -36,16 +36,20 @@ pub(crate) type TTransport = Boxed<(PeerId, StreamMuxerBox)>;
 
 pub struct TransportConfig {
     #[cfg(feature = "tcp")]
+    #[cfg(not(target_arch = "wasm32"))]
     pub enable_tcp: bool,
     #[cfg(feature = "tcp")]
+    #[cfg(not(target_arch = "wasm32"))]
     pub tcp_config_callback: Box<dyn FnOnce(libp2p::tcp::Config) -> libp2p::tcp::Config>,
     pub timeout: Duration,
     #[cfg(feature = "dns")]
     pub dns_resolver: Option<DnsResolver>,
     pub version: UpgradeVersion,
     #[cfg(feature = "quic")]
+    #[cfg(not(target_arch = "wasm32"))]
     pub enable_quic: bool,
     #[cfg(feature = "quic")]
+    #[cfg(not(target_arch = "wasm32"))]
     pub quic_config_callback: Box<dyn FnMut(&mut libp2p::quic::Config)>,
     #[cfg(feature = "websocket")]
     pub enable_websocket: bool,
@@ -55,12 +59,14 @@ pub struct TransportConfig {
     #[cfg(feature = "webtransport")]
     pub enable_webtransport: bool,
     #[cfg(feature = "websocket")]
+    #[cfg(not(target_arch = "wasm32"))]
     pub websocket_pem: Option<(Vec<String>, String)>,
     #[cfg(feature = "websocket")]
     pub enable_secure_websocket: bool,
     #[cfg(feature = "webrtc")]
     pub enable_webrtc: bool,
     #[cfg(feature = "webrtc")]
+    #[cfg(not(target_arch = "wasm32"))]
     pub webrtc_pem: Option<String>,
     #[cfg(not(target_arch = "wasm32"))]
     #[cfg(feature = "pnet")]
@@ -80,19 +86,24 @@ impl Default for TransportConfig {
     fn default() -> Self {
         Self {
             #[cfg(feature = "tcp")]
+            #[cfg(not(target_arch = "wasm32"))]
             enable_tcp: false,
             #[cfg(feature = "tcp")]
+            #[cfg(not(target_arch = "wasm32"))]
             tcp_config_callback: Box::new(|config| config),
             #[cfg(feature = "quic")]
+            #[cfg(not(target_arch = "wasm32"))]
             enable_quic: false,
             #[cfg(feature = "websocket")]
             enable_websocket: false,
             #[cfg(feature = "websocket")]
+            #[cfg(not(target_arch = "wasm32"))]
             websocket_pem: None,
             #[cfg(feature = "websocket")]
             enable_secure_websocket: false,
             enable_memory_transport: false,
             #[cfg(feature = "quic")]
+            #[cfg(not(target_arch = "wasm32"))]
             quic_config_callback: Box::new(|_| {}),
             #[cfg(feature = "dns")]
             enable_dns: false,
@@ -101,6 +112,7 @@ impl Default for TransportConfig {
             #[cfg(feature = "webrtc")]
             enable_webrtc: false,
             #[cfg(feature = "webrtc")]
+            #[cfg(not(target_arch = "wasm32"))]
             webrtc_pem: None,
             timeout: Duration::from_secs(10),
             #[cfg(feature = "dns")]
@@ -427,7 +439,7 @@ pub(crate) fn build_transport(
 
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn build_transport(
-    keypair: identity::Keypair,
+    keypair: &Keypair,
     relay: Option<ClientTransport>,
     TransportConfig {
         timeout,

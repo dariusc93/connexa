@@ -3,6 +3,7 @@
 #[cfg(feature = "autonat")]
 mod autonat;
 #[cfg(feature = "dcutr")]
+#[cfg(not(target_arch = "wasm32"))]
 mod dcutr;
 #[cfg(feature = "floodsub")]
 mod floodsub;
@@ -13,6 +14,7 @@ mod identify;
 #[cfg(feature = "kad")]
 mod kad;
 #[cfg(feature = "mdns")]
+#[cfg(not(target_arch = "wasm32"))]
 mod mdns;
 #[cfg(feature = "ping")]
 mod ping;
@@ -26,6 +28,7 @@ mod request_response;
 mod stream;
 mod swarm;
 #[cfg(feature = "upnp")]
+#[cfg(not(target_arch = "wasm32"))]
 mod upnp;
 
 use crate::behaviour::BehaviourEvent;
@@ -74,6 +77,7 @@ use libp2p::kad::{
     QueryId, QueryResult, Record, RecordKey as Key, RoutingUpdate,
 };
 #[cfg(feature = "mdns")]
+#[cfg(not(target_arch = "wasm32"))]
 use libp2p::mdns::Event as MdnsEvent;
 #[cfg(feature = "ping")]
 use libp2p::ping::Event as PingEvent;
@@ -88,6 +92,7 @@ use libp2p::rendezvous::{Namespace, client::Event as RendezvousClientEvent};
 use libp2p::swarm::derive_prelude::ListenerId;
 use libp2p::swarm::{ConnectionId, NetworkBehaviour, SwarmEvent};
 #[cfg(feature = "upnp")]
+#[cfg(not(target_arch = "wasm32"))]
 use libp2p::upnp::Event as UpnpEvent;
 use libp2p::{Multiaddr, PeerId, Swarm};
 use pollable_map::futures::set::FutureSet;
