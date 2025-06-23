@@ -149,6 +149,9 @@ where
     pub pending_dht_find_closest_peer:
         IndexMap<QueryId, oneshot::Sender<std::io::Result<Vec<PeerInfo>>>>,
 
+    #[cfg(feature = "kad")]
+    pub pending_dht_bootstrap: IndexMap<QueryId, oneshot::Sender<std::io::Result<()>>>,
+
     pub pending_connection: IndexMap<ConnectionId, oneshot::Sender<std::io::Result<ConnectionId>>>,
     pub pending_disconnection_by_connection_id:
         IndexMap<ConnectionId, oneshot::Sender<std::io::Result<()>>>,
@@ -236,6 +239,8 @@ where
             pending_dht_get_provider_record: Default::default(),
             #[cfg(feature = "kad")]
             pending_dht_find_closest_peer: Default::default(),
+            #[cfg(feature = "kad")]
+            pending_dht_bootstrap: Default::default(),
             cleanup_timer: Delay::new(duration),
             cleanup_interval: duration,
             pending_connection: IndexMap::new(),

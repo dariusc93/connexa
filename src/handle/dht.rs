@@ -71,6 +71,42 @@ where
         rx.await.map_err(std::io::Error::other)?.map(|s| s.boxed())
     }
 
+    /// Bootstraps the DHT node.
+    /// Note that this will continue to wait until bootstrapping completes
+    pub async fn bootstrap(&self) -> std::io::Result<()> {
+        let (tx, rx) = oneshot::channel();
+        self.connexa
+            .to_task
+            .clone()
+            .send(
+                DHTCommand::Bootstrap {
+                    lazy: false,
+                    resp: tx,
+                }
+                .into(),
+            )
+            .await?;
+        rx.await.map_err(std::io::Error::other)?
+    }
+
+    /// Lazily bootstraps the DHT node.
+    /// Note that this will handle bootstrapping in the background
+    pub async fn bootstrap_lazy(&self) -> std::io::Result<()> {
+        let (tx, rx) = oneshot::channel();
+        self.connexa
+            .to_task
+            .clone()
+            .send(
+                DHTCommand::Bootstrap {
+                    lazy: true,
+                    resp: tx,
+                }
+                .into(),
+            )
+            .await?;
+        rx.await.map_err(std::io::Error::other)?
+    }
+
     /// Creates a listener for DHT events related to a specific key
     pub async fn listener(
         &self,

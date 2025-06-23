@@ -7,6 +7,7 @@ use libp2p::kad::{
     GetProvidersOk, GetRecordOk, InboundRequest, PutRecordOk, QueryResult, Record, RoutingUpdate,
 };
 use std::fmt::Debug;
+use std::io;
 
 impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>
 where
@@ -26,6 +27,27 @@ where
                 let id = kad.get_closest_peers(peer_id);
 
                 self.pending_dht_find_closest_peer.insert(id, resp);
+            }
+            DHTCommand::Bootstrap { lazy, resp } => {
+                let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    return;
+                };
+
+                let id = match kad.bootstrap() {
+                    Ok(id) => id,
+                    Err(e) => {
+                        let _ = resp.send(Err(std::io::Error::other(e)));
+                        return;
+                    }
+                };
+
+                if lazy {
+                    let _ = resp.send(Ok(()));
+                    return;
+                }
+
+                self.pending_dht_bootstrap.insert(id, resp);
             }
             DHTCommand::Provide { key, resp } => {
                 let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
@@ -289,7 +311,7 @@ where
                 result,
                 stats: _,
                 // should we check for the final event?
-                step: _,
+                step,
             } => match result {
                 QueryResult::Bootstrap(result) => match result {
                     Ok(BootstrapOk {
@@ -297,12 +319,22 @@ where
                         num_remaining,
                     }) => {
                         tracing::info!(?peer, ?num_remaining, "kademlia bootstrap");
+                        if step.last {
+                            if let Some(ch) = self.pending_dht_bootstrap.shift_remove(&id) {
+                                let _ = ch.send(Ok(()));
+                            }
+                        }
                     }
-                    Err(BootstrapError::Timeout {
-                        peer,
-                        num_remaining,
-                    }) => {
+                    Err(
+                        e @ BootstrapError::Timeout {
+                            peer,
+                            num_remaining,
+                        },
+                    ) => {
                         tracing::info!(?peer, ?num_remaining, "kademlia bootstrap timeout");
+                        if let Some(ch) = self.pending_dht_bootstrap.shift_remove(&id) {
+                            let _ = ch.send(Err(io::Error::new(io::ErrorKind::TimedOut, e)));
+                        }
                     }
                 },
                 QueryResult::GetClosestPeers(result) => match result {
