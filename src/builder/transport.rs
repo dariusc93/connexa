@@ -360,8 +360,6 @@ pub(crate) fn build_transport(
             false => Either::Right(transport),
         };
 
-        let transport = TransportTimeout::new(transport, timeout);
-
         #[cfg(feature = "pnet")]
         let transport = match (enable_pnet, pnet_psk) {
             (true, Some(psk)) => Either::Left(
