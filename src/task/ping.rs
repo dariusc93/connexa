@@ -20,6 +20,7 @@ where
                 tracing::info!("ping to {} at {} took {:?}", peer, connection, duration);
             }
             Err(e) => {
+                // TODO: Possibly disconnect peer since if there is an error?
                 tracing::error!("ping to {} at {} failed: {:?}", peer, connection, e);
             }
         }
