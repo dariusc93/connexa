@@ -93,12 +93,13 @@ where
                 tracing::info!(%connection_id, ?local_addr, ?send_back_addr, "incoming connection");
             }
             SwarmEvent::IncomingConnectionError {
+                peer_id,
                 connection_id,
                 local_addr,
                 send_back_addr,
                 error,
             } => {
-                tracing::error!(%connection_id, ?local_addr, ?send_back_addr, error=%error, "incoming connection error");
+                tracing::error!(?peer_id, %connection_id, ?local_addr, ?send_back_addr, error=%error, "incoming connection error");
             }
             SwarmEvent::OutgoingConnectionError {
                 connection_id,

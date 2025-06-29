@@ -61,11 +61,11 @@ getrandom = { version = "0.2.15" }
 getrandom_03 = { version = "0.3.3", package = "getrandom" }
 hickory-resolver = "0.25.0-alpha.5"
 indexmap = "2.9.0"
-libp2p = { version = "0.55.0" }
-libp2p-allow-block-list = "0.5.0"
-libp2p-connection-limits = "0.5.0"
-libp2p-stream = { version = "0.3.0-alpha" }
-libp2p-webrtc = { version = "=0.9.0-alpha", features = ["pem"] }
+libp2p = { version = "0.56.0" }
+libp2p-allow-block-list = "0.6.0"
+libp2p-connection-limits = "0.6.0"
+libp2p-stream = { version = "0.4.0-alpha" }
+libp2p-webrtc = { version = "=0.9.0-alpha.1", features = ["pem"] }
 libp2p-webrtc-websys = "0.4.0"
 pollable-map = "0.1.7"
 pem = { version = "3.0.5" }

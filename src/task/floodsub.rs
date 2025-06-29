@@ -5,7 +5,7 @@ use crate::prelude::{
 use crate::task::ConnexaTask;
 use crate::types::PubsubCommand;
 use futures::channel::mpsc;
-use libp2p::floodsub::FloodsubEvent;
+use libp2p::floodsub::Event as FloodsubEvent;
 use std::fmt::Debug;
 
 impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>

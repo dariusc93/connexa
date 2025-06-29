@@ -18,7 +18,7 @@ use libp2p::autonat::v1::Config as AutonatV1Config;
 #[cfg(feature = "autonat")]
 use libp2p::autonat::v2::client::Config as AutonatV2ClientConfig;
 #[cfg(feature = "floodsub")]
-use libp2p::floodsub::FloodsubConfig;
+use libp2p::floodsub::Config as FloodsubConfig;
 #[cfg(feature = "identify")]
 use libp2p::identify::Config as IdentifyConfig;
 use libp2p::identity::Keypair;

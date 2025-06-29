@@ -37,8 +37,11 @@ where
             } => {
                 tracing::info!(%src_peer_id, %renewed, "relay server reservation request accepted");
             }
-            RelayServerEvent::ReservationReqDenied { src_peer_id } => {
-                tracing::warn!(%src_peer_id, "relay server reservation request denied");
+            RelayServerEvent::ReservationReqDenied {
+                src_peer_id,
+                status,
+            } => {
+                tracing::warn!(%src_peer_id, ?status, "relay server reservation request denied");
             }
             RelayServerEvent::ReservationTimedOut { src_peer_id } => {
                 tracing::warn!(%src_peer_id, "relay server reservation timed out");
@@ -46,8 +49,9 @@ where
             RelayServerEvent::CircuitReqDenied {
                 src_peer_id,
                 dst_peer_id,
+                status,
             } => {
-                tracing::warn!(%src_peer_id, %dst_peer_id, "relay server circuit request denied");
+                tracing::warn!(%src_peer_id, %dst_peer_id, ?status, "relay server circuit request denied");
             }
             RelayServerEvent::CircuitReqAccepted {
                 src_peer_id,

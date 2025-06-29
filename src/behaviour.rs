@@ -81,7 +81,7 @@ where
     #[cfg(feature = "gossipsub")]
     pub gossipsub: Toggle<libp2p::gossipsub::Behaviour>,
     #[cfg(feature = "floodsub")]
-    pub floodsub: Toggle<libp2p::floodsub::Floodsub>,
+    pub floodsub: Toggle<libp2p::floodsub::Behaviour>,
 
     #[cfg(feature = "ping")]
     pub ping: Toggle<Ping>,
@@ -239,9 +239,9 @@ where
             .floodsub
             .then(|| {
                 let config_fn = config.floodsub_config;
-                let config = config_fn(libp2p::floodsub::FloodsubConfig::new(peer_id));
+                let config = config_fn(libp2p::floodsub::Config::new(peer_id));
 
-                libp2p::floodsub::Floodsub::from_config(config)
+                libp2p::floodsub::Behaviour::from_config(config)
             })
             .into();
 

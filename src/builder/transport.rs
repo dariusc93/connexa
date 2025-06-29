@@ -317,7 +317,7 @@ pub(crate) fn build_transport(
         let transport = match enable_websocket {
             true => {
                 let mut ws_transport =
-                    libp2p::websocket::WsConfig::new(TokioTcpTransport::new(tcp_config));
+                    libp2p::websocket::Config::new(TokioTcpTransport::new(tcp_config));
                 if enable_secure_websocket {
                     let (certs, priv_key) = match websocket_pem {
                         Some((cert, kp)) => {

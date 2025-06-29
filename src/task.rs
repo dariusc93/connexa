@@ -62,8 +62,6 @@ use libp2p::autonat::v2::client::Event as AutonatV2ClientEvent;
 use libp2p::autonat::v2::server::Event as AutonatV2ServerEvent;
 #[cfg(all(feature = "relay", feature = "dcutr"))]
 use libp2p::dcutr::Event as DcutrEvent;
-#[cfg(feature = "floodsub")]
-use libp2p::floodsub::FloodsubEvent;
 #[cfg(feature = "gossipsub")]
 use libp2p::gossipsub::Event as GossipsubEvent;
 #[cfg(feature = "identify")]
