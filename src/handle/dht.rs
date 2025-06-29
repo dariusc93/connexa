@@ -214,6 +214,13 @@ pub trait ToOptionalRecordKey {
     fn to_record_key(self) -> Option<RecordKey>;
 }
 
+#[cfg(feature = "cid")]
+impl ToRecordKey for cid::Cid {
+    fn to_record_key(self) -> RecordKey {
+        self.hash().to_bytes().into()
+    }
+}
+
 impl ToRecordKey for RecordKey {
     fn to_record_key(self) -> RecordKey {
         self

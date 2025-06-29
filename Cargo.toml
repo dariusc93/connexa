@@ -53,6 +53,7 @@ members = ["examples/custom-behaviour-and-context", "examples/custom-transport",
 async-rt = "0.1.8"
 async-trait = { version = "0.1.88" }
 bytes = "1.10.1"
+cid = "0.11.1"
 either = "1.15.0"
 futures = { version = "0.3.31" }
 futures-timer = "3.0.0"
@@ -85,6 +86,7 @@ wasm-bindgen-futures = { version = "0.4.50" }
 async-rt.workspace = true
 async-trait.workspace = true
 bytes = { workspace = true }
+cid = { workspace = true, optional = true }
 either.workspace = true
 futures.workspace = true
 indexmap.workspace = true
