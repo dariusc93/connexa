@@ -1,14 +1,13 @@
 use crate::behaviour;
-use crate::prelude::NetworkBehaviour;
 use crate::task::ConnexaTask;
 use crate::types::AutonatCommand;
 use libp2p::Swarm;
 use libp2p::autonat::v1::Event as AutonatV1Event;
 use libp2p::autonat::v2::client::Event as AutonatV2ClientEvent;
 use libp2p::autonat::v2::server::Event as AutonatV2ServerEvent;
+use libp2p::swarm::NetworkBehaviour;
 use std::fmt::Debug;
 use std::io;
-
 impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>
 where
     X: Default + Send + 'static,

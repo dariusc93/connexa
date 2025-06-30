@@ -1,6 +1,6 @@
 use clap::Parser;
-use connexa::prelude::dial_opts::DialOpts;
-use connexa::prelude::{DefaultConnexaBuilder, Keypair, Multiaddr, PeerId, Protocol};
+use connexa::prelude::swarm::dial_opts::DialOpts;
+use connexa::prelude::{DefaultConnexaBuilder, Multiaddr, PeerId, Protocol, identity::Keypair};
 use futures::future::FutureExt;
 use rustyline_async::Readline;
 use std::io;

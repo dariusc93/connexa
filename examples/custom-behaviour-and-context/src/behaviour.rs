@@ -1,7 +1,10 @@
-use connexa::prelude::derive_prelude::{Endpoint, PortUse};
+use connexa::prelude::swarm::derive_prelude::{Endpoint, PortUse};
 use connexa::prelude::{
-    ConnectionDenied, ConnectionId, FromSwarm, Multiaddr, NetworkBehaviour, PeerId, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    Multiaddr, PeerId,
+    swarm::{
+        ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler, THandlerInEvent,
+        THandlerOutEvent, ToSwarm,
+    },
 };
 use std::collections::VecDeque;
 use std::task::{Context, Poll, Waker};

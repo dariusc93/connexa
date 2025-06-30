@@ -1,7 +1,9 @@
-use crate::prelude::NetworkBehaviour;
 use crate::task::ConnexaTask;
 use libp2p::mdns::Event as MdnsEvent;
 use std::fmt::Debug;
+
+use libp2p::swarm::NetworkBehaviour;
+
 impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>
 where
     X: Default + Send + 'static,

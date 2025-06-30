@@ -1,6 +1,6 @@
-use crate::prelude::NetworkBehaviour;
 use crate::task::ConnexaTask;
 use libp2p::dcutr::Event as DcutrEvent;
+use libp2p::swarm::NetworkBehaviour;
 use std::fmt::Debug;
 
 impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>

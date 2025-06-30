@@ -1,5 +1,5 @@
 use clap::Parser;
-use connexa::prelude::{DefaultConnexaBuilder, Keypair, Multiaddr, PeerId, Protocol};
+use connexa::prelude::{DefaultConnexaBuilder, Multiaddr, PeerId, Protocol, identity::Keypair};
 use std::io;
 use std::net::Ipv4Addr;
 use std::str::FromStr;

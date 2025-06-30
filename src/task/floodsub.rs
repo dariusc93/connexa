@@ -1,11 +1,11 @@
 use crate::prelude::{
-    FloodsubMessage, NetworkBehaviour, PubsubEvent, PubsubFloodsubPublish, PubsubPublishType,
-    PubsubType,
+    FloodsubMessage, PubsubEvent, PubsubFloodsubPublish, PubsubPublishType, PubsubType,
 };
 use crate::task::ConnexaTask;
 use crate::types::PubsubCommand;
 use futures::channel::mpsc;
 use libp2p::floodsub::Event as FloodsubEvent;
+use libp2p::swarm::NetworkBehaviour;
 use std::fmt::Debug;
 
 impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>

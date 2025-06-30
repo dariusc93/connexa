@@ -1,8 +1,9 @@
-use crate::prelude::{GossipsubMessage, NetworkBehaviour, PubsubEvent, PubsubPublishType};
+use crate::prelude::{GossipsubMessage, PubsubEvent, PubsubPublishType};
 use crate::task::ConnexaTask;
 use crate::types::{PubsubCommand, PubsubType};
 use futures::channel::mpsc;
 use libp2p::gossipsub::Event as GossipsubEvent;
+use libp2p::swarm::NetworkBehaviour;
 use std::fmt::Debug;
 
 impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>

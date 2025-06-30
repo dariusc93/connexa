@@ -1,7 +1,9 @@
 use crate::behaviour;
 use crate::behaviour::BehaviourEvent;
-use crate::prelude::{ConnectionEvent, NetworkBehaviour, SwarmEvent};
+use crate::prelude::ConnectionEvent;
 use crate::task::ConnexaTask;
+use libp2p::swarm::NetworkBehaviour;
+use libp2p::swarm::SwarmEvent;
 use std::fmt::Debug;
 
 impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>

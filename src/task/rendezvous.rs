@@ -1,10 +1,10 @@
-use crate::prelude::NetworkBehaviour;
 use crate::task::ConnexaTask;
 use crate::types::RendezvousCommand;
 use futures::SinkExt;
 use libp2p::rendezvous::client::Event as RendezvousClientEvent;
 use libp2p::rendezvous::server::Event as RendezvousServerEvent;
 use libp2p::rendezvous::{Namespace, Registration};
+use libp2p::swarm::NetworkBehaviour;
 use std::fmt::Debug;
 
 impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>

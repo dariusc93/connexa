@@ -1,5 +1,5 @@
-use crate::prelude::NetworkBehaviour;
 use crate::task::ConnexaTask;
+use libp2p::swarm::NetworkBehaviour;
 use libp2p::upnp::Event as UpnpEvent;
 use std::fmt::Debug;
 

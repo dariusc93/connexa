@@ -1,4 +1,4 @@
-use crate::prelude::{DHTEvent, NetworkBehaviour, RecordHandle};
+use crate::prelude::{DHTEvent, RecordHandle};
 use crate::task::ConnexaTask;
 use crate::types::DHTCommand;
 use futures::channel::{mpsc, oneshot};
@@ -8,6 +8,8 @@ use libp2p::kad::{
 };
 use std::fmt::Debug;
 use std::io;
+
+use libp2p::swarm::NetworkBehaviour;
 
 impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>
 where

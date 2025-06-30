@@ -6,8 +6,8 @@ pub mod task;
 pub(crate) mod types;
 
 use crate::behaviour::BehaviourEvent;
-use crate::prelude::{Swarm, SwarmEvent};
 use libp2p::swarm::NetworkBehaviour;
+use libp2p::swarm::{Swarm, SwarmEvent};
 use std::task::{Context, Poll};
 
 pub(crate) type TTaskCallback<C, X, T> =
@@ -30,13 +30,104 @@ pub mod dummy {
 pub mod prelude {
     use crate::builder::ConnexaBuilder;
     pub use crate::types::*;
-    pub use libp2p::{
-        Multiaddr, PeerId, StreamProtocol, identity::*, multiaddr::Protocol, swarm::*,
-    };
+    pub use libp2p::{Multiaddr, PeerId, Stream, StreamProtocol, multiaddr::Protocol};
+
+    pub use libp2p::identity;
+
+    pub use libp2p::swarm;
 
     #[cfg(feature = "kad")]
     pub mod dht {
         pub use libp2p::kad::*;
+    }
+
+    #[cfg(feature = "request-response")]
+    pub mod request_response {
+        pub use libp2p::request_response::{
+            Config, Event, InboundFailure, InboundRequestId, Message, OutboundFailure,
+            OutboundRequestId, ProtocolSupport,
+        };
+    }
+
+    #[cfg(feature = "stream")]
+    pub mod stream {
+        pub use libp2p_stream::{Control, IncomingStreams, OpenStreamError};
+    }
+
+    #[cfg(feature = "relay")]
+    pub mod relay {
+        pub mod server {
+            // TODO: Determine if CircuitId is needed
+            pub use libp2p::relay::{Config, Event, RateLimiter, StatusCode};
+        }
+
+        pub mod client {
+            pub use libp2p::relay::client::Event;
+        }
+    }
+
+    #[cfg(feature = "dcutr")]
+    pub mod dcutr {
+        pub use libp2p::dcutr::{Error, Event};
+    }
+
+    #[cfg(feature = "ping")]
+    pub mod ping {
+        pub use libp2p::ping::{Config, Event, Failure};
+    }
+
+    #[cfg(feature = "identify")]
+    pub mod identify {
+        pub use libp2p::identify::{Config, Event, Info, UpgradeError};
+    }
+
+    #[cfg(feature = "gossipsub")]
+    pub mod gossipsub {
+        pub use libp2p::gossipsub::{
+            AllowAllSubscriptionFilter, Config, ConfigBuilder, Event, IdentTopic, Message,
+            MessageId, Sha256Topic, Topic, TopicHash,
+        };
+    }
+
+    #[cfg(feature = "floodsub")]
+    pub mod floodsub {
+        pub use libp2p::floodsub::{Config, Event, Topic};
+    }
+
+    #[cfg(feature = "rendezvous")]
+    pub mod rendezvous {
+        pub use libp2p::rendezvous::{
+            Cookie, ErrorCode, MAX_NAMESPACE, MAX_TTL, MIN_TTL, Namespace, Registration,
+        };
+    }
+
+    #[cfg(feature = "mdns")]
+    pub mod mdns {
+        pub use libp2p::mdns::{Config, Event};
+    }
+
+    #[cfg(feature = "autonat")]
+    pub mod autonat {
+        pub mod v1 {
+            pub use libp2p::autonat::v1::{
+                Config, Event, InboundFailure, InboundProbeError, InboundProbeEvent,
+            };
+        }
+
+        pub mod v2 {
+            pub mod server {
+                pub use libp2p::autonat::v2::server::Event;
+            }
+
+            pub mod client {
+                pub use libp2p::autonat::v2::client::{Config, Event};
+            }
+        }
+    }
+
+    #[cfg(feature = "upnp")]
+    pub mod upnp {
+        pub use libp2p::upnp::Event;
     }
 
     pub mod transport {
