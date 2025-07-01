@@ -10,7 +10,9 @@ readme = "README.md"
 repository = "https://github.com/dariusc93/connexa"
 
 [features]
-default = ["stream", "floodsub", "identify", "dcutr", "gossipsub", "autonat", "relay", "kad", "ping", "request-response", "request-response-misc", "rendezvous", "upnp", "mdns", "rsa", "dns", "ed25519", "secp256k1", "ecdsa", "tls", "noise", "tcp", "quic", "pnet", "websocket", "yamux"]
+default = ["full"]
+
+full = ["stream", "floodsub", "identify", "dcutr", "gossipsub", "autonat", "relay", "kad", "ping", "request-response", "request-response-misc", "rendezvous", "upnp", "mdns", "rsa", "dns", "ed25519", "secp256k1", "ecdsa", "tls", "noise", "tcp", "quic", "pnet", "websocket", "yamux"]
 
 rsa = ["libp2p/rsa"]
 ed25519 = ["libp2p/ed25519"]
