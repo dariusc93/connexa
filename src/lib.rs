@@ -134,7 +134,9 @@ pub mod prelude {
         pub use libp2p::core::muxing;
         pub use libp2p::core::transport;
         pub use libp2p::core::upgrade;
+        #[cfg(feature = "noise")]
         pub use libp2p::noise;
+        #[cfg(feature = "yamux")]
         pub use libp2p::yamux;
     }
 
