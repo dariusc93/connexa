@@ -35,7 +35,7 @@ use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 use libp2p::{Swarm, Transport};
 use libp2p_connection_limits::ConnectionLimits;
 use std::fmt::Debug;
-use std::task::Poll;
+use std::task::{Context, Poll};
 // Since this used for quic duration, we will feature gate it to satisfy lint
 #[cfg(feature = "quic")]
 #[cfg(not(target_arch = "wasm32"))]
@@ -234,6 +234,19 @@ where
         F: Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, C::ToSwarm) + 'static + Send,
     {
         self.custom_event_callback = Box::new(f);
+        self
+    }
+
+    /// Sets a custom callback for handling polling operations
+    /// Note that regardless of if the Fn returns Poll::Ready or Poll::Pending that
+    /// it would be no-op since this is just to process futures or streams that may be held in context
+    pub fn set_pollable_callback<F>(mut self, f: F) -> Self
+    where
+        F: Fn(&mut Context<'_>, &mut Swarm<behaviour::Behaviour<C>>, &mut X) -> Poll<()>
+            + Send
+            + 'static,
+    {
+        self.custom_pollable_callback = Box::new(f);
         self
     }
 
