@@ -34,15 +34,20 @@ pub mod prelude {
 
     pub use libp2p::identity;
 
-    pub use libp2p::swarm;
+    pub mod swarm {
+        pub use libp2p::SwarmBuilder;
+        pub use libp2p::swarm::*;
+    }
 
     #[cfg(feature = "kad")]
     pub mod dht {
+        pub use crate::handle::dht::{ToOptionalRecordKey, ToRecordKey};
         pub use libp2p::kad::*;
     }
 
     #[cfg(feature = "request-response")]
     pub mod request_response {
+        pub use crate::handle::request_response::{IntoRequest, OptionalStreamProtocol};
         pub use libp2p::request_response::{
             Config, Event, InboundFailure, InboundRequestId, Message, OutboundFailure,
             OutboundRequestId, ProtocolSupport,
@@ -51,6 +56,7 @@ pub mod prelude {
 
     #[cfg(feature = "stream")]
     pub mod stream {
+        pub use crate::handle::stream::IntoStreamProtocol;
         pub use libp2p_stream::{Control, IncomingStreams, OpenStreamError};
     }
 
@@ -85,7 +91,7 @@ pub mod prelude {
     pub mod gossipsub {
         pub use libp2p::gossipsub::{
             AllowAllSubscriptionFilter, Config, ConfigBuilder, Event, IdentTopic, Message,
-            MessageId, Sha256Topic, Topic, TopicHash,
+            MessageId, Sha256Topic, Topic, TopicHash, ValidationMode, Version,
         };
     }
 
@@ -130,12 +136,21 @@ pub mod prelude {
         pub use libp2p::upnp::Event;
     }
 
+    pub mod connection_limits {
+        pub use libp2p_connection_limits::{ConnectionLimits, Exceeded};
+    }
+
     pub mod transport {
         pub use libp2p::core::muxing;
         pub use libp2p::core::transport;
         pub use libp2p::core::upgrade;
+        pub use libp2p::core::{ConnectedPoint, Endpoint};
         #[cfg(feature = "noise")]
         pub use libp2p::noise;
+        #[cfg(feature = "tcp")]
+        pub use libp2p::tcp;
+        #[cfg(feature = "websocket")]
+        pub use libp2p::websocket;
         #[cfg(feature = "yamux")]
         pub use libp2p::yamux;
     }

@@ -2,7 +2,7 @@
 mod autonat;
 mod blacklist;
 #[cfg(feature = "kad")]
-mod dht;
+pub(crate) mod dht;
 #[cfg(feature = "floodsub")]
 mod floodsub;
 #[cfg(feature = "gossipsub")]
@@ -10,9 +10,9 @@ mod gossipsub;
 #[cfg(feature = "rendezvous")]
 mod rendezvous;
 #[cfg(feature = "request-response")]
-mod request_response;
+pub(crate) mod request_response;
 #[cfg(feature = "stream")]
-mod stream;
+pub(crate) mod stream;
 mod swarm;
 mod whitelist;
 
