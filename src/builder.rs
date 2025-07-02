@@ -519,10 +519,10 @@ where
     /// `custom_event_callback` and `custom_task_callback`.
     pub fn with_custom_behaviour<F>(mut self, f: F) -> Self
     where
-        F: Fn(Keypair) -> C,
+        F: Fn(&Keypair) -> C,
         F: 'static,
     {
-        let behaviour = f(self.keypair.clone());
+        let behaviour = f(&self.keypair);
         self.custom_behaviour = Some(behaviour);
         self
     }
@@ -532,10 +532,10 @@ where
     /// `custom_event_callback` and `custom_task_callback`.
     pub fn with_custom_behaviour_with_context<F, IC>(mut self, context: IC, f: F) -> Self
     where
-        F: Fn(Keypair, IC) -> C,
+        F: Fn(&Keypair, IC) -> C,
         F: 'static,
     {
-        let behaviour = f(self.keypair.clone(), context);
+        let behaviour = f(&self.keypair, context);
         self.custom_behaviour = Some(behaviour);
         self
     }
