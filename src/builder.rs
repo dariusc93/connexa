@@ -58,7 +58,7 @@ where
 {
     keypair: Keypair,
     context: X,
-    custom_behaviour: Option<Box<dyn Fn(Keypair) -> C>>,
+    custom_behaviour: Option<C>,
     file_descriptor_limits: Option<FileDescLimit>,
     custom_task_callback: TTaskCallback<C, X, T>,
     custom_event_callback: TEventCallback<C, X>,
@@ -517,11 +517,26 @@ where
     /// Set a custom behaviour
     /// Note that if you want to communicate or interact with the behaviour that you would need to set a callback via
     /// `custom_event_callback` and `custom_task_callback`.
-    pub fn with_custom_behaviour<F>(mut self, behaviour: F) -> Self
+    pub fn with_custom_behaviour<F>(mut self, f: F) -> Self
     where
-        F: Fn(Keypair) -> C + 'static,
+        F: Fn(Keypair) -> C,
+        F: 'static,
     {
-        self.custom_behaviour = Some(Box::new(behaviour));
+        let behaviour = f(self.keypair.clone());
+        self.custom_behaviour = Some(behaviour);
+        self
+    }
+
+    /// Set a custom behaviour with context
+    /// Note that if you want to communicate or interact with the behaviour that you would need to set a callback via
+    /// `custom_event_callback` and `custom_task_callback`.
+    pub fn with_custom_behaviour_with_context<F, IC>(mut self, context: IC, f: F) -> Self
+    where
+        F: Fn(Keypair, IC) -> C,
+        F: 'static,
+    {
+        let behaviour = f(self.keypair.clone(), context);
+        self.custom_behaviour = Some(behaviour);
         self
     }
 
@@ -684,7 +699,6 @@ where
         let peer_id = keypair.public().to_peer_id();
 
         let swarm_config = swarm_config(libp2p::swarm::Config::with_executor(ConnexaExecutor));
-        let custom_behaviour = custom_behaviour.map(|custom_fn| custom_fn(keypair.clone()));
         let (behaviour, relay_transport) =
             behaviour::Behaviour::new(&keypair, custom_behaviour, config, protocols)?;
 
