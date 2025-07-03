@@ -236,7 +236,7 @@ pub(crate) fn build_transport(
         #[cfg(feature = "pnet")]
         pnet_psk,
         #[cfg(feature = "quic")]
-        mut quic_config_callback,
+        quic_config_callback,
     }: TransportConfig,
 ) -> io::Result<TTransport> {
     #[cfg(all(feature = "noise", feature = "tls"))]

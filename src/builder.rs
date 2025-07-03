@@ -627,7 +627,7 @@ where
     /// Enables secure websocket transport
     #[cfg(feature = "websocket")]
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn enable_secure_websocket_woth_config<F>(mut self, f: F) -> std::io::Result<Self>
+    pub fn enable_secure_websocket_woth_config<F>(self, f: F) -> std::io::Result<Self>
     where
         F: FnOnce(&Keypair) -> std::io::Result<(Vec<String>, String)>,
     {
