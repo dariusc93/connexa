@@ -450,3 +450,163 @@ impl NetworkBehaviour for Behaviour {
         Poll::Pending
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use libp2p::core::muxing::StreamMuxerBox;
+    use libp2p::core::transport::MemoryTransport;
+    use libp2p::core::upgrade::Version;
+    use libp2p::multiaddr::Protocol;
+    use libp2p::swarm::SwarmEvent;
+    use libp2p::{Swarm, SwarmBuilder};
+    use libp2p::{Transport, noise, yamux};
+
+    #[tokio::test]
+    async fn send_single_request() {
+        let mut node_a = swarm_node().await;
+        let mut node_b = swarm_node().await;
+
+        let peer_id_a = *node_a.local_peer_id();
+
+        let peer_id_b = *node_b.local_peer_id();
+        let addr_b = node_b.listeners().collect::<Vec<_>>()[0];
+
+        node_a.add_peer_address(peer_id_b, addr_b.clone());
+
+        let mut response_fut = node_a
+            .behaviour_mut()
+            .send_request(peer_id_b, "ping".as_bytes().into());
+        let mut node_b_request_listener = node_b.behaviour_mut().subscribe();
+
+        let mut received_request = false;
+        let mut received_response = false;
+
+        loop {
+            tokio::select! {
+                _event = node_a.select_next_some() => {},
+                _event = node_b.select_next_some() => {},
+                Some((sender_peer_id, id, request)) = node_b_request_listener.next() => {
+                    assert_eq!(sender_peer_id, peer_id_a);
+                    assert_eq!(request, Bytes::from("ping".as_bytes()));
+                    received_request = true;
+                    node_b.behaviour_mut().send_response(peer_id_a, id, "pong".as_bytes().into()).expect("channel still active");
+                }
+                response = &mut response_fut => {
+                    let response = response.expect("valid response");
+                    assert_eq!(response, Bytes::from("pong".as_bytes()));
+                    received_response = true;
+                }
+            }
+
+            if received_request && received_response {
+                break;
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn send_single_request_to_multiple_peers() {
+        let mut node_a = swarm_node().await;
+        let mut node_b = swarm_node().await;
+        let mut node_c = swarm_node().await;
+
+        let peer_id_a = *node_a.local_peer_id();
+
+        let peer_id_b = *node_b.local_peer_id();
+        let addr_b = node_b.listeners().collect::<Vec<_>>()[0];
+
+        let peer_id_c = *node_c.local_peer_id();
+        let addr_c = node_c.listeners().collect::<Vec<_>>()[0];
+
+        node_a.add_peer_address(peer_id_b, addr_b.clone());
+        node_a.add_peer_address(peer_id_c, addr_c.clone());
+
+        let mut response_st = node_a
+            .behaviour_mut()
+            .send_requests([peer_id_b, peer_id_c], "ping".as_bytes().into());
+        let mut node_b_request_listener = node_b.behaviour_mut().subscribe();
+        let mut node_c_request_listener = node_c.behaviour_mut().subscribe();
+
+        let mut received_request_for_b = false;
+        let mut received_request_for_c = false;
+        let mut received_response_from_b = false;
+        let mut received_response_from_c = false;
+
+        loop {
+            tokio::select! {
+                _event = node_a.select_next_some() => {},
+                _event = node_b.select_next_some() => {},
+                _event = node_c.select_next_some() => {},
+                Some((sender_peer_id, id, request)) = node_b_request_listener.next() => {
+                    assert_eq!(sender_peer_id, peer_id_a);
+                    assert_eq!(request, Bytes::from("ping".as_bytes()));
+                    received_request_for_b = true;
+                    node_b.behaviour_mut().send_response(peer_id_a, id, "pong_b".as_bytes().into()).expect("channel still active");
+                }
+                Some((sender_peer_id, id, request)) = node_c_request_listener.next() => {
+                    assert_eq!(sender_peer_id, peer_id_a);
+                    assert_eq!(request, Bytes::from("ping".as_bytes()));
+                    received_request_for_c = true;
+                    node_c.behaviour_mut().send_response(peer_id_a, id, "pong_c".as_bytes().into()).expect("channel still active");
+                }
+                Some((peer_id, response)) = response_st.next() => {
+                    match response {
+                        Ok(response) if response == Bytes::from("pong_b") => {
+                            assert_eq!(peer_id, peer_id_b);
+                            received_response_from_b = true;
+                        },
+                        Ok(response) if response == Bytes::from("pong_c") => {
+                            assert_eq!(peer_id, peer_id_c);
+                            received_response_from_c = true;
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+            }
+
+            if received_request_for_b
+                && received_request_for_c
+                && received_response_from_b
+                && received_response_from_c
+            {
+                break;
+            }
+        }
+    }
+
+    async fn swarm_node() -> Swarm<Behaviour> {
+        let mut swarm = SwarmBuilder::with_new_identity()
+            .with_tokio()
+            .with_other_transport(|k| {
+                let auth_upgrade = noise::Config::new(k)?;
+                let multiplex_upgrade = yamux::Config::default();
+                let memory_transport = MemoryTransport::new();
+                let transport = memory_transport
+                    .upgrade(Version::V1)
+                    .authenticate(auth_upgrade)
+                    .multiplex(multiplex_upgrade)
+                    .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
+                    .boxed();
+                Ok(transport)
+            })
+            .unwrap()
+            .with_behaviour(|_| Ok(Behaviour::new(Default::default())))
+            .unwrap()
+            .build();
+
+        let id = swarm
+            .listen_on(Multiaddr::empty().with(Protocol::Memory(0)))
+            .expect("valid listener");
+
+        if let SwarmEvent::NewListenAddr {
+            listener_id,
+            address: _,
+        } = swarm.next().await.expect("swarm havent dropped")
+        {
+            assert_eq!(listener_id, id);
+        }
+
+        swarm
+    }
+}
