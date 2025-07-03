@@ -166,7 +166,7 @@ impl Behaviour {
     pub fn send_request(
         &mut self,
         peer_id: PeerId,
-        request: Bytes,
+        request: impl Into<Bytes>,
     ) -> BoxFuture<'static, std::io::Result<Bytes>> {
         // Since we are only requesting from a single peer, we will only accept one response, if any, from the stream
         let mut st = self.send_requests([peer_id], request);
@@ -184,7 +184,7 @@ impl Behaviour {
         &mut self,
         peer_id: PeerId,
         id: InboundRequestId,
-        response: Bytes,
+        response: impl Into<Bytes>,
     ) -> std::io::Result<()> {
         let pending_list = self.pending_request.get_mut(&peer_id).ok_or(IoError::new(
             IoErrorKind::NotFound,
@@ -195,6 +195,8 @@ impl Behaviour {
             IoErrorKind::NotFound,
             "no pending request available",
         ))?;
+
+        let response = response.into();
 
         if self.rr_behaviour.send_response(ch, response).is_err() {
             return Err(IoError::new(
@@ -209,8 +211,9 @@ impl Behaviour {
     pub fn send_requests(
         &mut self,
         peers: impl IntoIterator<Item = PeerId>,
-        request: Bytes,
+        request: impl Into<Bytes>,
     ) -> BoxStream<'static, (PeerId, std::io::Result<Bytes>)> {
+        let request = request.into();
         let mut oneshots = FutureMap::new();
         for peer_id in peers {
             let id = self.rr_behaviour.send_request(&peer_id, request.clone());
@@ -476,7 +479,7 @@ mod tests {
 
         let mut response_fut = node_a
             .behaviour_mut()
-            .send_request(peer_id_b, "ping".as_bytes().into());
+            .send_request(peer_id_b, "ping".as_bytes());
         let mut node_b_request_listener = node_b.behaviour_mut().subscribe();
 
         let mut received_request = false;
@@ -490,7 +493,7 @@ mod tests {
                     assert_eq!(sender_peer_id, peer_id_a);
                     assert_eq!(request, Bytes::from("ping".as_bytes()));
                     received_request = true;
-                    node_b.behaviour_mut().send_response(peer_id_a, id, "pong".as_bytes().into()).expect("channel still active");
+                    node_b.behaviour_mut().send_response(peer_id_a, id, "pong".as_bytes()).expect("channel still active");
                 }
                 response = &mut response_fut => {
                     let response = response.expect("valid response");
@@ -524,7 +527,7 @@ mod tests {
 
         let mut response_st = node_a
             .behaviour_mut()
-            .send_requests([peer_id_b, peer_id_c], "ping".as_bytes().into());
+            .send_requests([peer_id_b, peer_id_c], "ping".as_bytes());
         let mut node_b_request_listener = node_b.behaviour_mut().subscribe();
         let mut node_c_request_listener = node_c.behaviour_mut().subscribe();
 
@@ -542,13 +545,13 @@ mod tests {
                     assert_eq!(sender_peer_id, peer_id_a);
                     assert_eq!(request, Bytes::from("ping".as_bytes()));
                     received_request_for_b = true;
-                    node_b.behaviour_mut().send_response(peer_id_a, id, "pong_b".as_bytes().into()).expect("channel still active");
+                    node_b.behaviour_mut().send_response(peer_id_a, id, "pong_b".as_bytes()).expect("channel still active");
                 }
                 Some((sender_peer_id, id, request)) = node_c_request_listener.next() => {
                     assert_eq!(sender_peer_id, peer_id_a);
                     assert_eq!(request, Bytes::from("ping".as_bytes()));
                     received_request_for_c = true;
-                    node_c.behaviour_mut().send_response(peer_id_a, id, "pong_c".as_bytes().into()).expect("channel still active");
+                    node_c.behaviour_mut().send_response(peer_id_a, id, "pong_c".as_bytes()).expect("channel still active");
                 }
                 Some((peer_id, response)) = response_st.next() => {
                     match response {
