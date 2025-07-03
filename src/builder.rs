@@ -65,7 +65,7 @@ where
     swarm_event_callback: TSwarmEventCallback<C>,
     custom_pollable_callback: TPollableCallback<C, X>,
     config: Config,
-    swarm_config: Box<dyn Fn(libp2p::swarm::Config) -> libp2p::swarm::Config>,
+    swarm_config: Box<dyn FnOnce(libp2p::swarm::Config) -> libp2p::swarm::Config>,
     transport_config: TransportConfig,
     custom_transport: Option<TTransport>,
     protocols: Protocols,
@@ -73,27 +73,27 @@ where
 
 pub(crate) struct Config {
     #[cfg(feature = "kad")]
-    pub kademlia_config: (String, Box<dyn Fn(KadConfig) -> KadConfig>),
+    pub kademlia_config: (String, Box<dyn FnOnce(KadConfig) -> KadConfig>),
     #[cfg(feature = "gossipsub")]
     pub gossipsub_config:
-        Box<dyn Fn(libp2p::gossipsub::ConfigBuilder) -> libp2p::gossipsub::ConfigBuilder>,
+        Box<dyn FnOnce(libp2p::gossipsub::ConfigBuilder) -> libp2p::gossipsub::ConfigBuilder>,
     #[cfg(feature = "floodsub")]
-    pub floodsub_config: Box<dyn Fn(FloodsubConfig) -> FloodsubConfig>,
+    pub floodsub_config: Box<dyn FnOnce(FloodsubConfig) -> FloodsubConfig>,
     #[cfg(feature = "ping")]
-    pub ping_config: Box<dyn Fn(PingConfig) -> PingConfig>,
+    pub ping_config: Box<dyn FnOnce(PingConfig) -> PingConfig>,
     #[cfg(feature = "autonat")]
-    pub autonat_v1_config: Box<dyn Fn(AutonatV1Config) -> AutonatV1Config>,
+    pub autonat_v1_config: Box<dyn FnOnce(AutonatV1Config) -> AutonatV1Config>,
     #[cfg(feature = "autonat")]
-    pub autonat_v2_client_config: Box<dyn Fn(AutonatV2ClientConfig) -> AutonatV2ClientConfig>,
+    pub autonat_v2_client_config: Box<dyn FnOnce(AutonatV2ClientConfig) -> AutonatV2ClientConfig>,
     #[cfg(feature = "relay")]
-    pub relay_server_config: Box<dyn Fn(RelayServerConfig) -> RelayServerConfig>,
+    pub relay_server_config: Box<dyn FnOnce(RelayServerConfig) -> RelayServerConfig>,
     #[cfg(feature = "identify")]
-    pub identify_config: (String, Box<dyn Fn(IdentifyConfig) -> IdentifyConfig>),
+    pub identify_config: (String, Box<dyn FnOnce(IdentifyConfig) -> IdentifyConfig>),
     #[cfg(feature = "request-response")]
     pub request_response_config: Vec<RequestResponseConfig>,
     pub allow_list: Vec<PeerId>,
     pub deny_list: Vec<PeerId>,
-    pub connection_limits: Box<dyn Fn(ConnectionLimits) -> ConnectionLimits>,
+    pub connection_limits: Box<dyn FnOnce(ConnectionLimits) -> ConnectionLimits>,
 }
 
 impl Default for Config {
@@ -205,7 +205,7 @@ where
     /// Configuration for the swarm.
     pub fn set_swarm_config<F>(mut self, f: F) -> Self
     where
-        F: Fn(libp2p::swarm::Config) -> libp2p::swarm::Config + 'static,
+        F: FnOnce(libp2p::swarm::Config) -> libp2p::swarm::Config + 'static,
     {
         self.swarm_config = Box::new(f);
         self
@@ -274,7 +274,7 @@ where
     #[cfg(feature = "kad")]
     pub fn with_kademlia_with_config<F>(mut self, protocol: impl Into<String>, f: F) -> Self
     where
-        F: Fn(KadConfig) -> KadConfig + 'static,
+        F: FnOnce(KadConfig) -> KadConfig + 'static,
     {
         self.protocols.kad = true;
         self.config.kademlia_config = (protocol.into(), Box::new(f));
@@ -314,7 +314,7 @@ where
     #[cfg(feature = "relay")]
     pub fn with_relay_server_with_config<F>(mut self, config: F) -> Self
     where
-        F: Fn(RelayServerConfig) -> RelayServerConfig + 'static,
+        F: FnOnce(RelayServerConfig) -> RelayServerConfig + 'static,
     {
         self.protocols.relay_server = true;
         self.config.relay_server_config = Box::new(config);
@@ -353,7 +353,7 @@ where
     #[cfg(feature = "identify")]
     pub fn with_identify_with_config<F>(mut self, protocol: impl Into<String>, config: F) -> Self
     where
-        F: Fn(IdentifyConfig) -> IdentifyConfig + 'static,
+        F: FnOnce(IdentifyConfig) -> IdentifyConfig + 'static,
     {
         let protocol = protocol.into();
         self.protocols.identify = true;
@@ -378,7 +378,7 @@ where
     #[cfg(feature = "gossipsub")]
     pub fn with_gossipsub_with_config<F>(mut self, config: F) -> Self
     where
-        F: Fn(libp2p::gossipsub::ConfigBuilder) -> libp2p::gossipsub::ConfigBuilder + 'static,
+        F: FnOnce(libp2p::gossipsub::ConfigBuilder) -> libp2p::gossipsub::ConfigBuilder + 'static,
     {
         self.protocols.gossipsub = true;
         self.config.gossipsub_config = Box::new(config);
@@ -395,7 +395,7 @@ where
     #[cfg(feature = "floodsub")]
     pub fn with_floodsub_with_config<F>(mut self, config: F) -> Self
     where
-        F: Fn(FloodsubConfig) -> FloodsubConfig + 'static,
+        F: FnOnce(FloodsubConfig) -> FloodsubConfig + 'static,
     {
         self.protocols.floodsub = true;
         self.config.floodsub_config = Box::new(config);
@@ -431,7 +431,7 @@ where
     #[cfg(feature = "autonat")]
     pub fn with_autonat_v1_with_config<F>(mut self, config: F) -> Self
     where
-        F: Fn(AutonatV1Config) -> AutonatV1Config + 'static,
+        F: FnOnce(AutonatV1Config) -> AutonatV1Config + 'static,
     {
         self.protocols.autonat_v1 = true;
         self.config.autonat_v1_config = Box::new(config);
@@ -448,7 +448,7 @@ where
     #[cfg(feature = "autonat")]
     pub fn with_autonat_v2_client_with_config<F>(mut self, config: F) -> Self
     where
-        F: Fn(AutonatV2ClientConfig) -> AutonatV2ClientConfig + 'static,
+        F: FnOnce(AutonatV2ClientConfig) -> AutonatV2ClientConfig + 'static,
     {
         self.protocols.autonat_v2_client = true;
         self.config.autonat_v2_client_config = Box::new(config);
@@ -472,7 +472,7 @@ where
     #[cfg(feature = "ping")]
     pub fn with_ping_with_config<F>(mut self, config: F) -> Self
     where
-        F: Fn(PingConfig) -> PingConfig + 'static,
+        F: FnOnce(PingConfig) -> PingConfig + 'static,
     {
         self.protocols.ping = true;
         self.config.ping_config = Box::new(config);
@@ -507,7 +507,7 @@ where
     /// Enables connection limits with custom configuration.
     pub fn with_connection_limits_with_config<F>(mut self, f: F) -> Self
     where
-        F: Fn(ConnectionLimits) -> ConnectionLimits + 'static,
+        F: FnOnce(ConnectionLimits) -> ConnectionLimits + 'static,
     {
         self.protocols.connection_limits = true;
         self.config.connection_limits = Box::new(f);
@@ -519,7 +519,7 @@ where
     /// `custom_event_callback` and `custom_task_callback`.
     pub fn with_custom_behaviour<F>(mut self, f: F) -> Self
     where
-        F: Fn(&Keypair) -> C,
+        F: FnOnce(&Keypair) -> C,
         F: 'static,
     {
         let behaviour = f(&self.keypair);
@@ -532,7 +532,7 @@ where
     /// `custom_event_callback` and `custom_task_callback`.
     pub fn with_custom_behaviour_with_context<F, IC>(mut self, context: IC, f: F) -> Self
     where
-        F: Fn(&Keypair, IC) -> C,
+        F: FnOnce(&Keypair, IC) -> C,
         F: 'static,
     {
         let behaviour = f(&self.keypair, context);
@@ -549,9 +549,10 @@ where
         //      While in smaller settings this would be alright, we should be cautious of this setting for nodes with larger connections
         //      since this may increase cpu and network usage.
         //      see https://github.com/libp2p/rust-libp2p/issues/5097
-        self.enable_quic_with_config(|config| {
+        self.enable_quic_with_config(|mut config| {
             config.keep_alive_interval = Duration::from_millis(100);
             config.max_idle_timeout = 300;
+            config
         })
     }
 
@@ -560,7 +561,7 @@ where
     #[cfg(not(target_arch = "wasm32"))]
     pub fn enable_quic_with_config<F>(mut self, f: F) -> Self
     where
-        F: FnMut(&mut libp2p::quic::Config) + 'static,
+        F: FnOnce(libp2p::quic::Config) -> libp2p::quic::Config + 'static,
     {
         let callback = Box::new(f);
         self.transport_config.quic_config_callback = callback;

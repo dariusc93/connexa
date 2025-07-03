@@ -50,7 +50,7 @@ pub struct TransportConfig {
     pub enable_quic: bool,
     #[cfg(feature = "quic")]
     #[cfg(not(target_arch = "wasm32"))]
-    pub quic_config_callback: Box<dyn FnMut(&mut libp2p::quic::Config)>,
+    pub quic_config_callback: Box<dyn FnOnce(libp2p::quic::Config) -> libp2p::quic::Config>,
     #[cfg(feature = "websocket")]
     pub enable_websocket: bool,
     #[cfg(feature = "dns")]
@@ -104,7 +104,7 @@ impl Default for TransportConfig {
             enable_memory_transport: false,
             #[cfg(feature = "quic")]
             #[cfg(not(target_arch = "wasm32"))]
-            quic_config_callback: Box::new(|_| {}),
+            quic_config_callback: Box::new(|config| config),
             #[cfg(feature = "dns")]
             enable_dns: false,
             #[cfg(feature = "webtransport")]
@@ -418,8 +418,7 @@ pub(crate) fn build_transport(
     #[cfg(feature = "quic")]
     let transport = match enable_quic {
         true => {
-            let mut quic_config = QuicConfig::new(&keypair);
-            quic_config_callback(&mut quic_config);
+            let quic_config = quic_config_callback(QuicConfig::new(&keypair));
             let quic_transport = TokioQuicTransport::new(quic_config);
 
             OrTransport::new(quic_transport, transport)
