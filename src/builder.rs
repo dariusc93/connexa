@@ -628,6 +628,33 @@ where
         self
     }
 
+    /// Enables WebRTC transport
+    #[cfg(feature = "webrtc")]
+    pub fn enable_webrtc(mut self) -> Self {
+        self.transport_config.enable_webrtc = true;
+        self
+    }
+
+    /// Enables WebRTC transport, allowing one to generate a certificate using the provided keypair in the closure.
+    #[cfg(feature = "webrtc")]
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn enable_webrtc_with_config<F>(mut self, f: F) -> std::io::Result<Self>
+    where
+        F: FnOnce(&Keypair) -> std::io::Result<String>,
+    {
+        self.transport_config.enable_webrtc = true;
+        self.transport_config.webrtc_pem = Some(f(&self.keypair)?);
+        Ok(self)
+    }
+
+    /// Enable WebRTC transport with a provided pre-generated pem.
+    #[cfg(feature = "webrtc")]
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn enable_webrtc_with_pem(mut self, pem: impl Into<String>) -> Self {
+        let pem = pem.into();
+        self.enable_webrtc_with_config(move |_| Ok(pem)).expect("pem is provided; should not fail")
+    }
+
     /// Enables memory transport
     pub fn enable_memory_transport(mut self) -> Self {
         self.transport_config.enable_memory_transport = true;
