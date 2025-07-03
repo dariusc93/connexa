@@ -607,11 +607,31 @@ where
     /// Enables secure websocket transport
     #[cfg(feature = "websocket")]
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn enable_secure_websocket(mut self, pem: Option<(Vec<String>, String)>) -> Self {
+    pub fn enable_secure_websocket(mut self) -> Self {
         self.transport_config.enable_secure_websocket = true;
         self.transport_config.enable_websocket = true;
-        self.transport_config.websocket_pem = pem;
         self
+    }
+
+    /// Enables secure websocket transport
+    #[cfg(feature = "websocket")]
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn enable_secure_websocket_woth_pem(mut self, keypair: String, certs: Vec<String>) -> Self {
+        self.transport_config.enable_secure_websocket = true;
+        self.transport_config.enable_websocket = true;
+        self.transport_config.websocket_pem = Some((certs, keypair));
+        self
+    }
+
+    /// Enables secure websocket transport
+    #[cfg(feature = "websocket")]
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn enable_secure_websocket_woth_config<F>(mut self, f: F) -> std::io::Result<Self>
+    where
+        F: FnOnce(&Keypair) -> std::io::Result<(Vec<String>, String)>,
+    {
+        let (certs, keypair) = f(&self.keypair)?;
+        Ok(self.enable_secure_websocket_woth_pem(keypair, certs))
     }
 
     /// Enables DNS
@@ -652,7 +672,8 @@ where
     #[cfg(not(target_arch = "wasm32"))]
     pub fn enable_webrtc_with_pem(mut self, pem: impl Into<String>) -> Self {
         let pem = pem.into();
-        self.enable_webrtc_with_config(move |_| Ok(pem)).expect("pem is provided; should not fail")
+        self.enable_webrtc_with_config(move |_| Ok(pem))
+            .expect("pem is provided; should not fail")
     }
 
     /// Enables memory transport
