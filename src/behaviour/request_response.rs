@@ -28,6 +28,9 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
+const CHANNEL_LIMIT: usize = 256;
+const TIMEOUT: Duration = Duration::from_secs(30);
+
 #[derive(Debug, Clone)]
 pub struct RequestResponseConfig {
     pub protocol: String,
@@ -254,10 +257,10 @@ impl Behaviour {
         }
 
         //
-        match self.broadcast_request.len() > 256 {
+        match self.broadcast_request.len() > CHANNEL_LIMIT {
             true => {
                 // Because the channels exceed a specific threshold, we will begin do cleanup with a timer instead
-                self.gc_timer.replace(Delay::new(Duration::from_secs(30)));
+                self.gc_timer.replace(Delay::new(TIMEOUT));
             }
             false => {
                 self.broadcast_request.retain(|ch| !ch.is_closed());
@@ -412,8 +415,8 @@ impl NetworkBehaviour for Behaviour {
     fn poll(&mut self, cx: &mut Context) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if self.gc_timer.poll_unpin(cx).is_ready() {
             self.broadcast_request.retain(|ch| !ch.is_closed());
-            if self.broadcast_request.len() > 256 {
-                self.gc_timer.replace(Delay::new(Duration::from_secs(30)));
+            if self.broadcast_request.len() > CHANNEL_LIMIT {
+                self.gc_timer.replace(Delay::new(TIMEOUT));
             }
         }
 
