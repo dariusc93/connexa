@@ -8,6 +8,7 @@ use futures::channel::oneshot::Sender as OneshotSender;
 use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use futures::{TryFutureExt, pin_mut};
+use futures_timer::Delay;
 use libp2p::core::Endpoint;
 use libp2p::core::transport::PortUse;
 use libp2p::request_response::{
@@ -20,6 +21,7 @@ use libp2p::swarm::{
 };
 use libp2p::{Multiaddr, PeerId, StreamProtocol, request_response};
 use pollable_map::futures::FutureMap;
+use pollable_map::optional::Optional;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -125,6 +127,8 @@ pub struct Behaviour {
     broadcast_request: Vec<MpscSender<(PeerId, InboundRequestId, Bytes)>>,
     rr_behaviour: request_response::Behaviour<Codec>,
 
+    gc_timer: Optional<Delay>,
+
     channel_buffer: usize,
 }
 
@@ -151,6 +155,7 @@ impl Behaviour {
             pending_request: HashMap::new(),
             broadcast_request: Vec::new(),
             rr_behaviour,
+            gc_timer: Optional::default(),
             channel_buffer: config.channel_buffer,
         }
     }
@@ -242,14 +247,21 @@ impl Behaviour {
         request: Bytes,
         response_channel: ResponseChannel<Bytes>,
     ) {
-        // TODO: Determine if this would have some performance impact on doing this on every request
-        // the node receives. If so, then we should create a timer that would cleanup the vector
-        self.broadcast_request.retain(|tx| !tx.is_closed());
-
         if self.broadcast_request.is_empty() {
             // If the node is not listening to the requests, then we should drop the response so it would time out
             tracing::warn!(%peer_id, request_id=%id, "no subscribers listening to request. dropping request");
             return;
+        }
+
+        //
+        match self.broadcast_request.len() > 256 {
+            true => {
+                // Because the channels exceed a specific threshold, we will begin do cleanup with a timer instead
+                self.gc_timer.replace(Delay::new(Duration::from_secs(30)));
+            }
+            false => {
+                self.broadcast_request.retain(|ch| !ch.is_closed());
+            }
         }
 
         self.pending_request
@@ -398,6 +410,13 @@ impl NetworkBehaviour for Behaviour {
     }
 
     fn poll(&mut self, cx: &mut Context) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+        if self.gc_timer.poll_unpin(cx).is_ready() {
+            self.broadcast_request.retain(|ch| !ch.is_closed());
+            if self.broadcast_request.len() > 256 {
+                self.gc_timer.replace(Delay::new(Duration::from_secs(30)));
+            }
+        }
+
         while let Poll::Ready(event) = self.rr_behaviour.poll(cx) {
             match event {
                 ToSwarm::GenerateEvent(request_response::Event::Message {
