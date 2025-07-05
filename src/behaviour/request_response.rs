@@ -496,9 +496,7 @@ mod tests {
 
         node_a.add_peer_address(peer_id_b, addr_b.clone());
 
-        let mut response_fut = node_a
-            .behaviour_mut()
-            .send_request(peer_id_b, "ping".as_bytes());
+        let mut response_fut = node_a.behaviour_mut().send_request(peer_id_b, "ping");
         let mut node_b_request_listener = node_b.behaviour_mut().subscribe();
 
         let mut received_request = false;
@@ -510,13 +508,13 @@ mod tests {
                 _event = node_b.select_next_some() => {},
                 Some((sender_peer_id, id, request)) = node_b_request_listener.next() => {
                     assert_eq!(sender_peer_id, peer_id_a);
-                    assert_eq!(request, Bytes::from("ping".as_bytes()));
+                    assert_eq!(request, "ping");
                     received_request = true;
-                    node_b.behaviour_mut().send_response(peer_id_a, id, "pong".as_bytes()).expect("channel still active");
+                    node_b.behaviour_mut().send_response(peer_id_a, id, "pong").expect("channel still active");
                 }
                 response = &mut response_fut => {
                     let response = response.expect("valid response");
-                    assert_eq!(response, Bytes::from("pong".as_bytes()));
+                    assert_eq!(response, "pong");
                     received_response = true;
                 }
             }
@@ -546,7 +544,7 @@ mod tests {
 
         let mut response_st = node_a
             .behaviour_mut()
-            .send_requests([peer_id_b, peer_id_c], "ping".as_bytes());
+            .send_requests([peer_id_b, peer_id_c], "ping");
         let mut node_b_request_listener = node_b.behaviour_mut().subscribe();
         let mut node_c_request_listener = node_c.behaviour_mut().subscribe();
 
@@ -562,23 +560,23 @@ mod tests {
                 _event = node_c.select_next_some() => {},
                 Some((sender_peer_id, id, request)) = node_b_request_listener.next() => {
                     assert_eq!(sender_peer_id, peer_id_a);
-                    assert_eq!(request, Bytes::from("ping".as_bytes()));
+                    assert_eq!(request, "ping");
                     received_request_for_b = true;
-                    node_b.behaviour_mut().send_response(peer_id_a, id, "pong_b".as_bytes()).expect("channel still active");
+                    node_b.behaviour_mut().send_response(peer_id_a, id, "pong_b").expect("channel still active");
                 }
                 Some((sender_peer_id, id, request)) = node_c_request_listener.next() => {
                     assert_eq!(sender_peer_id, peer_id_a);
-                    assert_eq!(request, Bytes::from("ping".as_bytes()));
+                    assert_eq!(request, "ping");
                     received_request_for_c = true;
-                    node_c.behaviour_mut().send_response(peer_id_a, id, "pong_c".as_bytes()).expect("channel still active");
+                    node_c.behaviour_mut().send_response(peer_id_a, id, "pong_c").expect("channel still active");
                 }
                 Some((peer_id, response)) = response_st.next() => {
                     match response {
-                        Ok(response) if response == Bytes::from("pong_b") => {
+                        Ok(response) if response == "pong_b" => {
                             assert_eq!(peer_id, peer_id_b);
                             received_response_from_b = true;
                         },
-                        Ok(response) if response == Bytes::from("pong_c") => {
+                        Ok(response) if response == "pong_c" => {
                             assert_eq!(peer_id, peer_id_c);
                             received_response_from_c = true;
                         }
