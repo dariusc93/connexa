@@ -7,6 +7,7 @@ use futures::stream::BoxStream;
 use indexmap::IndexSet;
 use libp2p::request_response::InboundRequestId;
 use libp2p::{PeerId, StreamProtocol};
+use std::io::Result as IoResult;
 
 #[derive(Copy, Clone)]
 pub struct ConnexaRequestResponse<'a, T> {
@@ -47,7 +48,7 @@ where
         request: impl IntoRequest,
     ) -> std::io::Result<BoxStream<'static, (PeerId, std::io::Result<Bytes>)>> {
         let peers = IndexSet::from_iter(peers);
-        let (protocol, request) = request.into_request();
+        let (protocol, request) = request.into_request()?;
 
         if peers.is_empty() {
             return Err(std::io::Error::other("no peers were provided"));
@@ -83,7 +84,7 @@ where
         peer_id: PeerId,
         request: impl IntoRequest,
     ) -> std::io::Result<Bytes> {
-        let (protocol, request) = request.into_request();
+        let (protocol, request) = request.into_request()?;
 
         if request.is_empty() {
             return Err(std::io::Error::other("request is empty"));
@@ -116,7 +117,7 @@ where
         request_id: InboundRequestId,
         response: impl IntoRequest,
     ) -> std::io::Result<()> {
-        let (protocol, response) = response.into_request();
+        let (protocol, response) = response.into_request()?;
         if response.is_empty() {
             return Err(std::io::Error::other("response is empty"));
         }
@@ -178,176 +179,176 @@ impl From<&'static str> for OptionalStreamProtocol {
 
 // TODO: Move into a macro
 pub trait IntoRequest {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes);
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)>;
 }
 
 impl IntoRequest for Bytes {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
-        (None, self)
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
+        Ok((None, self))
     }
 }
 
 impl<const N: usize> IntoRequest for [u8; N] {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request(Bytes::copy_from_slice(&self))
     }
 }
 
 impl<const N: usize> IntoRequest for &[u8; N] {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request(Bytes::copy_from_slice(self))
     }
 }
 
 impl IntoRequest for Vec<u8> {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request(Bytes::from(self))
     }
 }
 
 impl IntoRequest for &[u8] {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request(Bytes::copy_from_slice(self))
     }
 }
 
 impl IntoRequest for String {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request(Bytes::from(self.into_bytes()))
     }
 }
 
 impl IntoRequest for &'static str {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request(self.to_string())
     }
 }
 
 impl IntoRequest for (StreamProtocol, Bytes) {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
-        (Some(self.0), self.1)
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
+        Ok((Some(self.0), self.1))
     }
 }
 
 impl<const N: usize> IntoRequest for (StreamProtocol, [u8; N]) {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request((self.0, Bytes::copy_from_slice(&self.1)))
     }
 }
 
 impl<const N: usize> IntoRequest for (StreamProtocol, &[u8; N]) {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request((self.0, Bytes::copy_from_slice(self.1)))
     }
 }
 
 impl IntoRequest for (StreamProtocol, Vec<u8>) {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request((self.0, Bytes::from(self.1)))
     }
 }
 
 impl IntoRequest for (StreamProtocol, &[u8]) {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request((self.0, Bytes::copy_from_slice(self.1)))
     }
 }
 
 impl IntoRequest for (StreamProtocol, String) {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request((self.0, Bytes::from(self.1.into_bytes())))
     }
 }
 
 impl IntoRequest for (StreamProtocol, &'static str) {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request((self.0, self.1.to_string()))
     }
 }
 
 impl IntoRequest for (String, Bytes) {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
-        (
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
+        Ok((
             Some(StreamProtocol::try_from_owned(self.0).expect("valid protocol")),
             self.1,
-        )
+        ))
     }
 }
 
 impl<const N: usize> IntoRequest for (String, [u8; N]) {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request((self.0, Bytes::copy_from_slice(&self.1)))
     }
 }
 
 impl<const N: usize> IntoRequest for (String, &[u8; N]) {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request((self.0, Bytes::copy_from_slice(self.1)))
     }
 }
 
 impl IntoRequest for (String, Vec<u8>) {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request((self.0, Bytes::from(self.1)))
     }
 }
 
 impl IntoRequest for (String, &[u8]) {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request((self.0, Bytes::copy_from_slice(self.1)))
     }
 }
 
 impl IntoRequest for (String, String) {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request((self.0, Bytes::from(self.1.into_bytes())))
     }
 }
 
 impl IntoRequest for (String, &'static str) {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request((self.0, self.1.to_string()))
     }
 }
 
 impl IntoRequest for (&'static str, Bytes) {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
-        (Some(StreamProtocol::new(self.0)), self.1)
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
+        Ok((Some(StreamProtocol::new(self.0)), self.1))
     }
 }
 
 impl<const N: usize> IntoRequest for (&'static str, [u8; N]) {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request((self.0, Bytes::copy_from_slice(&self.1)))
     }
 }
 
 impl<const N: usize> IntoRequest for (&'static str, &[u8; N]) {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request((self.0, Bytes::copy_from_slice(self.1)))
     }
 }
 
 impl IntoRequest for (&'static str, Vec<u8>) {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request((self.0, Bytes::from(self.1)))
     }
 }
 
 impl IntoRequest for (&'static str, &[u8]) {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request((self.0, Bytes::copy_from_slice(self.1)))
     }
 }
 
 impl IntoRequest for (&'static str, String) {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request((self.0, Bytes::from(self.1.into_bytes())))
     }
 }
 
 impl IntoRequest for (&'static str, &'static str) {
-    fn into_request(self) -> (Option<StreamProtocol>, Bytes) {
+    fn into_request(self) -> IoResult<(Option<StreamProtocol>, Bytes)> {
         IntoRequest::into_request((self.0, self.1.to_string()))
     }
 }
