@@ -34,6 +34,9 @@ upnp = ["libp2p/upnp"]
 stream = ["dep:libp2p-stream"]
 mdns = ["libp2p/mdns"]
 
+json = ["dep:serde_json"]
+cbor = ["dep:cbor4ii"]
+
 dns = ["libp2p/dns"]
 tls = ["libp2p/tls"]
 noise = ["libp2p/noise"]
@@ -55,6 +58,7 @@ members = ["examples/custom-behaviour-and-context", "examples/custom-transport",
 async-rt = "0.1.8"
 async-trait = { version = "0.1.88" }
 bytes = "1.10.1"
+cbor4ii = { version = "1.0.0", features = ["use_std", "serde1"] }
 cid = "0.11.1"
 either = "1.15.0"
 futures = { version = "0.3.31" }
@@ -77,6 +81,7 @@ rcgen = { version = "0.13.2", features = ["pem", "x509-parser"] }
 rlimit = "0.10.2"
 send_wrapper = "0.6.0"
 serde = { version = "1.0.219" }
+serde_json = "1.0.140"
 serde-wasm-bindgen = "0.6.5"
 tracing = { version = "0.1.41" }
 
@@ -88,6 +93,7 @@ wasm-bindgen-futures = { version = "0.4.50" }
 async-rt.workspace = true
 async-trait.workspace = true
 bytes = { workspace = true }
+cbor4ii = { workspace = true, optional = true }
 cid = { workspace = true, optional = true }
 either.workspace = true
 futures.workspace = true
@@ -99,6 +105,7 @@ pem.workspace = true
 pollable-map.workspace = true
 rand.workspace = true
 serde = { features = ["derive"], workspace = true }
+serde_json = { workspace = true, optional = true }
 tracing = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

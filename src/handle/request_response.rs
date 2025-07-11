@@ -183,7 +183,7 @@ impl From<String> for OptionalStreamProtocol {
 impl From<&String> for OptionalStreamProtocol {
     fn from(protocol: &String) -> Self {
         let protocol = StreamProtocol::try_from_owned(protocol.to_string()).ok();
-        Self(protocol)   
+        Self(protocol)
     }
 }
 
@@ -281,5 +281,39 @@ impl<P: Into<OptionalStreamProtocol>> IntoRequest for (P, String) {
 impl<P: Into<OptionalStreamProtocol>> IntoRequest for (P, &'static str) {
     fn into_request(self) -> IoResult<(OptionalStreamProtocol, Bytes)> {
         IntoRequest::into_request((self.0.into(), self.1.to_string()))
+    }
+}
+
+#[cfg(feature = "cbor")]
+impl IntoRequest for cbor4ii::core::Value {
+    fn into_request(self) -> IoResult<(OptionalStreamProtocol, Bytes)> {
+        IntoRequest::into_request((None, self))
+    }
+}
+
+#[cfg(feature = "cbor")]
+impl<P: Into<OptionalStreamProtocol>> IntoRequest for (P, cbor4ii::core::Value) {
+    fn into_request(self) -> IoResult<(OptionalStreamProtocol, Bytes)> {
+        let (protocol, value) = self;
+        cbor4ii::serde::to_vec(Vec::new(), &value)
+            .map(|v| (protocol.into(), Bytes::from(v)))
+            .map_err(std::io::Error::other)
+    }
+}
+
+#[cfg(feature = "json")]
+impl IntoRequest for serde_json::Value {
+    fn into_request(self) -> IoResult<(OptionalStreamProtocol, Bytes)> {
+        IntoRequest::into_request((None, self))
+    }
+}
+
+#[cfg(feature = "json")]
+impl<P: Into<OptionalStreamProtocol>> IntoRequest for (P, serde_json::Value) {
+    fn into_request(self) -> IoResult<(OptionalStreamProtocol, Bytes)> {
+        let (protocol, value) = self;
+        serde_json::to_vec(&value)
+            .map(|v| (protocol.into(), Bytes::from(v)))
+            .map_err(std::io::Error::other)
     }
 }
