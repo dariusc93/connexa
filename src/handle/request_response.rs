@@ -183,7 +183,7 @@ impl From<String> for OptionalStreamProtocol {
 impl From<&String> for OptionalStreamProtocol {
     fn from(protocol: &String) -> Self {
         let protocol = StreamProtocol::try_from_owned(protocol.to_string()).ok();
-        Self(protocol)   
+        Self(protocol)
     }
 }
 
@@ -241,6 +241,15 @@ impl IntoRequest for &'static str {
     }
 }
 
+impl<F> IntoRequest for F
+where
+    F: FnOnce() -> IoResult<Bytes>,
+{
+    fn into_request(self) -> IoResult<(OptionalStreamProtocol, Bytes)> {
+        IntoRequest::into_request((None, self))
+    }
+}
+
 impl<P: Into<OptionalStreamProtocol>> IntoRequest for (P, Bytes) {
     fn into_request(self) -> IoResult<(OptionalStreamProtocol, Bytes)> {
         let (protocol, request) = self;
@@ -281,5 +290,15 @@ impl<P: Into<OptionalStreamProtocol>> IntoRequest for (P, String) {
 impl<P: Into<OptionalStreamProtocol>> IntoRequest for (P, &'static str) {
     fn into_request(self) -> IoResult<(OptionalStreamProtocol, Bytes)> {
         IntoRequest::into_request((self.0.into(), self.1.to_string()))
+    }
+}
+
+impl<P: Into<OptionalStreamProtocol>, F> IntoRequest for (P, F)
+where
+    F: FnOnce() -> IoResult<Bytes>,
+{
+    fn into_request(self) -> IoResult<(OptionalStreamProtocol, Bytes)> {
+        let (protocol, request) = self;
+        request().map(|request| (protocol.into(), request))
     }
 }
