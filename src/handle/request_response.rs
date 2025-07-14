@@ -235,7 +235,13 @@ impl IntoRequest for String {
     }
 }
 
-impl IntoRequest for &'static str {
+impl IntoRequest for &String {
+    fn into_request(self) -> IoResult<(OptionalStreamProtocol, Bytes)> {
+        IntoRequest::into_request(self.as_bytes())
+    }
+}
+
+impl<'a> IntoRequest for &'a str {
     fn into_request(self) -> IoResult<(OptionalStreamProtocol, Bytes)> {
         IntoRequest::into_request(self.to_string())
     }
@@ -259,7 +265,7 @@ impl<P: Into<OptionalStreamProtocol>> IntoRequest for (P, Bytes) {
 
 impl<const N: usize, P: Into<OptionalStreamProtocol>> IntoRequest for (P, [u8; N]) {
     fn into_request(self) -> IoResult<(OptionalStreamProtocol, Bytes)> {
-        IntoRequest::into_request((self.0.into(), Bytes::copy_from_slice(&self.1)))
+        IntoRequest::into_request((self.0.into(), &self.1))
     }
 }
 
@@ -277,19 +283,25 @@ impl<P: Into<OptionalStreamProtocol>> IntoRequest for (P, Vec<u8>) {
 
 impl<P: Into<OptionalStreamProtocol>> IntoRequest for (P, &[u8]) {
     fn into_request(self) -> IoResult<(OptionalStreamProtocol, Bytes)> {
-        IntoRequest::into_request((self.0.into(), Bytes::copy_from_slice(self.1)))
+        IntoRequest::into_request((self.0, Bytes::copy_from_slice(self.1)))
     }
 }
 
 impl<P: Into<OptionalStreamProtocol>> IntoRequest for (P, String) {
     fn into_request(self) -> IoResult<(OptionalStreamProtocol, Bytes)> {
-        IntoRequest::into_request((self.0.into(), self.1.into_bytes()))
+        IntoRequest::into_request((self.0, self.1.into_bytes()))
+    }
+}
+
+impl<P: Into<OptionalStreamProtocol>> IntoRequest for (P, &String) {
+    fn into_request(self) -> IoResult<(OptionalStreamProtocol, Bytes)> {
+        IntoRequest::into_request((self.0, self.1.as_bytes()))
     }
 }
 
 impl<P: Into<OptionalStreamProtocol>> IntoRequest for (P, &'static str) {
     fn into_request(self) -> IoResult<(OptionalStreamProtocol, Bytes)> {
-        IntoRequest::into_request((self.0.into(), self.1.to_string()))
+        IntoRequest::into_request((self.0, self.1.to_string()))
     }
 }
 

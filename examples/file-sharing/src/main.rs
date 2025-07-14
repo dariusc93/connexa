@@ -75,7 +75,7 @@ async fn main() -> std::io::Result<()> {
             assert!(path.is_file());
             let mut listener = connexa
                 .request_response()
-                .listen_for_requests(name.clone())
+                .listen_for_requests(&name)
                 .await?;
 
             while let Some((peer_id, request_id, request)) = listener.next().await {
@@ -109,7 +109,7 @@ async fn main() -> std::io::Result<()> {
 
             let response = connexa
                 .request_response()
-                .send_request(peer_id, name.clone())
+                .send_request(peer_id, (FILE_SHARING_PROTOCOL, name.clone()))
                 .await?;
             tokio::io::stdout().write_all(&response).await?;
         }
