@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use crate::handle::Connexa;
 use crate::types::StreamCommand;
 use futures::channel::oneshot;
@@ -76,8 +77,42 @@ impl IntoStreamProtocol for String {
     }
 }
 
+impl IntoStreamProtocol for &String {
+    fn into_protocol(self) -> std::io::Result<StreamProtocol> {
+        StreamProtocol::try_from_owned(self.to_owned()).map_err(std::io::Error::other)
+    }
+}
+
 impl IntoStreamProtocol for &'static str {
     fn into_protocol(self) -> std::io::Result<StreamProtocol> {
         Ok(StreamProtocol::new(self))
+    }
+}
+
+impl IntoStreamProtocol for Bytes {
+    fn into_protocol(self) -> std::io::Result<StreamProtocol> {
+        let protocol = String::from_utf8_lossy(&self).to_string();
+        protocol.into_protocol()
+    }
+}
+
+impl IntoStreamProtocol for &Bytes {
+    fn into_protocol(self) -> std::io::Result<StreamProtocol> {
+        let protocol = String::from_utf8_lossy(self).to_string();
+        protocol.into_protocol()
+    }
+}
+
+impl IntoStreamProtocol for Vec<u8> {
+    fn into_protocol(self) -> std::io::Result<StreamProtocol> {
+        let protocol = String::from_utf8_lossy(&self).to_string();
+        protocol.into_protocol()
+    }
+}
+
+impl IntoStreamProtocol for &[u8] {
+    fn into_protocol(self) -> std::io::Result<StreamProtocol> {
+        let protocol = String::from_utf8_lossy(&self).to_string();
+        protocol.into_protocol()
     }
 }
