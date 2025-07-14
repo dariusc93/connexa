@@ -21,8 +21,7 @@ where
 
     /// Subscribes to a topic in the floodsub network
     pub async fn subscribe(&self, topic: impl IntoTopic) -> std::io::Result<()> {
-        // TODO: avoid additional allocation
-        let topic = topic.into_topic().id().to_string();
+        let topic = topic.into_topic();
         let (tx, rx) = oneshot::channel();
 
         self.connexa
@@ -55,8 +54,7 @@ where
 
     /// Unsubscribes from a topic in the floodsub network
     pub async fn unsubscribe(&self, topic: impl IntoTopic) -> std::io::Result<()> {
-        // TODO: avoid additional allocation
-        let topic = topic.into_topic().id().to_string();
+        let topic = topic.into_topic();
         let (tx, rx) = oneshot::channel();
 
         self.connexa

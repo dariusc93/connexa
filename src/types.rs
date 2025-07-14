@@ -188,11 +188,11 @@ pub enum ConnectionEvent {
 #[derive(Debug)]
 pub enum FloodsubCommand {
     Subscribe {
-        topic: String,
+        topic: libp2p::floodsub::Topic,
         resp: oneshot::Sender<Result<()>>,
     },
     Unsubscribe {
-        topic: String,
+        topic: libp2p::floodsub::Topic,
         resp: oneshot::Sender<Result<()>>,
     },
     FloodsubListener {
