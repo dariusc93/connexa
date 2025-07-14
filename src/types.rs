@@ -206,18 +206,18 @@ pub enum FloodsubCommand {
 #[derive(Debug)]
 pub enum GossipsubCommand {
     Subscribe {
-        topic: String,
+        topic: libp2p::gossipsub::TopicHash,
         resp: oneshot::Sender<Result<()>>,
     },
     Unsubscribe {
-        topic: String,
+        topic: libp2p::gossipsub::TopicHash,
         resp: oneshot::Sender<Result<()>>,
     },
     Subscribed {
-        resp: oneshot::Sender<Result<Vec<String>>>,
+        resp: oneshot::Sender<Result<Vec<libp2p::gossipsub::TopicHash>>>,
     },
     Peers {
-        topic: String,
+        topic: libp2p::gossipsub::TopicHash,
         resp: oneshot::Sender<Result<Vec<PeerId>>>,
     },
     GossipsubListener {

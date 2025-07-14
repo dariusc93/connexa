@@ -22,7 +22,7 @@ where
                     return;
                 };
 
-                let topic = libp2p::gossipsub::IdentTopic::new(topic);
+                let topic = libp2p::gossipsub::IdentTopic::new(topic.into_string());
                 match pubsub.subscribe(&topic) {
                     Ok(true) => {
                         let _ = resp.send(Ok(()));
@@ -41,7 +41,7 @@ where
                     return;
                 };
 
-                let topic = libp2p::gossipsub::IdentTopic::new(topic);
+                let topic = libp2p::gossipsub::IdentTopic::new(topic.into_string());
                 match pubsub.unsubscribe(&topic) {
                     true => {
                         let _ = resp.send(Ok(()));
@@ -57,7 +57,6 @@ where
                     return;
                 };
 
-                let topic = libp2p::gossipsub::IdentTopic::new(topic).hash();
                 let peers = pubsub.mesh_peers(&topic).copied().collect();
 
                 let _ = resp.send(Ok(peers));
@@ -68,7 +67,7 @@ where
                     return;
                 };
 
-                let topics = pubsub.topics().map(|topic| topic.to_string()).collect();
+                let topics = pubsub.topics().cloned().collect();
 
                 let _ = resp.send(Ok(topics));
             }
@@ -78,7 +77,6 @@ where
                     return;
                 };
 
-                let topic = libp2p::gossipsub::IdentTopic::new(topic.into_string());
                 let ret = match pubsub.publish(topic, data) {
                     Ok(_) => Ok(()),
                     Err(e) => Err(std::io::Error::other(e)),

@@ -22,7 +22,7 @@ where
 
     /// Subscribes to a specified topic in the gossipsub network.
     pub async fn subscribe(&self, topic: impl IntoTopic) -> std::io::Result<()> {
-        let topic = topic.into_topic().to_string();
+        let topic = topic.into_topic();
         let (tx, rx) = oneshot::channel();
 
         self.connexa
@@ -55,7 +55,7 @@ where
 
     /// Unsubscribes from a specified gossipsub topic.
     pub async fn unsubscribe(&self, topic: impl IntoTopic) -> std::io::Result<()> {
-        let topic = topic.into_topic().to_string();
+        let topic = topic.into_topic();
         let (tx, rx) = oneshot::channel();
 
         self.connexa
@@ -69,7 +69,7 @@ where
 
     /// Retrieves a list of peers that are subscribed to a specified topic.
     pub async fn peers(&self, topic: impl IntoTopic) -> std::io::Result<Vec<PeerId>> {
-        let topic = topic.into_topic().to_string();
+        let topic = topic.into_topic();
         let (tx, rx) = oneshot::channel();
 
         self.connexa
