@@ -181,3 +181,31 @@ impl IntoTopic for &Bytes {
         IdentTopic::new(topic).hash()
     }
 }
+
+impl IntoTopic for Vec<String> {
+    fn into_topic(self) -> TopicHash {
+        let topic = self.join("/");
+        IntoTopic::into_topic(topic)
+    }
+}
+
+impl IntoTopic for &[String] {
+    fn into_topic(self) -> TopicHash {
+        let topic = self.join("/");
+        IntoTopic::into_topic(topic)
+    }
+}
+
+impl IntoTopic for &[&str] {
+    fn into_topic(self) -> TopicHash {
+        let topic = self.join("/");
+        IntoTopic::into_topic(topic)
+    }
+}
+
+impl IntoTopic for Vec<&str> {
+    fn into_topic(self) -> TopicHash {
+        let topic = self.join("/");
+        IntoTopic::into_topic(topic)
+    }
+}

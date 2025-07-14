@@ -225,4 +225,30 @@ impl IntoTopic for &Bytes {
     }
 }
 
-// TODO: impl IntoTopic for Vec<String> and Vec<&str> and join with a dash?
+impl IntoTopic for Vec<String> {
+    fn into_topic(self) -> Topic {
+        let topic = self.join("/");
+        Topic::new(topic)
+    }
+}
+
+impl IntoTopic for &[String] {
+    fn into_topic(self) -> Topic {
+        let topic = self.join("/");
+        Topic::new(topic)
+    }
+}
+
+impl IntoTopic for &[&str] {
+    fn into_topic(self) -> Topic {
+        let topic = self.join("/");
+        Topic::new(topic)
+    }
+}
+
+impl IntoTopic for Vec<&str> {
+    fn into_topic(self) -> Topic {
+        let topic = self.join("/");
+        Topic::new(topic)
+    }
+}
