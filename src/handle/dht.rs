@@ -229,6 +229,12 @@ impl ToRecordKey for RecordKey {
 
 impl ToRecordKey for String {
     fn to_record_key(self) -> RecordKey {
+        self.into_bytes().into()
+    }
+}
+
+impl ToRecordKey for &String {
+    fn to_record_key(self) -> RecordKey {
         self.as_bytes().to_vec().into()
     }
 }
@@ -246,6 +252,12 @@ impl ToRecordKey for Vec<u8> {
 }
 
 impl ToRecordKey for &[u8] {
+    fn to_record_key(self) -> RecordKey {
+        self.to_vec().into()
+    }
+}
+
+impl<const N: usize> ToRecordKey for [u8; N] {
     fn to_record_key(self) -> RecordKey {
         self.to_vec().into()
     }
