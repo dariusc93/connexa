@@ -1,13 +1,9 @@
 use crate::handle::Connexa;
-use crate::prelude::PubsubType;
-use crate::types::{
-    FloodsubMessage, PubsubCommand, PubsubEvent, PubsubFloodsubPublish, PubsubPublishType,
-};
+use crate::types::{FloodsubCommand, FloodsubMessage, PubsubEvent, PubsubFloodsubPublish};
 use bytes::Bytes;
 use futures::StreamExt;
 use futures::channel::oneshot;
 use futures::stream::BoxStream;
-use libp2p::PeerId;
 use libp2p::floodsub::Topic;
 
 #[derive(Copy, Clone)]
@@ -32,14 +28,7 @@ where
         self.connexa
             .to_task
             .clone()
-            .send(
-                PubsubCommand::Subscribe {
-                    pubsub_type: PubsubType::Floodsub,
-                    topic,
-                    resp: tx,
-                }
-                .into(),
-            )
+            .send(FloodsubCommand::Subscribe { topic, resp: tx }.into())
             .await?;
 
         rx.await.map_err(std::io::Error::other)?
@@ -56,7 +45,7 @@ where
         self.connexa
             .to_task
             .clone()
-            .send(PubsubCommand::FloodsubListener { topic, resp: tx }.into())
+            .send(FloodsubCommand::FloodsubListener { topic, resp: tx }.into())
             .await?;
 
         rx.await
@@ -73,36 +62,7 @@ where
         self.connexa
             .to_task
             .clone()
-            .send(
-                PubsubCommand::Unsubscribe {
-                    pubsub_type: PubsubType::Floodsub,
-                    topic,
-                    resp: tx,
-                }
-                .into(),
-            )
-            .await?;
-
-        rx.await.map_err(std::io::Error::other)?
-    }
-
-    /// Returns a list of peers subscribed to the specified topic
-    pub async fn peers(&self, topic: impl IntoTopic) -> std::io::Result<Vec<PeerId>> {
-        // TODO: avoid additional allocation
-        let topic = topic.into_topic().id().to_string();
-        let (tx, rx) = oneshot::channel();
-
-        self.connexa
-            .to_task
-            .clone()
-            .send(
-                PubsubCommand::Peers {
-                    pubsub_type: PubsubType::Floodsub,
-                    topic,
-                    resp: tx,
-                }
-                .into(),
-            )
+            .send(FloodsubCommand::Unsubscribe { topic, resp: tx }.into())
             .await?;
 
         rx.await.map_err(std::io::Error::other)?
@@ -122,11 +82,7 @@ where
             .to_task
             .clone()
             .send(
-                PubsubCommand::Publish(PubsubPublishType::Floodsub(
-                    PubsubFloodsubPublish::Publish { topic, data },
-                    tx,
-                ))
-                .into(),
+                FloodsubCommand::Publish(PubsubFloodsubPublish::Publish { topic, data }, tx).into(),
             )
             .await?;
 
@@ -147,11 +103,8 @@ where
             .to_task
             .clone()
             .send(
-                PubsubCommand::Publish(PubsubPublishType::Floodsub(
-                    PubsubFloodsubPublish::PublishAny { topic, data },
-                    tx,
-                ))
-                .into(),
+                FloodsubCommand::Publish(PubsubFloodsubPublish::PublishAny { topic, data }, tx)
+                    .into(),
             )
             .await?;
 
@@ -175,11 +128,8 @@ where
             .to_task
             .clone()
             .send(
-                PubsubCommand::Publish(PubsubPublishType::Floodsub(
-                    PubsubFloodsubPublish::PublishMany { topics, data },
-                    tx,
-                ))
-                .into(),
+                FloodsubCommand::Publish(PubsubFloodsubPublish::PublishMany { topics, data }, tx)
+                    .into(),
             )
             .await?;
 
@@ -203,10 +153,10 @@ where
             .to_task
             .clone()
             .send(
-                PubsubCommand::Publish(PubsubPublishType::Floodsub(
+                FloodsubCommand::Publish(
                     PubsubFloodsubPublish::PublishManyAny { topics, data },
                     tx,
-                ))
+                )
                 .into(),
             )
             .await?;

@@ -37,14 +37,14 @@ use crate::{TEventCallback, TPollableCallback, TSwarmEventCallback, TTaskCallbac
 
 #[cfg(feature = "gossipsub")]
 use crate::types::GossipsubMessage;
+#[cfg(any(feature = "floodsub", feature = "gossipsub"))]
+use crate::types::PubsubEvent;
 #[cfg(feature = "request-response")]
 use crate::types::RequestResponseCommand;
 #[cfg(feature = "kad")]
 use crate::types::{DHTCommand, DHTEvent, RecordHandle};
 #[cfg(feature = "floodsub")]
 use crate::types::{FloodsubMessage, PubsubFloodsubPublish};
-#[cfg(any(feature = "floodsub", feature = "gossipsub"))]
-use crate::types::{PubsubCommand, PubsubEvent, PubsubPublishType, PubsubType};
 
 #[cfg(feature = "stream")]
 use crate::types::StreamCommand;
@@ -489,13 +489,10 @@ where
                     let _ = resp.send(Ok(()));
                 }
             },
-            #[cfg(any(feature = "gossipsub", feature = "floodsub"))]
-            Command::Pubsub(pubsub_command) => match pubsub_command.pubsub_type() {
-                #[cfg(feature = "gossipsub")]
-                PubsubType::Gossipsub => self.process_gossipsub_command(pubsub_command),
-                #[cfg(feature = "floodsub")]
-                PubsubType::Floodsub => self.process_floodsub_command(pubsub_command),
-            },
+            #[cfg(feature = "gossipsub")]
+            Command::Gossipsub(command) => self.process_gossipsub_command(command),
+            #[cfg(feature = "floodsub")]
+            Command::Floodsub(command) => self.process_floodsub_command(command),
             #[cfg(feature = "autonat")]
             Command::Autonat(autonat_command) => self.process_autonat_v1_command(autonat_command),
             #[cfg(feature = "kad")]

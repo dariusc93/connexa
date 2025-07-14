@@ -1,6 +1,5 @@
 use crate::handle::Connexa;
-use crate::prelude::PubsubType;
-use crate::types::{GossipsubMessage, PubsubCommand, PubsubEvent, PubsubPublishType};
+use crate::types::{GossipsubCommand, GossipsubMessage, PubsubEvent};
 use bytes::Bytes;
 use futures::StreamExt;
 use futures::channel::oneshot;
@@ -29,14 +28,7 @@ where
         self.connexa
             .to_task
             .clone()
-            .send(
-                PubsubCommand::Subscribe {
-                    pubsub_type: PubsubType::Gossipsub,
-                    topic,
-                    resp: tx,
-                }
-                .into(),
-            )
+            .send(GossipsubCommand::Subscribe { topic, resp: tx }.into())
             .await?;
 
         rx.await.map_err(std::io::Error::other)?
@@ -53,7 +45,7 @@ where
         self.connexa
             .to_task
             .clone()
-            .send(PubsubCommand::GossipsubListener { topic, resp: tx }.into())
+            .send(GossipsubCommand::GossipsubListener { topic, resp: tx }.into())
             .await?;
 
         rx.await
@@ -69,14 +61,7 @@ where
         self.connexa
             .to_task
             .clone()
-            .send(
-                PubsubCommand::Unsubscribe {
-                    pubsub_type: PubsubType::Gossipsub,
-                    topic,
-                    resp: tx,
-                }
-                .into(),
-            )
+            .send(GossipsubCommand::Unsubscribe { topic, resp: tx }.into())
             .await?;
 
         rx.await.map_err(std::io::Error::other)?
@@ -90,14 +75,7 @@ where
         self.connexa
             .to_task
             .clone()
-            .send(
-                PubsubCommand::Peers {
-                    pubsub_type: PubsubType::Gossipsub,
-                    topic,
-                    resp: tx,
-                }
-                .into(),
-            )
+            .send(GossipsubCommand::Peers { topic, resp: tx }.into())
             .await?;
 
         rx.await.map_err(std::io::Error::other)?
@@ -117,11 +95,11 @@ where
             .to_task
             .clone()
             .send(
-                PubsubCommand::Publish(PubsubPublishType::Gossipsub {
+                GossipsubCommand::Publish {
                     topic,
                     data,
                     resp: tx,
-                })
+                }
                 .into(),
             )
             .await?;

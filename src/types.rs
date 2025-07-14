@@ -26,8 +26,10 @@ type Result<T> = std::io::Result<T>;
 #[derive(Debug)]
 pub enum Command<T = ()> {
     Swarm(SwarmCommand),
-    #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
-    Pubsub(PubsubCommand),
+    #[cfg(feature = "gossipsub")]
+    Gossipsub(GossipsubCommand),
+    #[cfg(feature = "floodsub")]
+    Floodsub(FloodsubCommand),
     #[cfg(feature = "kad")]
     Dht(DHTCommand),
     #[cfg(feature = "request-response")]
@@ -57,10 +59,17 @@ impl<T> From<AutonatCommand> for Command<T> {
     }
 }
 
+#[cfg(feature = "gossipsub")]
+impl<T> From<GossipsubCommand> for Command<T> {
+    fn from(cmd: GossipsubCommand) -> Self {
+        Command::Gossipsub(cmd)
+    }
+}
+
 #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
-impl<T> From<PubsubCommand> for Command<T> {
-    fn from(cmd: PubsubCommand) -> Self {
-        Command::Pubsub(cmd)
+impl<T> From<FloodsubCommand> for Command<T> {
+    fn from(cmd: FloodsubCommand) -> Self {
+        Command::Floodsub(cmd)
     }
 }
 
@@ -175,52 +184,51 @@ pub enum ConnectionEvent {
     },
 }
 
-#[cfg(any(feature = "floodsub", feature = "gossipsub"))]
-#[derive(Debug, Copy, Clone)]
-pub enum PubsubType {
-    #[cfg(feature = "floodsub")]
-    Floodsub,
-    #[cfg(feature = "gossipsub")]
-    Gossipsub,
-}
-
+#[cfg(feature = "floodsub")]
 #[derive(Debug)]
-pub enum PubsubCommand {
-    #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
+pub enum FloodsubCommand {
     Subscribe {
-        pubsub_type: PubsubType,
         topic: String,
         resp: oneshot::Sender<Result<()>>,
     },
-    #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
     Unsubscribe {
-        pubsub_type: PubsubType,
         topic: String,
         resp: oneshot::Sender<Result<()>>,
     },
-    #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
-    Subscribed {
-        pubsub_type: PubsubType,
-        resp: oneshot::Sender<Result<Vec<String>>>,
-    },
-    #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
-    Peers {
-        pubsub_type: PubsubType,
-        topic: String,
-        resp: oneshot::Sender<Result<Vec<PeerId>>>,
-    },
-    #[cfg(feature = "floodsub")]
     FloodsubListener {
         topic: libp2p::floodsub::Topic,
         resp: oneshot::Sender<Result<mpsc::Receiver<PubsubEvent<FloodsubMessage>>>>,
     },
-    #[cfg(feature = "gossipsub")]
+    Publish(PubsubFloodsubPublish, oneshot::Sender<Result<()>>),
+}
+
+#[cfg(feature = "gossipsub")]
+#[derive(Debug)]
+pub enum GossipsubCommand {
+    Subscribe {
+        topic: String,
+        resp: oneshot::Sender<Result<()>>,
+    },
+    Unsubscribe {
+        topic: String,
+        resp: oneshot::Sender<Result<()>>,
+    },
+    Subscribed {
+        resp: oneshot::Sender<Result<Vec<String>>>,
+    },
+    Peers {
+        topic: String,
+        resp: oneshot::Sender<Result<Vec<PeerId>>>,
+    },
     GossipsubListener {
         topic: libp2p::gossipsub::TopicHash,
         resp: oneshot::Sender<Result<mpsc::Receiver<PubsubEvent<GossipsubMessage>>>>,
     },
-    #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
-    Publish(PubsubPublishType),
+    Publish {
+        topic: libp2p::gossipsub::TopicHash,
+        data: Bytes,
+        resp: oneshot::Sender<Result<()>>,
+    },
 }
 
 #[derive(Debug)]
@@ -232,39 +240,6 @@ pub enum ConnectionLimitsCommand {
         limits: ConnectionLimits,
         resp: oneshot::Sender<Result<()>>,
     },
-}
-
-#[cfg(any(feature = "floodsub", feature = "gossipsub"))]
-impl PubsubCommand {
-    pub(crate) fn pubsub_type(&self) -> PubsubType {
-        match self {
-            #[cfg(feature = "floodsub")]
-            PubsubCommand::FloodsubListener { .. } => PubsubType::Floodsub,
-            #[cfg(feature = "gossipsub")]
-            PubsubCommand::GossipsubListener { .. } => PubsubType::Gossipsub,
-            PubsubCommand::Subscribe { pubsub_type, .. } => *pubsub_type,
-            PubsubCommand::Unsubscribe { pubsub_type, .. } => *pubsub_type,
-            PubsubCommand::Subscribed { pubsub_type, .. } => *pubsub_type,
-            PubsubCommand::Peers { pubsub_type, .. } => *pubsub_type,
-            #[cfg(feature = "gossipsub")]
-            PubsubCommand::Publish(PubsubPublishType::Gossipsub { .. }) => PubsubType::Gossipsub,
-            #[cfg(feature = "floodsub")]
-            PubsubCommand::Publish(PubsubPublishType::Floodsub { .. }) => PubsubType::Floodsub,
-        }
-    }
-}
-
-#[cfg(any(feature = "floodsub", feature = "gossipsub"))]
-#[derive(Debug)]
-pub enum PubsubPublishType {
-    #[cfg(feature = "gossipsub")]
-    Gossipsub {
-        topic: libp2p::gossipsub::TopicHash,
-        data: Bytes,
-        resp: oneshot::Sender<Result<()>>,
-    },
-    #[cfg(feature = "floodsub")]
-    Floodsub(PubsubFloodsubPublish, oneshot::Sender<Result<()>>),
 }
 
 #[cfg(feature = "floodsub")]

@@ -1,8 +1,6 @@
-use crate::prelude::{
-    FloodsubMessage, PubsubEvent, PubsubFloodsubPublish, PubsubPublishType, PubsubType,
-};
+use crate::prelude::{FloodsubMessage, PubsubEvent, PubsubFloodsubPublish};
 use crate::task::ConnexaTask;
-use crate::types::PubsubCommand;
+use crate::types::FloodsubCommand;
 use futures::channel::mpsc;
 use libp2p::floodsub::Event as FloodsubEvent;
 use libp2p::swarm::NetworkBehaviour;
@@ -14,29 +12,11 @@ where
     C: Send,
     C::ToSwarm: Debug,
 {
-    pub fn process_floodsub_command(&mut self, command: PubsubCommand) {
+    pub fn process_floodsub_command(&mut self, command: FloodsubCommand) {
         let swarm = self.swarm.as_mut().unwrap();
 
-        assert!(matches!(
-            command,
-            PubsubCommand::Subscribe {
-                pubsub_type: PubsubType::Floodsub,
-                ..
-            } | PubsubCommand::Unsubscribe {
-                pubsub_type: PubsubType::Floodsub,
-                ..
-            } | PubsubCommand::Peers {
-                pubsub_type: PubsubType::Floodsub,
-                ..
-            } | PubsubCommand::Subscribed {
-                pubsub_type: PubsubType::Floodsub,
-                ..
-            } | PubsubCommand::FloodsubListener { .. }
-                | PubsubCommand::Publish(PubsubPublishType::Floodsub { .. })
-        ));
-
         match command {
-            PubsubCommand::Subscribe { topic, resp, .. } => {
+            FloodsubCommand::Subscribe { topic, resp, .. } => {
                 let Some(pubsub) = swarm.behaviour_mut().floodsub.as_mut() else {
                     let _ = resp.send(Err(std::io::Error::other("floodsub is not enabled")));
                     return;
@@ -52,7 +32,7 @@ where
                     }
                 }
             }
-            PubsubCommand::Unsubscribe { topic, resp, .. } => {
+            FloodsubCommand::Unsubscribe { topic, resp, .. } => {
                 let Some(pubsub) = swarm.behaviour_mut().floodsub.as_mut() else {
                     let _ = resp.send(Err(std::io::Error::other("floodsub is not enabled")));
                     return;
@@ -68,27 +48,7 @@ where
                     }
                 }
             }
-            PubsubCommand::Subscribed { resp, .. } => {
-                if !swarm.behaviour_mut().floodsub.is_enabled() {
-                    let _ = resp.send(Err(std::io::Error::other("floodsub is not enabled")));
-                    return;
-                }
-
-                let _ = resp.send(Err(std::io::Error::other(
-                    "function is unimplemented at this time",
-                )));
-            }
-            PubsubCommand::Peers { resp, .. } => {
-                if !swarm.behaviour_mut().floodsub.is_enabled() {
-                    let _ = resp.send(Err(std::io::Error::other("floodsub is not enabled")));
-                    return;
-                };
-
-                let _ = resp.send(Err(std::io::Error::other(
-                    "function is unimplemented at this time",
-                )));
-            }
-            PubsubCommand::Publish(PubsubPublishType::Floodsub(pubsub_type, resp)) => {
+            FloodsubCommand::Publish(pubsub_type, resp) => {
                 let Some(pubsub) = swarm.behaviour_mut().floodsub.as_mut() else {
                     let _ = resp.send(Err(std::io::Error::other("floodsub is not enabled")));
                     return;
@@ -115,7 +75,7 @@ where
 
                 let _ = resp.send(Ok(()));
             }
-            PubsubCommand::FloodsubListener { topic, resp } => {
+            FloodsubCommand::FloodsubListener { topic, resp } => {
                 if !swarm.behaviour_mut().floodsub.is_enabled() {
                     let _ = resp.send(Err(std::io::Error::other("floodsub is not enabled")));
                     return;
@@ -129,8 +89,6 @@ where
 
                 let _ = resp.send(Ok(rx));
             }
-            #[cfg(feature = "gossipsub")]
-            _ => unreachable!(),
         }
     }
 
