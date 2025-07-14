@@ -6,6 +6,7 @@ use futures::StreamExt;
 use futures::channel::oneshot;
 use futures::stream::BoxStream;
 use libp2p::PeerId;
+use libp2p::gossipsub::{Hasher, IdentTopic, Topic, TopicHash};
 
 #[derive(Copy, Clone)]
 pub struct ConnexaGossipsub<'a, T> {
@@ -21,8 +22,8 @@ where
     }
 
     /// Subscribes to a specified topic in the gossipsub network.
-    pub async fn subscribe(&self, topic: impl Into<String>) -> std::io::Result<()> {
-        let topic = topic.into();
+    pub async fn subscribe(&self, topic: impl IntoTopic) -> std::io::Result<()> {
+        let topic = topic.into_topic().to_string();
         let (tx, rx) = oneshot::channel();
 
         self.connexa
@@ -44,9 +45,9 @@ where
     /// Creates a listener for a specified gossipsub topic.
     pub async fn listener(
         &self,
-        topic: impl Into<String>,
+        topic: impl IntoTopic,
     ) -> std::io::Result<BoxStream<'static, PubsubEvent<GossipsubMessage>>> {
-        let topic = topic.into();
+        let topic = topic.into_topic();
         let (tx, rx) = oneshot::channel();
 
         self.connexa
@@ -61,8 +62,8 @@ where
     }
 
     /// Unsubscribes from a specified gossipsub topic.
-    pub async fn unsubscribe(&self, topic: impl Into<String>) -> std::io::Result<()> {
-        let topic = topic.into();
+    pub async fn unsubscribe(&self, topic: impl IntoTopic) -> std::io::Result<()> {
+        let topic = topic.into_topic().to_string();
         let (tx, rx) = oneshot::channel();
 
         self.connexa
@@ -82,8 +83,8 @@ where
     }
 
     /// Retrieves a list of peers that are subscribed to a specified topic.
-    pub async fn peers(&self, topic: impl Into<String>) -> std::io::Result<Vec<PeerId>> {
-        let topic = topic.into();
+    pub async fn peers(&self, topic: impl IntoTopic) -> std::io::Result<Vec<PeerId>> {
+        let topic = topic.into_topic().to_string();
         let (tx, rx) = oneshot::channel();
 
         self.connexa
@@ -105,10 +106,10 @@ where
     /// Publishes a message to a specified gossipsub topic.
     pub async fn publish(
         &self,
-        topic: impl Into<String>,
+        topic: impl IntoTopic,
         message: impl Into<Bytes>,
     ) -> std::io::Result<()> {
-        let topic = topic.into();
+        let topic = topic.into_topic();
         let data = message.into();
         let (tx, rx) = oneshot::channel();
 
@@ -126,5 +127,79 @@ where
             .await?;
 
         rx.await.map_err(std::io::Error::other)?
+    }
+}
+
+pub trait IntoTopic {
+    fn into_topic(self) -> TopicHash;
+}
+
+impl<H: Hasher> IntoTopic for Topic<H> {
+    fn into_topic(self) -> TopicHash {
+        self.hash()
+    }
+}
+
+impl<H: Hasher> IntoTopic for &Topic<H> {
+    fn into_topic(self) -> TopicHash {
+        self.hash()
+    }
+}
+
+impl IntoTopic for TopicHash {
+    fn into_topic(self) -> TopicHash {
+        self
+    }
+}
+
+impl IntoTopic for &TopicHash {
+    fn into_topic(self) -> TopicHash {
+        self.clone()
+    }
+}
+
+impl IntoTopic for String {
+    fn into_topic(self) -> TopicHash {
+        IdentTopic::new(self).hash()
+    }
+}
+
+impl IntoTopic for &String {
+    fn into_topic(self) -> TopicHash {
+        IdentTopic::new(self).hash()
+    }
+}
+
+impl IntoTopic for &str {
+    fn into_topic(self) -> TopicHash {
+        IdentTopic::new(self).hash()
+    }
+}
+
+impl IntoTopic for Vec<u8> {
+    fn into_topic(self) -> TopicHash {
+        let topic = String::from_utf8_lossy(&self);
+        IdentTopic::new(topic).hash()
+    }
+}
+
+impl IntoTopic for &[u8] {
+    fn into_topic(self) -> TopicHash {
+        let topic = String::from_utf8_lossy(self);
+        IdentTopic::new(topic).hash()
+    }
+}
+
+impl IntoTopic for Bytes {
+    fn into_topic(self) -> TopicHash {
+        let topic = String::from_utf8_lossy(&self);
+        IdentTopic::new(topic).hash()
+    }
+}
+
+impl IntoTopic for &Bytes {
+    fn into_topic(self) -> TopicHash {
+        let topic = String::from_utf8_lossy(self);
+        IdentTopic::new(topic).hash()
     }
 }

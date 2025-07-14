@@ -8,6 +8,7 @@ use futures::StreamExt;
 use futures::channel::oneshot;
 use futures::stream::BoxStream;
 use libp2p::PeerId;
+use libp2p::floodsub::Topic;
 
 #[derive(Copy, Clone)]
 pub struct ConnexaFloodsub<'a, T = ()> {
@@ -23,8 +24,9 @@ where
     }
 
     /// Subscribes to a topic in the floodsub network
-    pub async fn subscribe(&self, topic: impl Into<String>) -> std::io::Result<()> {
-        let topic = topic.into();
+    pub async fn subscribe(&self, topic: impl IntoTopic) -> std::io::Result<()> {
+        // TODO: avoid additional allocation
+        let topic = topic.into_topic().id().to_string();
         let (tx, rx) = oneshot::channel();
 
         self.connexa
@@ -46,9 +48,9 @@ where
     /// Creates a listener for a specific topic that returns a stream of pubsub events
     pub async fn listener(
         &self,
-        topic: impl Into<String>,
+        topic: impl IntoTopic,
     ) -> std::io::Result<BoxStream<'static, PubsubEvent<FloodsubMessage>>> {
-        let topic = topic.into();
+        let topic = topic.into_topic();
         let (tx, rx) = oneshot::channel();
 
         self.connexa
@@ -63,8 +65,9 @@ where
     }
 
     /// Unsubscribes from a topic in the floodsub network
-    pub async fn unsubscribe(&self, topic: impl Into<String>) -> std::io::Result<()> {
-        let topic = topic.into();
+    pub async fn unsubscribe(&self, topic: impl IntoTopic) -> std::io::Result<()> {
+        // TODO: avoid additional allocation
+        let topic = topic.into_topic().id().to_string();
         let (tx, rx) = oneshot::channel();
 
         self.connexa
@@ -84,8 +87,9 @@ where
     }
 
     /// Returns a list of peers subscribed to the specified topic
-    pub async fn peers(&self, topic: impl Into<String>) -> std::io::Result<Vec<PeerId>> {
-        let topic = topic.into();
+    pub async fn peers(&self, topic: impl IntoTopic) -> std::io::Result<Vec<PeerId>> {
+        // TODO: avoid additional allocation
+        let topic = topic.into_topic().id().to_string();
         let (tx, rx) = oneshot::channel();
 
         self.connexa
@@ -107,10 +111,10 @@ where
     /// Publishes a message to a single topic in the floodsub network
     pub async fn publish(
         &self,
-        topic: impl Into<String>,
+        topic: impl IntoTopic,
         message: impl Into<Bytes>,
     ) -> std::io::Result<()> {
-        let topic = topic.into();
+        let topic = topic.into_topic();
         let data = message.into();
         let (tx, rx) = oneshot::channel();
 
@@ -132,10 +136,10 @@ where
     /// Publishes a message to any peers in a single topic, regardless if they're subscribed
     pub async fn publish_any(
         &self,
-        topic: impl Into<String>,
+        topic: impl IntoTopic,
         message: impl Into<Bytes>,
     ) -> std::io::Result<()> {
-        let topic = topic.into();
+        let topic = topic.into_topic();
         let data = message.into();
         let (tx, rx) = oneshot::channel();
 
@@ -157,10 +161,13 @@ where
     /// Publishes the same message to multiple topics in the floodsub network
     pub async fn publish_many(
         &self,
-        topics: impl IntoIterator<Item = impl Into<String>>,
+        topics: impl IntoIterator<Item = impl IntoTopic>,
         message: impl Into<Bytes>,
     ) -> std::io::Result<()> {
-        let topics = topics.into_iter().map(|t| t.into()).collect::<Vec<_>>();
+        let topics = topics
+            .into_iter()
+            .map(|t| t.into_topic())
+            .collect::<Vec<_>>();
         let data = message.into();
         let (tx, rx) = oneshot::channel();
 
@@ -182,10 +189,13 @@ where
     /// Publishes the same message to any peers in multiple topics, regardless if they're subscribed
     pub async fn publish_many_any(
         &self,
-        topics: impl IntoIterator<Item = impl Into<String>>,
+        topics: impl IntoIterator<Item = impl IntoTopic>,
         message: impl Into<Bytes>,
     ) -> std::io::Result<()> {
-        let topics = topics.into_iter().map(|t| t.into()).collect::<Vec<_>>();
+        let topics = topics
+            .into_iter()
+            .map(|t| t.into_topic())
+            .collect::<Vec<_>>();
         let data = message.into();
         let (tx, rx) = oneshot::channel();
 
@@ -204,3 +214,67 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 }
+
+pub trait IntoTopic {
+    fn into_topic(self) -> Topic;
+}
+
+impl IntoTopic for String {
+    fn into_topic(self) -> Topic {
+        Topic::new(self)
+    }
+}
+
+impl IntoTopic for &String {
+    fn into_topic(self) -> Topic {
+        Topic::new(self)
+    }
+}
+
+impl IntoTopic for &str {
+    fn into_topic(self) -> Topic {
+        Topic::new(self)
+    }
+}
+
+impl IntoTopic for Topic {
+    fn into_topic(self) -> Topic {
+        self
+    }
+}
+
+impl IntoTopic for &Topic {
+    fn into_topic(self) -> Topic {
+        self.clone()
+    }
+}
+
+impl IntoTopic for Vec<u8> {
+    fn into_topic(self) -> Topic {
+        let topic = String::from_utf8_lossy(&self);
+        Topic::new(topic)
+    }
+}
+
+impl IntoTopic for &[u8] {
+    fn into_topic(self) -> Topic {
+        let topic = String::from_utf8_lossy(self);
+        Topic::new(topic)
+    }
+}
+
+impl IntoTopic for Bytes {
+    fn into_topic(self) -> Topic {
+        let topic = String::from_utf8_lossy(&self);
+        Topic::new(topic)
+    }
+}
+
+impl IntoTopic for &Bytes {
+    fn into_topic(self) -> Topic {
+        let topic = String::from_utf8_lossy(self);
+        Topic::new(topic)
+    }
+}
+
+// TODO: impl IntoTopic for Vec<String> and Vec<&str> and join with a dash?

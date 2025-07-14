@@ -95,7 +95,7 @@ where
                     return;
                 };
 
-                let topic = libp2p::gossipsub::IdentTopic::new(topic);
+                let topic = libp2p::gossipsub::IdentTopic::new(topic.into_string());
                 let ret = match pubsub.publish(topic, data) {
                     Ok(_) => Ok(()),
                     Err(e) => Err(std::io::Error::other(e)),
@@ -108,8 +108,6 @@ where
                     let _ = resp.send(Err(std::io::Error::other("gossipsub is not enabled")));
                     return;
                 }
-
-                let topic = libp2p::gossipsub::IdentTopic::new(topic).hash();
 
                 let (tx, rx) = mpsc::channel(50);
 

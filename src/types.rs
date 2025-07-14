@@ -211,12 +211,12 @@ pub enum PubsubCommand {
     },
     #[cfg(feature = "floodsub")]
     FloodsubListener {
-        topic: String,
+        topic: libp2p::floodsub::Topic,
         resp: oneshot::Sender<Result<mpsc::Receiver<PubsubEvent<FloodsubMessage>>>>,
     },
     #[cfg(feature = "gossipsub")]
     GossipsubListener {
-        topic: String,
+        topic: libp2p::gossipsub::TopicHash,
         resp: oneshot::Sender<Result<mpsc::Receiver<PubsubEvent<GossipsubMessage>>>>,
     },
     #[cfg(any(feature = "floodsub", feature = "gossipsub"))]
@@ -259,7 +259,7 @@ impl PubsubCommand {
 pub enum PubsubPublishType {
     #[cfg(feature = "gossipsub")]
     Gossipsub {
-        topic: String,
+        topic: libp2p::gossipsub::TopicHash,
         data: Bytes,
         resp: oneshot::Sender<Result<()>>,
     },
@@ -270,10 +270,22 @@ pub enum PubsubPublishType {
 #[cfg(feature = "floodsub")]
 #[derive(Debug)]
 pub enum PubsubFloodsubPublish {
-    Publish { topic: String, data: Bytes },
-    PublishAny { topic: String, data: Bytes },
-    PublishMany { topics: Vec<String>, data: Bytes },
-    PublishManyAny { topics: Vec<String>, data: Bytes },
+    Publish {
+        topic: libp2p::floodsub::Topic,
+        data: Bytes,
+    },
+    PublishAny {
+        topic: libp2p::floodsub::Topic,
+        data: Bytes,
+    },
+    PublishMany {
+        topics: Vec<libp2p::floodsub::Topic>,
+        data: Bytes,
+    },
+    PublishManyAny {
+        topics: Vec<libp2p::floodsub::Topic>,
+        data: Bytes,
+    },
 }
 
 #[cfg(feature = "autonat")]
