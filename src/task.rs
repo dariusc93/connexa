@@ -37,15 +37,15 @@ use crate::{TEventCallback, TPollableCallback, TSwarmEventCallback, TTaskCallbac
 
 #[cfg(feature = "gossipsub")]
 use crate::types::GossipsubMessage;
-#[cfg(any(feature = "floodsub", feature = "gossipsub"))]
-use crate::types::PubsubEvent;
 #[cfg(feature = "request-response")]
 use crate::types::RequestResponseCommand;
 #[cfg(feature = "kad")]
 use crate::types::{DHTCommand, DHTEvent, RecordHandle};
 #[cfg(feature = "floodsub")]
-use crate::types::{FloodsubMessage, PubsubFloodsubPublish};
+use crate::types::{FloodsubEvent, FloodsubMessage, PubsubFloodsubPublish};
 
+#[cfg(feature = "gossipsub")]
+use crate::types::GossipsubEvent;
 #[cfg(feature = "stream")]
 use crate::types::StreamCommand;
 use crate::types::{BlacklistCommand, ConnectionLimitsCommand, WhitelistCommand};
@@ -62,8 +62,6 @@ use libp2p::autonat::v2::client::Event as AutonatV2ClientEvent;
 use libp2p::autonat::v2::server::Event as AutonatV2ServerEvent;
 #[cfg(all(feature = "relay", feature = "dcutr"))]
 use libp2p::dcutr::Event as DcutrEvent;
-#[cfg(feature = "gossipsub")]
-use libp2p::gossipsub::Event as GossipsubEvent;
 #[cfg(feature = "identify")]
 use libp2p::identify::Event as IdentifyEvent;
 #[cfg(feature = "kad")]
@@ -162,10 +160,9 @@ where
 
     #[cfg(feature = "gossipsub")]
     pub gossipsub_listener:
-        IndexMap<libp2p::gossipsub::TopicHash, Vec<mpsc::Sender<PubsubEvent<GossipsubMessage>>>>,
+        IndexMap<libp2p::gossipsub::TopicHash, Vec<mpsc::Sender<GossipsubEvent>>>,
     #[cfg(feature = "floodsub")]
-    pub floodsub_listener:
-        IndexMap<libp2p::floodsub::Topic, Vec<mpsc::Sender<PubsubEvent<FloodsubMessage>>>>,
+    pub floodsub_listener: IndexMap<libp2p::floodsub::Topic, Vec<mpsc::Sender<FloodsubEvent>>>,
 
     #[cfg(feature = "rendezvous")]
     pub pending_rendezvous_register:

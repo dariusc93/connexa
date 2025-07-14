@@ -1,5 +1,5 @@
 use crate::handle::Connexa;
-use crate::types::{FloodsubCommand, FloodsubMessage, PubsubEvent, PubsubFloodsubPublish};
+use crate::types::{FloodsubCommand, FloodsubEvent, PubsubFloodsubPublish};
 use bytes::Bytes;
 use futures::StreamExt;
 use futures::channel::oneshot;
@@ -37,7 +37,7 @@ where
     pub async fn listener(
         &self,
         topic: impl IntoTopic,
-    ) -> std::io::Result<BoxStream<'static, PubsubEvent<FloodsubMessage>>> {
+    ) -> std::io::Result<BoxStream<'static, FloodsubEvent>> {
         let topic = topic.into_topic();
         let (tx, rx) = oneshot::channel();
 

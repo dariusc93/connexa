@@ -1,5 +1,5 @@
 use clap::Parser;
-use connexa::prelude::{DefaultConnexaBuilder, GossipsubMessage, Multiaddr, PubsubEvent};
+use connexa::prelude::{DefaultConnexaBuilder, GossipsubEvent, GossipsubMessage, Multiaddr};
 use futures::FutureExt;
 use futures::StreamExt;
 use rustyline_async::Readline;
@@ -68,13 +68,13 @@ async fn main() -> std::io::Result<()> {
         tokio::select! {
             Some(event) = listener.next() => {
                 match event {
-                    PubsubEvent::Subscribed{ peer_id } => {
+                    GossipsubEvent::Subscribed{ peer_id } => {
                         writeln!(stdout, "[{}] subscribed", peer_id)?;
                     },
-                    PubsubEvent::Unsubscribed{ peer_id } => {
+                    GossipsubEvent::Unsubscribed{ peer_id } => {
                         writeln!(stdout, "[{}] unsubscribed", peer_id)?;
                     },
-                    PubsubEvent::Message{ message: GossipsubMessage {
+                    GossipsubEvent::Message{ message: GossipsubMessage {
                             source: Some(peer_id),
                             data,
                             ..

@@ -1,8 +1,8 @@
-use crate::prelude::{FloodsubMessage, PubsubEvent, PubsubFloodsubPublish};
+use crate::prelude::{FloodsubMessage, PubsubFloodsubPublish};
 use crate::task::ConnexaTask;
-use crate::types::FloodsubCommand;
+use crate::types::{FloodsubCommand, FloodsubEvent};
 use futures::channel::mpsc;
-use libp2p::floodsub::Event as FloodsubEvent;
+use libp2p::floodsub::Event;
 use libp2p::swarm::NetworkBehaviour;
 use std::fmt::Debug;
 
@@ -92,9 +92,9 @@ where
         }
     }
 
-    pub fn process_floodsub_event(&mut self, event: FloodsubEvent) {
+    pub fn process_floodsub_event(&mut self, event: Event) {
         let (topics, event) = match event {
-            FloodsubEvent::Message(libp2p::floodsub::FloodsubMessage {
+            Event::Message(libp2p::floodsub::FloodsubMessage {
                 source,
                 data,
                 sequence_number,
@@ -106,16 +106,16 @@ where
                     sequence_number,
                 };
 
-                let event = PubsubEvent::Message { message };
+                let event = FloodsubEvent::Message { message };
 
                 (topics, event)
             }
-            FloodsubEvent::Subscribed { peer_id, topic } => {
-                let event = PubsubEvent::Subscribed { peer_id };
+            Event::Subscribed { peer_id, topic } => {
+                let event = FloodsubEvent::Subscribed { peer_id };
                 (vec![topic], event)
             }
-            FloodsubEvent::Unsubscribed { peer_id, topic } => {
-                let event = PubsubEvent::Unsubscribed { peer_id };
+            Event::Unsubscribed { peer_id, topic } => {
+                let event = FloodsubEvent::Unsubscribed { peer_id };
                 (vec![topic], event)
             }
         };

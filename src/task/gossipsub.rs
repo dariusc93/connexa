@@ -1,8 +1,8 @@
-use crate::prelude::{GossipsubMessage, PubsubEvent};
+use crate::prelude::GossipsubMessage;
 use crate::task::ConnexaTask;
-use crate::types::GossipsubCommand;
+use crate::types::{GossipsubCommand, GossipsubEvent};
 use futures::channel::mpsc;
-use libp2p::gossipsub::Event as GossipsubEvent;
+use libp2p::gossipsub::Event;
 use libp2p::swarm::NetworkBehaviour;
 use std::fmt::Debug;
 
@@ -99,9 +99,9 @@ where
         }
     }
 
-    pub fn process_gossipsub_event(&mut self, event: GossipsubEvent) {
+    pub fn process_gossipsub_event(&mut self, event: Event) {
         let (topic, event) = match event {
-            GossipsubEvent::Message {
+            Event::Message {
                 propagation_source,
                 message,
                 message_id,
@@ -116,23 +116,23 @@ where
                     propagate_message: None,
                 };
 
-                let event = PubsubEvent::Message { message };
+                let event = GossipsubEvent::Message { message };
 
                 (topic, event)
             }
-            GossipsubEvent::Subscribed { peer_id, topic } => {
-                let event = PubsubEvent::Subscribed { peer_id };
+            Event::Subscribed { peer_id, topic } => {
+                let event = GossipsubEvent::Subscribed { peer_id };
                 (topic, event)
             }
-            GossipsubEvent::Unsubscribed { peer_id, topic } => {
-                let event = PubsubEvent::Unsubscribed { peer_id };
+            Event::Unsubscribed { peer_id, topic } => {
+                let event = GossipsubEvent::Unsubscribed { peer_id };
                 (topic, event)
             }
-            GossipsubEvent::GossipsubNotSupported { peer_id } => {
+            Event::GossipsubNotSupported { peer_id } => {
                 tracing::info!(%peer_id, "peer does not support gossipsub");
                 return;
             }
-            GossipsubEvent::SlowPeer {
+            Event::SlowPeer {
                 peer_id,
                 failed_messages,
             } => {

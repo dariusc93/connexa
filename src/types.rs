@@ -66,7 +66,7 @@ impl<T> From<GossipsubCommand> for Command<T> {
     }
 }
 
-#[cfg(any(feature = "floodsub", feature = "gossipsub"))]
+#[cfg(feature = "floodsub")]
 impl<T> From<FloodsubCommand> for Command<T> {
     fn from(cmd: FloodsubCommand) -> Self {
         Command::Floodsub(cmd)
@@ -197,7 +197,7 @@ pub enum FloodsubCommand {
     },
     FloodsubListener {
         topic: libp2p::floodsub::Topic,
-        resp: oneshot::Sender<Result<mpsc::Receiver<PubsubEvent<FloodsubMessage>>>>,
+        resp: oneshot::Sender<Result<mpsc::Receiver<FloodsubEvent>>>,
     },
     Publish(PubsubFloodsubPublish, oneshot::Sender<Result<()>>),
 }
@@ -222,7 +222,7 @@ pub enum GossipsubCommand {
     },
     GossipsubListener {
         topic: libp2p::gossipsub::TopicHash,
-        resp: oneshot::Sender<Result<mpsc::Receiver<PubsubEvent<GossipsubMessage>>>>,
+        resp: oneshot::Sender<Result<mpsc::Receiver<GossipsubEvent>>>,
     },
     Publish {
         topic: libp2p::gossipsub::TopicHash,
@@ -462,12 +462,20 @@ impl<R: Clone> Clone for RecordHandle<R> {
     }
 }
 
-#[cfg(any(feature = "floodsub", feature = "gossipsub"))]
+#[cfg(feature = "gossipsub")]
 #[derive(Debug, Clone)]
-pub enum PubsubEvent<M> {
+pub enum GossipsubEvent {
     Subscribed { peer_id: PeerId },
     Unsubscribed { peer_id: PeerId },
-    Message { message: M },
+    Message { message: GossipsubMessage },
+}
+
+#[cfg(feature = "floodsub")]
+#[derive(Debug, Clone)]
+pub enum FloodsubEvent {
+    Subscribed { peer_id: PeerId },
+    Unsubscribed { peer_id: PeerId },
+    Message { message: FloodsubMessage },
 }
 
 #[cfg(feature = "gossipsub")]
