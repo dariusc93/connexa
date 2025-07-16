@@ -1,6 +1,6 @@
-use bytes::Bytes;
 use crate::handle::Connexa;
 use crate::types::StreamCommand;
+use bytes::Bytes;
 use futures::channel::oneshot;
 use libp2p::{PeerId, StreamProtocol};
 
