@@ -75,8 +75,15 @@ pub(crate) struct Config {
     #[cfg(feature = "kad")]
     pub kademlia_config: (String, Box<dyn FnOnce(KadConfig) -> KadConfig>),
     #[cfg(feature = "gossipsub")]
-    pub gossipsub_config:
-        Box<dyn FnOnce(libp2p::gossipsub::ConfigBuilder) -> libp2p::gossipsub::ConfigBuilder>,
+    pub gossipsub_config: Box<
+        dyn FnOnce(
+            &Keypair,
+            libp2p::gossipsub::ConfigBuilder,
+        ) -> (
+            libp2p::gossipsub::ConfigBuilder,
+            libp2p::gossipsub::MessageAuthenticity,
+        ),
+    >,
     #[cfg(feature = "floodsub")]
     pub floodsub_config: Box<dyn FnOnce(FloodsubConfig) -> FloodsubConfig>,
     #[cfg(feature = "ping")]
@@ -102,7 +109,12 @@ impl Default for Config {
             #[cfg(feature = "kad")]
             kademlia_config: ("/ipfs/kad/1.0.0".to_string(), Box::new(|config| config)),
             #[cfg(feature = "gossipsub")]
-            gossipsub_config: Box::new(|config| config),
+            gossipsub_config: Box::new(|keypair, config| {
+                (
+                    config,
+                    libp2p::gossipsub::MessageAuthenticity::Signed(keypair.clone()),
+                )
+            }),
             #[cfg(feature = "floodsub")]
             floodsub_config: Box::new(|config| config),
             #[cfg(feature = "ping")]
@@ -371,14 +383,25 @@ where
     /// Enables gossipsub
     #[cfg(feature = "gossipsub")]
     pub fn with_gossipsub(self) -> Self {
-        self.with_gossipsub_with_config(|config| config)
+        self.with_gossipsub_with_config(|keypair, config| {
+            (
+                config,
+                libp2p::gossipsub::MessageAuthenticity::Signed(keypair.clone()),
+            )
+        })
     }
 
     /// Enables gossipsub with custom configuration
     #[cfg(feature = "gossipsub")]
     pub fn with_gossipsub_with_config<F>(mut self, config: F) -> Self
     where
-        F: FnOnce(libp2p::gossipsub::ConfigBuilder) -> libp2p::gossipsub::ConfigBuilder + 'static,
+        F: FnOnce(
+                &Keypair,
+                libp2p::gossipsub::ConfigBuilder,
+            ) -> (
+                libp2p::gossipsub::ConfigBuilder,
+                libp2p::gossipsub::MessageAuthenticity,
+            ) + 'static,
     {
         self.protocols.gossipsub = true;
         self.config.gossipsub_config = Box::new(config);

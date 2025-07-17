@@ -221,16 +221,10 @@ where
             .gossipsub
             .then(|| {
                 let config_fn = config.gossipsub_config;
-                let config_builder = libp2p::gossipsub::ConfigBuilder::default();
-                let config = config_fn(config_builder)
-                    .build()
-                    .expect("valid configuration");
-                // TODO: Customize message authenticity
-                libp2p::gossipsub::Behaviour::new(
-                    libp2p::gossipsub::MessageAuthenticity::Signed(keypair.clone()),
-                    config,
-                )
-                .expect("valid configuration")
+                let (config_builder, auth) =
+                    config_fn(&keypair, libp2p::gossipsub::ConfigBuilder::default());
+                let config = config_builder.build().expect("valid configuration");
+                libp2p::gossipsub::Behaviour::new(auth, config).expect("valid configuration")
             })
             .into();
 
