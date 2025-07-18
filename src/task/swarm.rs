@@ -4,6 +4,7 @@ use crate::prelude::ConnectionEvent;
 use crate::task::ConnexaTask;
 use libp2p::swarm::NetworkBehaviour;
 use libp2p::swarm::SwarmEvent;
+use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 
 impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>
@@ -121,6 +122,11 @@ where
                 if let Some(ch) = self.pending_listen_on.shift_remove(&listener_id) {
                     let _ = ch.send(Ok(listener_id));
                 }
+
+                self.listener_addresses
+                    .entry(listener_id)
+                    .or_default()
+                    .push(address);
             }
             SwarmEvent::ExpiredListenAddr {
                 listener_id,
@@ -128,6 +134,12 @@ where
             } => {
                 // TODO: Determine if we should remove the address from external addresses
                 tracing::info!(%listener_id, %address, "expired listen address");
+                if let Entry::Occupied(mut entry) = self.listener_addresses.entry(listener_id) {
+                    entry.get_mut().retain(|addr| *addr != address);
+                    if entry.get().is_empty() {
+                        entry.remove();
+                    }
+                }
             }
             SwarmEvent::ListenerClosed {
                 listener_id,
@@ -135,6 +147,7 @@ where
                 reason,
             } => {
                 tracing::info!(%listener_id, ?addresses, ?reason, "listener closed");
+                self.listener_addresses.remove(&listener_id);
                 if let Some(ch) = self.pending_remove_listener.shift_remove(&listener_id) {
                     let _ = ch.send(reason.map_err(std::io::Error::other));
                 }

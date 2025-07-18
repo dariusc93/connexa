@@ -140,6 +140,10 @@ pub enum SwarmCommand {
         address: Multiaddr,
         resp: oneshot::Sender<Result<ListenerId>>,
     },
+    GetListeningAddress {
+        id: ListenerId,
+        resp: oneshot::Sender<Result<Vec<Multiaddr>>>,
+    },
     RemoveListener {
         listener_id: ListenerId,
         resp: oneshot::Sender<Result<()>>,

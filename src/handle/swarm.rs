@@ -99,6 +99,21 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
+    /// Get a listening address by an existing [`ListenerId`]
+    pub async fn get_listening_addresses(
+        &self,
+        id: ListenerId,
+    ) -> crate::handle::Result<Vec<Multiaddr>> {
+        let (tx, rx) = oneshot::channel();
+        self.connexa
+            .to_task
+            .clone()
+            .send(SwarmCommand::GetListeningAddress { id, resp: tx }.into())
+            .await?;
+
+        rx.await.map_err(std::io::Error::other)?
+    }
+
     /// Stops listening on the address associated with the given ListernerId
     pub async fn remove_listener(&self, listener_id: ListenerId) -> crate::handle::Result<()> {
         let (tx, rx) = oneshot::channel();

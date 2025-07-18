@@ -94,7 +94,7 @@ use libp2p::{Multiaddr, PeerId, Swarm};
 use pollable_map::futures::set::FutureSet;
 use pollable_map::optional::Optional;
 use pollable_map::stream::StreamMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -114,6 +114,8 @@ where
     pub custom_pollable_callback: TPollableCallback<C, X>,
 
     pub connection_listeners: Vec<mpsc::Sender<ConnectionEvent>>,
+
+    pub listener_addresses: HashMap<ListenerId, Vec<Multiaddr>>,
 
     /// A listener for sending dht events
     #[cfg(feature = "kad")]
@@ -212,6 +214,7 @@ where
             custom_pollable_callback: Box::new(|_, _, _| Poll::Pending),
             swarm_event_callback: Box::new(|_| ()),
             connection_listeners: Vec::new(),
+            listener_addresses: HashMap::new(),
             #[cfg(feature = "kad")]
             dht_event_sender: Default::default(),
             #[cfg(feature = "kad")]
@@ -349,11 +352,20 @@ where
                     };
                     self.pending_listen_on.insert(id, resp);
                 }
+                SwarmCommand::GetListeningAddress { id, resp } => {
+                    let Some(addrs) = self.listener_addresses.get(&id) else {
+                        let _ = resp.send(Err(std::io::Error::other("listener not found")));
+                        return;
+                    };
+
+                    let _ = resp.send(Ok(addrs.clone()));
+                }
                 SwarmCommand::RemoveListener { listener_id, resp } => {
                     if !swarm.remove_listener(listener_id) {
                         let _ = resp.send(Err(std::io::Error::other("listener not found")));
                         return;
                     }
+                    self.listener_addresses.remove(&listener_id);
                     self.pending_remove_listener.insert(listener_id, resp);
                 }
                 SwarmCommand::AddExternalAddress { address, resp } => {
