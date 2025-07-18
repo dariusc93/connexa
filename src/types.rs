@@ -7,7 +7,7 @@ use futures::stream::BoxStream;
 use indexmap::IndexSet;
 use libp2p::core::ConnectedPoint;
 #[cfg(feature = "gossipsub")]
-use libp2p::gossipsub::MessageId;
+use libp2p::gossipsub::{MessageAcceptance, MessageId};
 #[cfg(feature = "kad")]
 use libp2p::kad::{Mode, PeerInfo, PeerRecord, ProviderRecord, Quorum, Record, RecordKey};
 #[cfg(feature = "rendezvous")]
@@ -232,6 +232,12 @@ pub enum GossipsubCommand {
         topic: libp2p::gossipsub::TopicHash,
         data: Bytes,
         resp: oneshot::Sender<Result<()>>,
+    },
+    ReportMessage {
+        peer_id: PeerId,
+        message_id: MessageId,
+        accept: MessageAcceptance,
+        resp: oneshot::Sender<Result<bool>>,
     },
 }
 
@@ -467,7 +473,7 @@ impl<R: Clone> Clone for RecordHandle<R> {
 }
 
 #[cfg(feature = "gossipsub")]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GossipsubEvent {
     Subscribed { peer_id: PeerId },
     Unsubscribed { peer_id: PeerId },
@@ -475,7 +481,7 @@ pub enum GossipsubEvent {
 }
 
 #[cfg(feature = "floodsub")]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FloodsubEvent {
     Subscribed { peer_id: PeerId },
     Unsubscribed { peer_id: PeerId },
@@ -483,7 +489,7 @@ pub enum FloodsubEvent {
 }
 
 #[cfg(feature = "gossipsub")]
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct GossipsubMessage {
     pub message_id: MessageId,
@@ -491,39 +497,10 @@ pub struct GossipsubMessage {
     pub source: Option<PeerId>,
     pub data: Bytes,
     pub sequence_number: Option<u64>,
-    pub propagate_message: Option<oneshot::Sender<Result<MessageId>>>,
-}
-
-#[cfg(feature = "gossipsub")]
-impl GossipsubMessage {
-    pub fn inject_channel(&self, ch: oneshot::Sender<Result<MessageId>>) -> GossipsubMessage {
-        GossipsubMessage {
-            message_id: self.message_id.clone(),
-            propagated_source: self.propagated_source,
-            source: self.source,
-            data: self.data.clone(),
-            sequence_number: self.sequence_number,
-            propagate_message: Some(ch),
-        }
-    }
-}
-
-#[cfg(feature = "gossipsub")]
-impl Clone for GossipsubMessage {
-    fn clone(&self) -> Self {
-        GossipsubMessage {
-            message_id: self.message_id.clone(),
-            propagated_source: self.propagated_source,
-            source: self.source,
-            data: self.data.clone(),
-            sequence_number: self.sequence_number,
-            propagate_message: None,
-        }
-    }
 }
 
 #[cfg(feature = "floodsub")]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct FloodsubMessage {
     pub source: PeerId,

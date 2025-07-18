@@ -5,7 +5,7 @@ use futures::StreamExt;
 use futures::channel::oneshot;
 use futures::stream::BoxStream;
 use libp2p::PeerId;
-use libp2p::gossipsub::{Hasher, IdentTopic, Topic, TopicHash};
+use libp2p::gossipsub::{Hasher, IdentTopic, MessageAcceptance, MessageId, Topic, TopicHash};
 
 #[derive(Copy, Clone)]
 pub struct ConnexaGossipsub<'a, T> {
@@ -101,6 +101,32 @@ where
                     resp: tx,
                 }
                 .into(),
+            )
+            .await?;
+
+        rx.await.map_err(std::io::Error::other)?
+    }
+
+    /// Reports validation results to the gossipsub system for a received message
+    pub async fn report_message(
+        &self,
+        peer_id: PeerId,
+        message_id: MessageId,
+        message_acceptance: MessageAcceptance,
+    ) -> std::io::Result<bool> {
+        let (tx, rx) = oneshot::channel();
+
+        self.connexa
+            .to_task
+            .clone()
+            .send(
+                GossipsubCommand::ReportMessage {
+                    peer_id,
+                    message_id,
+                    accept: message_acceptance,
+                    resp: tx,
+                }
+                    .into(),
             )
             .await?;
 

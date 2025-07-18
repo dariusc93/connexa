@@ -1,10 +1,12 @@
 use crate::prelude::GossipsubMessage;
 use crate::task::ConnexaTask;
 use crate::types::{GossipsubCommand, GossipsubEvent};
-use futures::channel::mpsc;
+use futures::channel::{mpsc, oneshot};
 use libp2p::gossipsub::Event;
 use libp2p::swarm::NetworkBehaviour;
 use std::fmt::Debug;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>
 where
@@ -96,6 +98,22 @@ where
 
                 let _ = resp.send(Ok(rx));
             }
+            GossipsubCommand::ReportMessage {
+                peer_id,
+                message_id,
+                accept,
+                resp,
+            } => {
+                let Some(pubsub) = swarm.behaviour_mut().gossipsub.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("gossipsub is not enabled")));
+                    return;
+                };
+
+                let is_stored_in_cache =
+                    pubsub.report_message_validation_result(&message_id, &peer_id, accept);
+
+                let _ = resp.send(Ok(is_stored_in_cache));
+            }
         }
     }
 
@@ -113,7 +131,6 @@ where
                     source: message.source,
                     sequence_number: message.sequence_number,
                     data: message.data.into(),
-                    propagate_message: None,
                 };
 
                 let event = GossipsubEvent::Message { message };
@@ -147,7 +164,6 @@ where
 
         // Should we retain the list too for any closed channels?
         for ch in chs {
-            // TODO: Perform a check to see if the message needs propagation?
             let _ = ch.try_send(event.clone());
         }
     }

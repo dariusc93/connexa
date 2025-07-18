@@ -62,6 +62,8 @@ use libp2p::autonat::v2::client::Event as AutonatV2ClientEvent;
 use libp2p::autonat::v2::server::Event as AutonatV2ServerEvent;
 #[cfg(all(feature = "relay", feature = "dcutr"))]
 use libp2p::dcutr::Event as DcutrEvent;
+#[cfg(feature = "gossipsub")]
+use libp2p::gossipsub::{MessageAcceptance, MessageId, Topic, TopicHash};
 #[cfg(feature = "identify")]
 use libp2p::identify::Event as IdentifyEvent;
 #[cfg(feature = "kad")]
@@ -91,6 +93,7 @@ use libp2p::swarm::{ConnectionId, NetworkBehaviour, SwarmEvent};
 #[cfg(not(target_arch = "wasm32"))]
 use libp2p::upnp::Event as UpnpEvent;
 use libp2p::{Multiaddr, PeerId, Swarm};
+use pollable_map::futures::FutureMap;
 use pollable_map::futures::set::FutureSet;
 use pollable_map::optional::Optional;
 use pollable_map::stream::StreamMap;
@@ -193,6 +196,10 @@ where
         >,
     >,
 
+    #[cfg(feature = "gossipsub")]
+    pub gossipsub_can_propagate:
+        FutureMap<(PeerId, MessageId), oneshot::Receiver<std::io::Result<MessageAcceptance>>>,
+
     pub cleanup_timer: Delay,
     pub cleanup_interval: Duration,
 }
@@ -251,6 +258,8 @@ where
             floodsub_listener: Default::default(),
             #[cfg(feature = "gossipsub")]
             gossipsub_listener: Default::default(),
+            #[cfg(feature = "gossipsub")]
+            gossipsub_can_propagate: Default::default(),
             #[cfg(feature = "rendezvous")]
             pending_rendezvous_discover: Default::default(),
             #[cfg(feature = "rendezvous")]
@@ -580,6 +589,60 @@ where
             let this = &mut *self;
             if let Some(swarm) = this.swarm.as_mut() {
                 let _ = (this.custom_pollable_callback)(cx, swarm, &mut this.context);
+            }
+        }
+
+        #[cfg(feature = "gossipsub")]
+        while let Poll::Ready(Some(((propagation_source, message_id), result))) =
+            self.gossipsub_can_propagate.poll_next_unpin(cx)
+        {
+            match result {
+                Ok(Ok(acceptance)) => {
+                    tracing::trace!(?acceptance, "received message acceptance");
+                    let gossipsub = self
+                        .swarm
+                        .as_mut()
+                        .unwrap()
+                        .behaviour_mut()
+                        .gossipsub
+                        .as_mut()
+                        .unwrap();
+
+                    if !gossipsub.report_message_validation_result(
+                        &message_id,
+                        &propagation_source,
+                        acceptance,
+                    ) {
+                        tracing::warn!(
+                            ?propagation_source,
+                            ?message_id,
+                            "message not in cache. ignoring..."
+                        );
+                        continue;
+                    }
+                    tracing::trace!(
+                        ?propagation_source,
+                        ?message_id,
+                        "reported message validation"
+                    );
+                }
+                Ok(Err(e)) => {
+                    tracing::error!(
+                        ?propagation_source,
+                        ?message_id,
+                        ?e,
+                        "failed to report message validation"
+                    );
+                    continue;
+                }
+                Err(e) => {
+                    tracing::error!(
+                        ?propagation_source,
+                        ?message_id,
+                        ?e,
+                        "failed to report message validation"
+                    );
+                }
             }
         }
 
