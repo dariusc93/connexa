@@ -89,14 +89,16 @@ pub mod prelude {
 
     #[cfg(feature = "gossipsub")]
     pub mod gossipsub {
+        pub use crate::handle::gossipsub::IntoTopic as IntoGossipsubTopic;
         pub use libp2p::gossipsub::{
             AllowAllSubscriptionFilter, Config, ConfigBuilder, Event, IdentTopic, Message,
-            MessageId, Sha256Topic, Topic, TopicHash, ValidationMode, Version,
+            MessageAuthenticity, MessageId, Sha256Topic, Topic, TopicHash, ValidationMode, Version,
         };
     }
 
     #[cfg(feature = "floodsub")]
     pub mod floodsub {
+        pub use crate::handle::floodsub::IntoTopic as IntoFloodsubTopic;
         pub use libp2p::floodsub::{Config, Event, Topic};
     }
 

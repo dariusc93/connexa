@@ -4,9 +4,9 @@ mod blacklist;
 #[cfg(feature = "kad")]
 pub(crate) mod dht;
 #[cfg(feature = "floodsub")]
-mod floodsub;
+pub(crate) mod floodsub;
 #[cfg(feature = "gossipsub")]
-mod gossipsub;
+pub(crate) mod gossipsub;
 #[cfg(feature = "rendezvous")]
 mod rendezvous;
 #[cfg(feature = "request-response")]
