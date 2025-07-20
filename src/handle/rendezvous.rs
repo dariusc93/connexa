@@ -5,7 +5,6 @@ use libp2p::rendezvous::Cookie;
 use libp2p::{Multiaddr, PeerId};
 use std::io;
 
-#[allow(dead_code)]
 #[derive(Copy, Clone)]
 pub struct ConnexaRendezvous<'a, T> {
     connexa: &'a Connexa<T>,
