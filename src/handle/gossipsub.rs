@@ -235,3 +235,12 @@ impl IntoTopic for Vec<&str> {
         IntoTopic::into_topic(topic)
     }
 }
+
+impl<F> IntoTopic for F
+where
+    F: FnOnce() -> TopicHash,
+{
+    fn into_topic(self) -> TopicHash {
+        self()
+    }
+}

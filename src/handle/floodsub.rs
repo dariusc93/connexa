@@ -252,3 +252,12 @@ impl IntoTopic for Vec<&str> {
         Topic::new(topic)
     }
 }
+
+impl<F> IntoTopic for F
+where
+    F: FnOnce() -> Topic,
+{
+    fn into_topic(self) -> Topic {
+        self()
+    }
+}
