@@ -1,5 +1,7 @@
 use clap::Parser;
-use connexa::prelude::{DefaultConnexaBuilder, GossipsubEvent, GossipsubMessage, Multiaddr};
+use connexa::prelude::{
+    DefaultConnexaBuilder, GossipsubEvent, GossipsubMessage, Multiaddr, Protocol,
+};
 use futures::FutureExt;
 use futures::StreamExt;
 use rustyline_async::Readline;
@@ -35,10 +37,16 @@ async fn main() -> std::io::Result<()> {
         false => opt.listener,
     };
 
+    let mut listener_ids = Vec::with_capacity(addrs.len());
+
     for addr in addrs {
-        if let Err(e) = connexa.swarm().listen_on(addr.clone()).await {
-            println!("failed to listen on {}: {}", addr, e);
-        }
+        match connexa.swarm().listen_on(addr.clone()).await {
+            Ok(id) => listener_ids.push(id),
+            Err(e) => {
+                println!("failed to listen on {addr}: {e}");
+                continue;
+            }
+        };
     }
 
     let topic = opt.topic.unwrap_or_else(|| "test-net".to_string());
@@ -60,8 +68,16 @@ async fn main() -> std::io::Result<()> {
     let (mut rl, mut stdout) =
         Readline::new(format!("{peer_id} >")).map_err(std::io::Error::other)?;
 
-    for addr in listen_addr {
-        writeln!(stdout, "> listening on {}", addr)?;
+    for listener_id in listener_ids {
+        if let Ok(addrs) = connexa.swarm().get_listening_addresses(listener_id).await {
+            for addr in addrs {
+                writeln!(
+                    stdout,
+                    "> listening on {}",
+                    addr.with(Protocol::P2p(peer_id))
+                )?;
+            }
+        }
     }
 
     loop {
