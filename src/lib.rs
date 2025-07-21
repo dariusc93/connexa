@@ -92,7 +92,8 @@ pub mod prelude {
         pub use crate::handle::gossipsub::IntoTopic as IntoGossipsubTopic;
         pub use libp2p::gossipsub::{
             AllowAllSubscriptionFilter, Config, ConfigBuilder, Event, IdentTopic, Message,
-            MessageAuthenticity, MessageId, Sha256Topic, Topic, TopicHash, ValidationMode, Version,
+            MessageAcceptance, MessageAuthenticity, MessageId, Sha256Topic, Topic, TopicHash,
+            ValidationMode, Version,
         };
     }
 
