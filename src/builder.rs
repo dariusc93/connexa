@@ -538,7 +538,7 @@ where
     }
 
     /// Set a custom behaviour
-    /// Note that if you want to communicate or interact with the behaviour that you would need to set a callback via
+    /// Note that if you want to communicate or interact with the behaviour, you would need to set a callback via
     /// `custom_event_callback` and `custom_task_callback`.
     pub fn with_custom_behaviour<F>(mut self, f: F) -> Self
     where
