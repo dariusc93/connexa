@@ -114,7 +114,7 @@ async fn main() -> io::Result<()> {
         connexa.swarm().dial(address).await?;
         let c = connexa.clone();
         let protocol = protocol.clone();
-        tokio::spawn(connection_handler(protocol, peer_id, c));
+        tokio::spawn(connection_handler(protocol, peer_id, c, data_size));
     }
 
     tokio::signal::ctrl_c().await?;
@@ -122,7 +122,7 @@ async fn main() -> io::Result<()> {
     Ok(())
 }
 
-async fn connection_handler(protocol: StreamProtocol, peer: PeerId, connexa: Connexa) {
+async fn connection_handler(protocol: StreamProtocol, peer: PeerId, connexa: Connexa, size: usize) {
     loop {
         tokio::time::sleep(Duration::from_secs(1)).await;
         let stream = match connexa.stream().open_stream(peer, protocol.clone()).await {
@@ -133,7 +133,7 @@ async fn connection_handler(protocol: StreamProtocol, peer: PeerId, connexa: Con
             }
         };
 
-        if let Err(e) = send(stream).await {
+        if let Err(e) = send(stream, size).await {
             tracing::warn!(%peer, "Echo protocol failed: {e}");
             continue;
         }
@@ -158,8 +158,8 @@ async fn echo(size: usize, mut stream: Stream) -> std::io::Result<usize> {
     }
 }
 
-async fn send(mut stream: Stream) -> io::Result<()> {
-    let num_bytes = rand::random::<usize>() % 1000;
+async fn send(mut stream: Stream, size: usize) -> io::Result<()> {
+    let num_bytes = rand::random::<usize>() % size;
 
     let mut bytes = vec![0; num_bytes];
     rand::thread_rng().fill_bytes(&mut bytes);
