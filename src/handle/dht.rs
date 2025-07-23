@@ -265,7 +265,6 @@ impl<const N: usize> ToRecordKey for [u8; N] {
 
 impl ToRecordKey for Bytes {
     fn to_record_key(self) -> RecordKey {
-        // TODO: Implement conversion upstream
         self.to_vec().into()
     }
 }
