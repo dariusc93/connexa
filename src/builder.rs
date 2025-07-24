@@ -640,7 +640,7 @@ where
     /// Enables secure websocket transport
     #[cfg(feature = "websocket")]
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn enable_secure_websocket_woth_pem(mut self, keypair: String, certs: Vec<String>) -> Self {
+    pub fn enable_secure_websocket_with_pem(mut self, keypair: String, certs: Vec<String>) -> Self {
         self.transport_config.enable_secure_websocket = true;
         self.transport_config.enable_websocket = true;
         self.transport_config.websocket_pem = Some((certs, keypair));
@@ -650,12 +650,12 @@ where
     /// Enables secure websocket transport
     #[cfg(feature = "websocket")]
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn enable_secure_websocket_woth_config<F>(self, f: F) -> std::io::Result<Self>
+    pub fn enable_secure_websocket_with_config<F>(self, f: F) -> std::io::Result<Self>
     where
         F: FnOnce(&Keypair) -> std::io::Result<(Vec<String>, String)>,
     {
         let (certs, keypair) = f(&self.keypair)?;
-        Ok(self.enable_secure_websocket_woth_pem(keypair, certs))
+        Ok(self.enable_secure_websocket_with_pem(keypair, certs))
     }
 
     /// Enables DNS
