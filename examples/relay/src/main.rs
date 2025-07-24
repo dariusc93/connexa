@@ -119,7 +119,7 @@ async fn main() -> io::Result<()> {
             assert!(!listening_addrs.is_empty());
 
             for addr in listening_addrs {
-                println!("> Use {}", addr);
+                println!("> Use {addr}");
             }
         }
         Mode::Server => {

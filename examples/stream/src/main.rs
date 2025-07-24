@@ -70,7 +70,7 @@ async fn main() -> io::Result<()> {
 
     for addr in addrs {
         if let Err(e) = connexa.swarm().listen_on(addr.clone()).await {
-            println!("failed to listen on {}: {}", addr, e);
+            println!("failed to listen on {addr}: {e}");
         }
     }
 
@@ -80,7 +80,7 @@ async fn main() -> io::Result<()> {
 
     for addr in addrs {
         let addr = addr.with(Protocol::P2p(peer_id));
-        println!("new address - {}", addr);
+        println!("new address - {addr}");
     }
 
     let protocol = opt

@@ -4,7 +4,7 @@ use connexa::prelude::{
     DHTEvent, DefaultConnexaBuilder, Multiaddr, PeerId, Protocol, RecordHandle,
 };
 use futures::StreamExt;
-use futures::stream::BoxStream;
+use futures::stream::{BoxStream, FuturesUnordered};
 use futures::{FutureExt, Stream};
 use pollable_map::stream::StreamMap;
 use rustyline_async::Readline;
@@ -49,24 +49,48 @@ async fn main() -> std::io::Result<()> {
         false => opt.listener,
     };
 
-    for addr in addrs {
-        if let Err(e) = connexa.swarm().listen_on(addr.clone()).await {
-            println!("failed to listen on {}: {}", addr, e);
-        }
-    }
-
-    tokio::task::yield_now().await;
-
-    let addrs = connexa.swarm().listening_addresses().await?;
-
     let peer_id = connexa.keypair().public().to_peer_id();
     let (mut rl, mut stdout) =
         Readline::new(format!("{peer_id} >")).map_err(std::io::Error::other)?;
 
-    for addr in addrs {
-        let addr = addr.with(Protocol::P2p(peer_id));
-        connexa.swarm().add_external_address(addr.clone()).await?;
-        writeln!(stdout, "> listening on {}", addr)?;
+    let ids = FuturesUnordered::from_iter(
+        addrs
+            .iter()
+            .cloned()
+            .map(|addr| async { (addr.clone(), connexa.swarm().listen_on(addr).await) }),
+    )
+    .filter_map(|(addr, result)| {
+        let mut stdout = stdout.clone();
+        async move {
+            result
+                .map_err(|e| {
+                    let _ = writeln!(stdout, "> failed to listen on {addr}: {e}");
+                    e
+                })
+                .ok()
+        }
+    })
+    .collect::<Vec<_>>()
+    .await;
+
+    let peer_id = connexa.keypair().public().to_peer_id();
+
+    for id in ids {
+        let addrs = match connexa.swarm().get_listening_addresses(id).await {
+            Ok(addrs) => addrs,
+            Err(e) => {
+                writeln!(
+                    stdout,
+                    "> failed to obtain listening addresses for {id}: {e}"
+                )?;
+                continue;
+            }
+        };
+        for addr in addrs {
+            let addr = addr.with(Protocol::P2p(peer_id));
+            connexa.swarm().add_external_address(addr.clone()).await?;
+            writeln!(stdout, "> listening on {addr}")?;
+        }
     }
 
     for mut addr in opt.peer {
@@ -80,7 +104,7 @@ async fn main() -> std::io::Result<()> {
             })
             .expect("valid multiaddr with peer id");
         if let Err(e) = connexa.dht().add_address(peer_id, addr.clone()).await {
-            writeln!(stdout, "failed to add DHT address {}: {}", addr, e)?;
+            writeln!(stdout, "> failed to add DHT address {addr}: {e}")?;
         }
     }
 

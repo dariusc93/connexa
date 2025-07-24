@@ -1,7 +1,8 @@
 use clap::Parser;
 use connexa::behaviour::request_response::RequestResponseConfig;
 use connexa::prelude::{DefaultConnexaBuilder, Multiaddr, Protocol};
-use futures::StreamExt;
+use futures::stream::FuturesUnordered;
+use futures::{StreamExt, TryStreamExt};
 use std::path::PathBuf;
 use tokio::io::AsyncWriteExt;
 
@@ -54,20 +55,38 @@ async fn main() -> std::io::Result<()> {
         false => opt.listener,
     };
 
-    for addr in addrs {
-        if let Err(e) = connexa.swarm().listen_on(addr.clone()).await {
-            println!("failed to listen on {}: {}", addr, e);
-        }
-    }
-
-    let addrs = connexa.swarm().listening_addresses().await?;
+    let ids = FuturesUnordered::from_iter(
+        addrs
+            .iter()
+            .cloned()
+            .map(|addr| async { (addr.clone(), connexa.swarm().listen_on(addr).await) }),
+    )
+    .filter_map(|(addr, result)| async move {
+        result
+            .map_err(|e| {
+                println!("failed to listen on {addr}: {e}");
+                e
+            })
+            .ok()
+    })
+    .collect::<Vec<_>>()
+    .await;
 
     let peer_id = connexa.keypair().public().to_peer_id();
 
-    for addr in addrs {
-        let addr = addr.with(Protocol::P2p(peer_id));
-        connexa.swarm().add_external_address(addr.clone()).await?;
-        println!("new address - {}", addr);
+    for id in ids {
+        let addrs = match connexa.swarm().get_listening_addresses(id).await {
+            Ok(addrs) => addrs,
+            Err(e) => {
+                println!("failed to obtain listening addresses for {id}: {e}");
+                continue;
+            }
+        };
+        for addr in addrs {
+            let addr = addr.with(Protocol::P2p(peer_id));
+            connexa.swarm().add_external_address(addr.clone()).await?;
+            println!("new address - {addr}");
+        }
     }
 
     match opt.argument {

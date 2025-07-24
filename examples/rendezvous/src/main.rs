@@ -88,18 +88,18 @@ async fn main() -> io::Result<()> {
     for addr in listen_addr {
         let addr = addr.with(Protocol::P2p(peer_id));
         if let Err(e) = connexa.swarm().add_external_address(addr.clone()).await {
-            println!("failed to add external address: {}", e);
+            println!("failed to add external address: {e}");
             continue;
         }
 
-        println!(">> listening on {}", addr);
+        println!(">> listening on {addr}");
     }
 
     for mut addr in opt.rendezvous_node {
         let peer_id = match addr.pop() {
             Some(Protocol::P2p(peer_id)) => peer_id,
             _ => {
-                println!("invalid rendezvous node address: {}", addr);
+                println!("invalid rendezvous node address: {addr}");
                 continue;
             }
         };
@@ -109,13 +109,13 @@ async fn main() -> io::Result<()> {
             .add_peer_address(peer_id, addr.clone())
             .await
         {
-            println!("failed to add rendezvous node: {}", e);
+            println!("failed to add rendezvous node: {e}");
             continue;
         }
 
         let opt = DialOpts::peer_id(peer_id).addresses(vec![addr]).build();
         if let Err(e) = connexa.swarm().dial(opt).await {
-            println!("failed to dial rendezvous node: {}", e);
+            println!("failed to dial rendezvous node: {e}");
             continue;
         }
     }
@@ -236,7 +236,7 @@ async fn main() -> io::Result<()> {
                         break;
                     }
                     Err(e) => {
-                        writeln!(stdout, "error: {}", e)?;
+                        writeln!(stdout, "error: {e}")?;
                         break;
                     }
                 }
