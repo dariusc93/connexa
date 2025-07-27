@@ -48,22 +48,18 @@ pub enum FileDescLimit {
     Custom(u64),
 }
 
-pub struct ConnexaBuilder<X, C, T>
+pub struct ConnexaBuilder<B, Ctx, Cmd>
 where
-    C: NetworkBehaviour,
-    C: Send,
-    C::ToSwarm: Debug,
-    T: Send + Sync + 'static,
-    X: Default + Send + Sync + 'static,
+    B: NetworkBehaviour,
 {
     keypair: Keypair,
-    context: X,
-    custom_behaviour: Option<C>,
+    context: Ctx,
+    custom_behaviour: Option<B>,
     file_descriptor_limits: Option<FileDescLimit>,
-    custom_task_callback: TTaskCallback<C, X, T>,
-    custom_event_callback: TEventCallback<C, X>,
-    swarm_event_callback: TSwarmEventCallback<C>,
-    custom_pollable_callback: TPollableCallback<C, X>,
+    custom_task_callback: TTaskCallback<B, Ctx, Cmd>,
+    custom_event_callback: TEventCallback<B, Ctx>,
+    swarm_event_callback: TSwarmEventCallback<B>,
+    custom_pollable_callback: TPollableCallback<B, Ctx>,
     config: Config,
     swarm_config: Box<dyn FnOnce(libp2p::swarm::Config) -> libp2p::swarm::Config>,
     transport_config: TransportConfig,
@@ -180,13 +176,13 @@ pub(crate) struct Protocols {
     pub(crate) deny_list: bool,
 }
 
-impl<X, C, T> ConnexaBuilder<X, C, T>
+impl<B, Ctx, Cmd> ConnexaBuilder<B, Ctx, Cmd>
 where
-    C: NetworkBehaviour,
-    C: Send,
-    C::ToSwarm: Debug,
-    T: Send + Sync + 'static,
-    X: Default + Unpin + Send + Sync + 'static,
+    B: NetworkBehaviour,
+    B: Send,
+    B::ToSwarm: Debug,
+    Ctx: Default + Unpin + Send + Sync + 'static,
+    Cmd: Send + Sync + 'static,
 {
     /// Create a new instance
     pub fn new_identity() -> Self {
@@ -200,7 +196,7 @@ where
         Self {
             keypair,
             custom_behaviour: None,
-            context: X::default(),
+            context: Ctx::default(),
             file_descriptor_limits: None,
             custom_task_callback: Box::new(|_, _, _| ()),
             custom_event_callback: Box::new(|_, _, _| ()),
@@ -234,7 +230,7 @@ where
     /// Set a callback for custom task events.
     pub fn set_custom_task_callback<F>(mut self, f: F) -> Self
     where
-        F: Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, T) + 'static + Send,
+        F: Fn(&mut Swarm<behaviour::Behaviour<B>>, &mut Ctx, Cmd) + 'static + Send,
     {
         self.custom_task_callback = Box::new(f);
         self
@@ -243,7 +239,7 @@ where
     /// Handles events from the custom behaviour.
     pub fn set_custom_event_callback<F>(mut self, f: F) -> Self
     where
-        F: Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, C::ToSwarm) + 'static + Send,
+        F: Fn(&mut Swarm<behaviour::Behaviour<B>>, &mut Ctx, B::ToSwarm) + 'static + Send,
     {
         self.custom_event_callback = Box::new(f);
         self
@@ -254,7 +250,7 @@ where
     /// it would be no-op since this is just to process futures or streams that may be held in context
     pub fn set_pollable_callback<F>(mut self, f: F) -> Self
     where
-        F: Fn(&mut Context<'_>, &mut Swarm<behaviour::Behaviour<C>>, &mut X) -> Poll<()>
+        F: Fn(&mut Context<'_>, &mut Swarm<behaviour::Behaviour<B>>, &mut Ctx) -> Poll<()>
             + Send
             + 'static,
     {
@@ -265,13 +261,13 @@ where
     /// Handles libp2p swarm events
     pub fn set_swarm_event_callback<F>(mut self, f: F) -> Self
     where
-        F: Fn(&SwarmEvent<behaviour::BehaviourEvent<C>>) + 'static + Send,
+        F: Fn(&SwarmEvent<behaviour::BehaviourEvent<B>>) + 'static + Send,
     {
         self.swarm_event_callback = Box::new(f);
         self
     }
 
-    pub fn set_context(mut self, context: X) -> Self {
+    pub fn set_context(mut self, context: Ctx) -> Self {
         self.context = context;
         self
     }
@@ -542,7 +538,7 @@ where
     /// `custom_event_callback` and `custom_task_callback`.
     pub fn with_custom_behaviour<F>(mut self, f: F) -> Self
     where
-        F: FnOnce(&Keypair) -> C,
+        F: FnOnce(&Keypair) -> B,
         F: 'static,
     {
         let behaviour = f(&self.keypair);
@@ -555,7 +551,7 @@ where
     /// `custom_event_callback` and `custom_task_callback`.
     pub fn with_custom_behaviour_with_context<F, IC>(mut self, context: IC, f: F) -> Self
     where
-        F: FnOnce(&Keypair, IC) -> C,
+        F: FnOnce(&Keypair, IC) -> B,
         F: 'static,
     {
         let behaviour = f(&self.keypair, context);
@@ -724,7 +720,7 @@ where
         Ok(self)
     }
 
-    pub fn build(self) -> std::io::Result<Connexa<T>> {
+    pub fn build(self) -> std::io::Result<Connexa<Cmd>> {
         let ConnexaBuilder {
             keypair,
             context,

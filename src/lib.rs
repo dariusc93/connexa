@@ -10,18 +10,20 @@ use libp2p::swarm::NetworkBehaviour;
 use libp2p::swarm::{Swarm, SwarmEvent};
 use std::task::{Context, Poll};
 
-pub(crate) type TTaskCallback<C, X, T> =
-    Box<dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, T) + 'static + Send>;
-pub(crate) type TEventCallback<C, X> = Box<
-    dyn Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, <C as NetworkBehaviour>::ToSwarm)
+pub(crate) type TTaskCallback<B, Ctx, Cmd> =
+    Box<dyn Fn(&mut Swarm<behaviour::Behaviour<B>>, &mut Ctx, Cmd) + 'static + Send>;
+pub(crate) type TEventCallback<B, Ctx> = Box<
+    dyn Fn(&mut Swarm<behaviour::Behaviour<B>>, &mut Ctx, <B as NetworkBehaviour>::ToSwarm)
         + 'static
         + Send,
 >;
-pub(crate) type TPollableCallback<C, X> = Box<
-    dyn Fn(&mut Context, &mut Swarm<behaviour::Behaviour<C>>, &mut X) -> Poll<()> + 'static + Send,
+pub(crate) type TPollableCallback<B, Ctx> = Box<
+    dyn Fn(&mut Context, &mut Swarm<behaviour::Behaviour<B>>, &mut Ctx) -> Poll<()>
+        + 'static
+        + Send,
 >;
-pub(crate) type TSwarmEventCallback<C> =
-    Box<dyn Fn(&SwarmEvent<BehaviourEvent<C>>) + 'static + Send>;
+pub(crate) type TSwarmEventCallback<B> =
+    Box<dyn Fn(&SwarmEvent<BehaviourEvent<B>>) + 'static + Send>;
 
 pub mod dummy {
     pub use crate::behaviour::dummy::{Behaviour, DummyHandler};
@@ -158,5 +160,5 @@ pub mod prelude {
         pub use libp2p::yamux;
     }
 
-    pub type DefaultConnexaBuilder = ConnexaBuilder<(), super::dummy::Behaviour, ()>;
+    pub type DefaultConnexaBuilder = ConnexaBuilder<super::dummy::Behaviour, (), ()>;
 }

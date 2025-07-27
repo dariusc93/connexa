@@ -41,11 +41,7 @@ use rand::rngs::OsRng;
 use std::fmt::Debug;
 
 #[derive(NetworkBehaviour)]
-pub struct Behaviour<C>
-where
-    C: NetworkBehaviour,
-    <C as NetworkBehaviour>::ToSwarm: Debug + Send,
-{
+pub struct Behaviour<C> {
     // connection management
     pub allow_list: Toggle<libp2p_allow_block_list::Behaviour<AllowedPeers>>,
     pub deny_list: Toggle<libp2p_allow_block_list::Behaviour<BlockedPeers>>,
