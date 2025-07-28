@@ -187,13 +187,13 @@ where
     /// Create a new instance
     pub fn new_identity() -> Self {
         let keypair = Keypair::generate_ed25519();
-        Self::with_existing_identity(&keypair)
+        Self::with_existing_identity(keypair).expect("keypair generation doesnt failed")
     }
 
     /// Create an instance with an existing keypair.
-    pub fn with_existing_identity(keypair: &Keypair) -> Self {
-        let keypair = keypair.clone();
-        Self {
+    pub fn with_existing_identity(keypair: impl ToKeypair) -> std::io::Result<Self> {
+        let keypair = keypair.to_keypair()?;
+        Ok(Self {
             keypair,
             custom_behaviour: None,
             context: Ctx::default(),
@@ -207,7 +207,7 @@ where
             swarm_config: Box::new(|config| config),
             transport_config: TransportConfig::default(),
             custom_transport: None,
-        }
+        })
     }
 
     /// Configuration for the swarm.
@@ -803,5 +803,51 @@ where
         let connexa = Connexa::new(span, keypair, to_task);
 
         Ok(connexa)
+    }
+}
+
+pub trait ToKeypair {
+    fn to_keypair(self) -> std::io::Result<Keypair>;
+}
+
+impl ToKeypair for Keypair {
+    fn to_keypair(self) -> std::io::Result<Keypair> {
+        Ok(self)
+    }
+}
+
+impl ToKeypair for &Keypair {
+    fn to_keypair(self) -> std::io::Result<Keypair> {
+        Ok(self.clone())
+    }
+}
+
+impl ToKeypair for u8 {
+    fn to_keypair(self) -> std::io::Result<Keypair> {
+        let mut bytes = [0u8; 32];
+        bytes[0] = self;
+        let kp = Keypair::ed25519_from_bytes(bytes).expect("only errors on wrong length");
+        Ok(kp)
+    }
+}
+
+impl ToKeypair for &mut [u8] {
+    fn to_keypair(self) -> std::io::Result<Keypair> {
+        Keypair::ed25519_from_bytes(self).map_err(std::io::Error::other)
+    }
+}
+
+impl ToKeypair for Vec<u8> {
+    fn to_keypair(self) -> std::io::Result<Keypair> {
+        Keypair::ed25519_from_bytes(self).map_err(std::io::Error::other)
+    }
+}
+
+impl ToKeypair for Option<Keypair> {
+    fn to_keypair(self) -> std::io::Result<Keypair> {
+        match self {
+            Some(kp) => Ok(kp),
+            None => Ok(Keypair::generate_ed25519()),
+        }
     }
 }

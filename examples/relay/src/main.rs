@@ -51,14 +51,14 @@ async fn main() -> io::Result<()> {
     let opt = Opt::parse();
     let keypair = generate_ed25519(opt.seed);
     let connexa = match opt.mode {
-        Mode::Server => DefaultConnexaBuilder::with_existing_identity(&keypair)
+        Mode::Server => DefaultConnexaBuilder::with_existing_identity(&keypair)?
             .enable_tcp()
             .enable_quic()
             .with_ping()
             .with_identify()
             .with_relay_server()
             .build()?,
-        Mode::Dial | Mode::Listen => DefaultConnexaBuilder::with_existing_identity(&keypair)
+        Mode::Dial | Mode::Listen => DefaultConnexaBuilder::with_existing_identity(&keypair)?
             .enable_tcp()
             .enable_quic()
             .with_ping()
@@ -68,7 +68,7 @@ async fn main() -> io::Result<()> {
     };
 
     let peer_id = keypair.public().to_peer_id();
-    println!("Peer ID: {}", peer_id);
+    println!("Peer ID: {peer_id}");
 
     let base_addr = Multiaddr::empty().with(Protocol::Ip4(Ipv4Addr::new(0, 0, 0, 0)));
 

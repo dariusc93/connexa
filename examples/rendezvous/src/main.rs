@@ -51,13 +51,13 @@ async fn main() -> io::Result<()> {
     let opt = Opt::parse();
     let keypair = generate_ed25519(opt.seed);
     let connexa = match opt.mode {
-        Mode::Server => DefaultConnexaBuilder::with_existing_identity(&keypair)
+        Mode::Server => DefaultConnexaBuilder::with_existing_identity(&keypair)?
             .enable_tcp()
             .enable_quic()
             .with_rendezvous_server()
             .set_swarm_config(|config| config.with_idle_connection_timeout(Duration::from_secs(60)))
             .build()?,
-        Mode::Client => DefaultConnexaBuilder::with_existing_identity(&keypair)
+        Mode::Client => DefaultConnexaBuilder::with_existing_identity(&keypair)?
             .enable_tcp()
             .enable_quic()
             .with_rendezvous_client()
