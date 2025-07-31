@@ -1,0 +1,28 @@
+[package]
+name = "browser-webrtc"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+futures.workspace = true
+connexa = { path = "../..", default-features = false, features = ["ed25519", "webrtc", "ping", "noise", "yamux"] }
+tracing = "0.1.41"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1.47.0", features = ["full"] }
+axum = "0.8.4"
+rust-embed = { version = "8.7.2", features = ["include-exclude", "interpolate-folder-path"] }
+tower = "0.5.2"
+tower-http = { version = "0.6.6", features = ["cors"] }
+mime_guess = "2.0.4"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tracing-wasm = "0.2.1"
+wasm-bindgen = "0.2.100"
+wasm-bindgen-futures = "0.4.50"
+web-sys = { version = "0.3", features = ['Document', 'Element', 'HtmlElement', 'Node', 'Response', 'Window'] }
+send_wrapper = "0.6.0"
