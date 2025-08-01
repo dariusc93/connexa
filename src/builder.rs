@@ -1,5 +1,5 @@
 mod executor;
-mod transport;
+pub(crate) mod transport;
 
 #[cfg(feature = "request-response")]
 use crate::behaviour::request_response::RequestResponseConfig;

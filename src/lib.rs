@@ -146,6 +146,10 @@ pub mod prelude {
     }
 
     pub mod transport {
+        #[cfg(feature = "dns")]
+        pub mod dns {
+            pub use crate::builder::transport::DnsResolver;
+        }
         pub use libp2p::core::muxing;
         pub use libp2p::core::transport;
         pub use libp2p::core::upgrade;
