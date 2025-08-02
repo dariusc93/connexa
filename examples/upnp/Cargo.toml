@@ -1,0 +1,9 @@
+[package]
+name = "upnp"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio.workspace = true
+futures.workspace = true
+connexa = { path = "../../", default-features = false, features = ["yamux", "noise", "tcp", "upnp"] }
