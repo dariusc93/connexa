@@ -1,12 +1,9 @@
-// We temporarily allow unused imports
-#![allow(unused_imports)]
 pub mod dummy;
 #[cfg(feature = "request-response")]
 pub mod request_response;
 #[cfg(feature = "request-response")]
 mod rr_man;
 
-use either::Either;
 #[cfg(feature = "autonat")]
 use libp2p::autonat;
 #[cfg(feature = "dcutr")]
