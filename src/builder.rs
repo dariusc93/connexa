@@ -191,8 +191,8 @@ where
     }
 
     /// Create an instance with an existing keypair.
-    pub fn with_existing_identity(keypair: impl ToKeypair) -> std::io::Result<Self> {
-        let keypair = keypair.to_keypair()?;
+    pub fn with_existing_identity(keypair: impl IntoKeypair) -> std::io::Result<Self> {
+        let keypair = keypair.into_keypair()?;
         Ok(Self {
             keypair,
             custom_behaviour: None,
@@ -806,26 +806,26 @@ where
     }
 }
 
-pub trait ToKeypair {
-    fn to_keypair(self) -> std::io::Result<Keypair>;
+pub trait IntoKeypair {
+    fn into_keypair(self) -> std::io::Result<Keypair>;
 }
 
-impl ToKeypair for Keypair {
-    fn to_keypair(self) -> std::io::Result<Keypair> {
+impl IntoKeypair for Keypair {
+    fn into_keypair(self) -> std::io::Result<Keypair> {
         Ok(self)
     }
 }
 
-impl ToKeypair for &Keypair {
-    fn to_keypair(self) -> std::io::Result<Keypair> {
+impl IntoKeypair for &Keypair {
+    fn into_keypair(self) -> std::io::Result<Keypair> {
         Ok(self.clone())
     }
 }
 
 // should only be used in testing environments and not in productions
 #[cfg(feature = "testing")]
-impl ToKeypair for u8 {
-    fn to_keypair(self) -> std::io::Result<Keypair> {
+impl IntoKeypair for u8 {
+    fn into_keypair(self) -> std::io::Result<Keypair> {
         let mut bytes = [0u8; 32];
         bytes[0] = self;
         let kp = Keypair::ed25519_from_bytes(bytes).expect("only errors on wrong length");
@@ -833,22 +833,22 @@ impl ToKeypair for u8 {
     }
 }
 
-impl ToKeypair for &mut [u8] {
-    fn to_keypair(self) -> std::io::Result<Keypair> {
+impl IntoKeypair for &mut [u8] {
+    fn into_keypair(self) -> std::io::Result<Keypair> {
         Keypair::ed25519_from_bytes(self).map_err(std::io::Error::other)
     }
 }
 
-impl ToKeypair for Vec<u8> {
-    fn to_keypair(self) -> std::io::Result<Keypair> {
+impl IntoKeypair for Vec<u8> {
+    fn into_keypair(self) -> std::io::Result<Keypair> {
         Keypair::ed25519_from_bytes(self).map_err(std::io::Error::other)
     }
 }
 
-impl<K: ToKeypair> ToKeypair for Option<K> {
-    fn to_keypair(self) -> std::io::Result<Keypair> {
+impl<K: IntoKeypair> IntoKeypair for Option<K> {
+    fn into_keypair(self) -> std::io::Result<Keypair> {
         match self {
-            Some(kp) => kp.to_keypair(),
+            Some(kp) => kp.into_keypair(),
             None => Ok(Keypair::generate_ed25519()),
         }
     }
