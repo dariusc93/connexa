@@ -168,11 +168,7 @@ where
             SwarmEvent::ExternalAddrConfirmed { address } => {
                 tracing::debug!(%address, "external address confirmed");
             }
-            SwarmEvent::ExternalAddrExpired { address } => {
-                if let Some(ch) = self.pending_remove_external_address.shift_remove(&address) {
-                    let _ = ch.send(Ok(()));
-                }
-            }
+            SwarmEvent::ExternalAddrExpired { .. } => {}
             SwarmEvent::NewExternalAddrOfPeer { peer_id, address } => {
                 tracing::debug!(%peer_id, %address, "new external address of peer");
             }

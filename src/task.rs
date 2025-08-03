@@ -161,8 +161,6 @@ where
     pub pending_listen_on: IndexMap<ListenerId, oneshot::Sender<std::io::Result<ListenerId>>>,
     pub pending_remove_listener: IndexMap<ListenerId, oneshot::Sender<std::io::Result<()>>>,
 
-    pub pending_remove_external_address: IndexMap<Multiaddr, oneshot::Sender<std::io::Result<()>>>,
-
     #[cfg(feature = "gossipsub")]
     pub gossipsub_listener:
         IndexMap<libp2p::gossipsub::TopicHash, Vec<mpsc::Sender<GossipsubEvent>>>,
@@ -253,7 +251,6 @@ where
             pending_disconnection_by_connection_id: IndexMap::new(),
             pending_listen_on: IndexMap::new(),
             pending_remove_listener: IndexMap::new(),
-            pending_remove_external_address: IndexMap::new(),
             #[cfg(feature = "floodsub")]
             floodsub_listener: Default::default(),
             #[cfg(feature = "gossipsub")]
@@ -383,7 +380,7 @@ where
                 }
                 SwarmCommand::RemoveExternalAddress { address, resp } => {
                     swarm.remove_external_address(&address);
-                    self.pending_remove_external_address.insert(address, resp);
+                    let _ = resp.send(Ok(()));
                 }
                 SwarmCommand::ListExternalAddresses { resp } => {
                     let addresses = swarm.external_addresses().cloned().collect();
