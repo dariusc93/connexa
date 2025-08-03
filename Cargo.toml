@@ -43,6 +43,7 @@ pnet = ["libp2p/pnet"]
 
 yamux = ["libp2p/yamux"]
 
+testing = []
 
 webrtc = ["dep:libp2p-webrtc", "dep:libp2p-webrtc-websys"]
 websocket = ["libp2p/websocket", "rcgen", "libp2p/websocket-websys"]

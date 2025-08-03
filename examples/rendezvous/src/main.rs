@@ -1,6 +1,6 @@
 use clap::Parser;
 use connexa::prelude::swarm::dial_opts::DialOpts;
-use connexa::prelude::{DefaultConnexaBuilder, Multiaddr, PeerId, Protocol, identity::Keypair};
+use connexa::prelude::{DefaultConnexaBuilder, Multiaddr, PeerId, Protocol};
 use futures::future::FutureExt;
 use rustyline_async::Readline;
 use std::io;
@@ -49,15 +49,14 @@ async fn main() -> io::Result<()> {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
     let opt = Opt::parse();
-    let keypair = generate_ed25519(opt.seed);
     let connexa = match opt.mode {
-        Mode::Server => DefaultConnexaBuilder::with_existing_identity(&keypair)
+        Mode::Server => DefaultConnexaBuilder::with_existing_identity(opt.seed)?
             .enable_tcp()
             .enable_quic()
             .with_rendezvous_server()
             .set_swarm_config(|config| config.with_idle_connection_timeout(Duration::from_secs(60)))
             .build()?,
-        Mode::Client => DefaultConnexaBuilder::with_existing_identity(&keypair)
+        Mode::Client => DefaultConnexaBuilder::with_existing_identity(opt.seed)?
             .enable_tcp()
             .enable_quic()
             .with_rendezvous_client()
@@ -246,16 +245,4 @@ async fn main() -> io::Result<()> {
 
     tokio::signal::ctrl_c().await?;
     Ok(())
-}
-
-fn generate_ed25519(secret_key_seed: Option<u8>) -> Keypair {
-    match secret_key_seed {
-        Some(seed) => {
-            let mut bytes = [0u8; 32];
-            bytes[0] = seed;
-
-            Keypair::ed25519_from_bytes(bytes).expect("only errors on wrong length")
-        }
-        None => Keypair::generate_ed25519(),
-    }
 }
