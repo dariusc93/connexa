@@ -50,9 +50,6 @@ fn test_vec_u8_into_keypair() {
         .into_keypair()
         .expect("should convert successfully");
 
-    // Verify it creates a valid keypair
-    let _public = keypair.public();
-
     // Same bytes should produce same keypair
     let keypair2 = bytes.into_keypair().expect("should convert successfully");
     assert_eq!(keypair.public(), keypair2.public());
@@ -77,7 +74,6 @@ fn test_slice_into_keypair() {
     let keypair = (&mut bytes[..])
         .into_keypair()
         .expect("should convert successfully");
-    let _public = keypair.public();
 
     // Create a fresh copy of the same bytes for comparison
     let mut bytes2 = [0u8; 32];
