@@ -89,6 +89,24 @@ where
 
                 let _ = resp.send(Ok(rx));
             }
+            FloodsubCommand::AddNodeToPartialView { peer_id, resp } => {
+                let Some(pubsub) = swarm.behaviour_mut().floodsub.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("floodsub is not enabled")));
+                    return;
+                };
+
+                pubsub.add_node_to_partial_view(peer_id);
+                let _ = resp.send(Ok(()));
+            }
+            FloodsubCommand::RemoveNodeFromPartialView { peer_id, resp } => {
+                let Some(pubsub) = swarm.behaviour_mut().floodsub.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("floodsub is not enabled")));
+                    return;
+                };
+
+                pubsub.remove_node_from_partial_view(&peer_id);
+                let _ = resp.send(Ok(()));
+            }
         }
     }
 

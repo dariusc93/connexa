@@ -199,6 +199,14 @@ pub enum FloodsubCommand {
         topic: libp2p::floodsub::Topic,
         resp: oneshot::Sender<Result<()>>,
     },
+    AddNodeToPartialView {
+        peer_id: PeerId,
+        resp: oneshot::Sender<Result<()>>,
+    },
+    RemoveNodeFromPartialView {
+        peer_id: PeerId,
+        resp: oneshot::Sender<Result<()>>,
+    },
     FloodsubListener {
         topic: libp2p::floodsub::Topic,
         resp: oneshot::Sender<Result<mpsc::Receiver<FloodsubEvent>>>,

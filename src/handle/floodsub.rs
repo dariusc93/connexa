@@ -4,6 +4,7 @@ use bytes::Bytes;
 use futures::StreamExt;
 use futures::channel::oneshot;
 use futures::stream::BoxStream;
+use libp2p::PeerId;
 use libp2p::floodsub::Topic;
 
 #[derive(Copy, Clone)]
@@ -28,6 +29,30 @@ where
             .to_task
             .clone()
             .send(FloodsubCommand::Subscribe { topic, resp: tx }.into())
+            .await?;
+
+        rx.await.map_err(std::io::Error::other)?
+    }
+
+    pub async fn add_node_to_partial_view(&self, peer_id: PeerId) -> std::io::Result<()> {
+        let (tx, rx) = oneshot::channel();
+
+        self.connexa
+            .to_task
+            .clone()
+            .send(FloodsubCommand::AddNodeToPartialView { peer_id, resp: tx }.into())
+            .await?;
+
+        rx.await.map_err(std::io::Error::other)?
+    }
+
+    pub async fn remove_node_from_partial_view(&self, peer_id: PeerId) -> std::io::Result<()> {
+        let (tx, rx) = oneshot::channel();
+
+        self.connexa
+            .to_task
+            .clone()
+            .send(FloodsubCommand::RemoveNodeFromPartialView { peer_id, resp: tx }.into())
             .await?;
 
         rx.await.map_err(std::io::Error::other)?
