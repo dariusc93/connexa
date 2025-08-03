@@ -18,6 +18,7 @@ where
         Self { connexa }
     }
 
+    /// Registers a peer in a namespace with an optional time-to-live (TTL).
     pub async fn register(
         &self,
         peer_id: PeerId,
@@ -44,6 +45,7 @@ where
         rx.await.map_err(io::Error::other)?
     }
 
+    /// Unregisters a peer from a namespace.
     pub async fn unregister(
         &self,
         peer_id: PeerId,
@@ -67,6 +69,7 @@ where
         rx.await.map_err(io::Error::other)?
     }
 
+    /// Discovers peers in a namespace.
     pub async fn discovery(
         &self,
         peer_id: PeerId,
