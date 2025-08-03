@@ -15,8 +15,8 @@ where
             result,
         } = event;
         match result {
-            Ok(remote_addr) => {
-                tracing::info!(%remote_peer_id, %remote_addr, "dcutr success");
+            Ok(connection_id) => {
+                tracing::info!(%remote_peer_id, %connection_id, "dcutr success");
             }
             Err(e) => {
                 tracing::error!(%remote_peer_id, %e, "dcutr failed");
