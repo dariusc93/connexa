@@ -59,7 +59,10 @@ where
                     return;
                 };
 
-                let peers = pubsub.mesh_peers(&topic).copied().collect();
+                let peers = pubsub
+                    .all_peers()
+                    .filter_map(|(peer_id, list)| list.contains(&&topic).then_some(*peer_id))
+                    .collect();
 
                 let _ = resp.send(Ok(peers));
             }

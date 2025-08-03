@@ -1,12 +1,9 @@
-// We temporarily allow unused imports
-#![allow(unused_imports)]
 pub mod dummy;
 #[cfg(feature = "request-response")]
 pub mod request_response;
 #[cfg(feature = "request-response")]
 mod rr_man;
 
-use either::Either;
 #[cfg(feature = "autonat")]
 use libp2p::autonat;
 #[cfg(feature = "dcutr")]
@@ -29,15 +26,13 @@ use libp2p::relay::client::Behaviour as RelayClient;
 use libp2p::relay::{Behaviour as RelayServer, client::Transport as ClientTransport};
 #[cfg(not(feature = "relay"))]
 type ClientTransport = ();
-use libp2p::StreamProtocol;
+
 use libp2p::swarm::behaviour::toggle::Toggle;
 
 use crate::builder::{Config, Protocols};
-use indexmap::IndexMap;
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkBehaviour;
 use libp2p_allow_block_list::{AllowedPeers, BlockedPeers};
-use rand::rngs::OsRng;
 use std::fmt::Debug;
 
 #[derive(NetworkBehaviour)]
@@ -154,7 +149,8 @@ where
             .kad
             .then(|| {
                 let (protocol, config_fn) = config.kademlia_config;
-                let protocol = StreamProtocol::try_from_owned(protocol).expect("valid protocol");
+                let protocol =
+                    libp2p::StreamProtocol::try_from_owned(protocol).expect("valid protocol");
                 let config = config_fn(libp2p::kad::Config::new(protocol));
                 Kademlia::with_config(
                     peer_id,
@@ -181,7 +177,7 @@ where
                 let config_fn = config.autonat_v2_client_config;
                 let config = config_fn(Default::default());
 
-                autonat::v2::client::Behaviour::new(OsRng, config)
+                autonat::v2::client::Behaviour::new(rand::rngs::OsRng, config)
             })
             .into();
 
@@ -383,10 +379,11 @@ where
 
         #[cfg(feature = "request-response")]
         {
-            let mut existing_protocol: IndexMap<StreamProtocol, _> = IndexMap::new();
+            let mut existing_protocol: indexmap::IndexMap<libp2p::StreamProtocol, _> =
+                indexmap::IndexMap::new();
 
             for (index, config) in config.request_response_config.iter().enumerate() {
-                let protocol = StreamProtocol::try_from_owned(config.protocol.clone())
+                let protocol = libp2p::StreamProtocol::try_from_owned(config.protocol.clone())
                     .expect("valid protocol");
                 if existing_protocol.contains_key(&protocol) {
                     tracing::warn!(%protocol, "request-response protocol is already registered");
@@ -506,7 +503,7 @@ where
     #[cfg(feature = "request-response")]
     pub(crate) fn request_response(
         &mut self,
-        protocol: Option<StreamProtocol>,
+        protocol: Option<libp2p::StreamProtocol>,
     ) -> Option<&mut request_response::Behaviour> {
         let Some(protocol) = protocol else {
             return self.rr_0.as_mut();

@@ -1,0 +1,9 @@
+[package]
+name = "ipfs-kad"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio.workspace = true
+connexa = { path = "../../", default-features = false, features = ["yamux", "noise", "tcp", "kad", "rsa", "dns", "ed25519"] }
+

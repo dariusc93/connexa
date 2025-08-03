@@ -107,6 +107,7 @@ pub mod prelude {
 
     #[cfg(feature = "rendezvous")]
     pub mod rendezvous {
+        pub use crate::handle::rendezvous::IntoNamespace;
         pub use libp2p::rendezvous::{
             Cookie, ErrorCode, MAX_NAMESPACE, MAX_TTL, MIN_TTL, Namespace, Registration,
         };
@@ -146,6 +147,10 @@ pub mod prelude {
     }
 
     pub mod transport {
+        #[cfg(feature = "dns")]
+        pub mod dns {
+            pub use crate::builder::transport::DnsResolver;
+        }
         pub use libp2p::core::muxing;
         pub use libp2p::core::transport;
         pub use libp2p::core::upgrade;

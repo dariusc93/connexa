@@ -3,11 +3,11 @@ mod codec;
 
 use crate::behaviour::request_response::codec::Codec;
 use bytes::Bytes;
+use futures::TryFutureExt;
 use futures::channel::mpsc::Sender as MpscSender;
 use futures::channel::oneshot::Sender as OneshotSender;
 use futures::future::BoxFuture;
 use futures::stream::BoxStream;
-use futures::{TryFutureExt, pin_mut};
 use futures_timer::Delay;
 use libp2p::core::Endpoint;
 use libp2p::core::transport::PortUse;

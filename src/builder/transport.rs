@@ -466,10 +466,14 @@ pub(crate) fn build_transport(
         false => Either::Right(DummyTransport::<DummyStream>::new()),
     };
 
+    #[cfg(feature = "relay")]
     let transport = match relay {
         Some(relay) => Either::Left(OrTransport::new(relay, transport)),
         None => Either::Right(transport),
     };
+
+    #[cfg(not(feature = "relay"))]
+    let _ = relay;
 
     let noise_config = libp2p::noise::Config::new(&keypair).map_err(io::Error::other)?;
     let yamux_config = libp2p::yamux::Config::default();
@@ -483,8 +487,6 @@ pub(crate) fn build_transport(
         }
         false => Either::Right(transport),
     };
-
-    let transport = TransportTimeout::new(transport, timeout);
 
     let transport = transport
         .upgrade(version.into())

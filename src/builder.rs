@@ -1,5 +1,5 @@
 mod executor;
-mod transport;
+pub(crate) mod transport;
 
 #[cfg(feature = "request-response")]
 use crate::behaviour::request_response::RequestResponseConfig;
@@ -690,7 +690,7 @@ where
     /// Enable WebRTC transport with a provided pre-generated pem.
     #[cfg(feature = "webrtc")]
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn enable_webrtc_with_pem(mut self, pem: impl Into<String>) -> Self {
+    pub fn enable_webrtc_with_pem(self, pem: impl Into<String>) -> Self {
         let pem = pem.into();
         self.enable_webrtc_with_config(move |_| Ok(pem))
             .expect("pem is provided; should not fail")

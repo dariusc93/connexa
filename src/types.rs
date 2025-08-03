@@ -199,6 +199,14 @@ pub enum FloodsubCommand {
         topic: libp2p::floodsub::Topic,
         resp: oneshot::Sender<Result<()>>,
     },
+    AddNodeToPartialView {
+        peer_id: PeerId,
+        resp: oneshot::Sender<Result<()>>,
+    },
+    RemoveNodeFromPartialView {
+        peer_id: PeerId,
+        resp: oneshot::Sender<Result<()>>,
+    },
     FloodsubListener {
         topic: libp2p::floodsub::Topic,
         resp: oneshot::Sender<Result<mpsc::Receiver<FloodsubEvent>>>,
@@ -394,18 +402,18 @@ pub enum StreamCommand {
 #[derive(Debug)]
 pub enum RendezvousCommand {
     Register {
-        namespace: String,
+        namespace: libp2p::rendezvous::Namespace,
         peer_id: PeerId,
         ttl: Option<u64>,
         resp: oneshot::Sender<Result<()>>,
     },
     Unregister {
-        namespace: String,
+        namespace: libp2p::rendezvous::Namespace,
         peer_id: PeerId,
         resp: oneshot::Sender<Result<()>>,
     },
     Discover {
-        namespace: Option<String>,
+        namespace: Option<libp2p::rendezvous::Namespace>,
         peer_id: PeerId,
         cookie: Option<Cookie>,
         ttl: Option<u64>,

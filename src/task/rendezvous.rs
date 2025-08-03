@@ -28,13 +28,6 @@ where
                     )));
                     return;
                 };
-                let namespace = match Namespace::new(namespace) {
-                    Ok(ns) => ns,
-                    Err(e) => {
-                        let _ = resp.send(Err(std::io::Error::other(e)));
-                        return;
-                    }
-                };
 
                 if let Err(e) = rz.register(namespace.clone(), peer_id, ttl) {
                     let _ = resp.send(Err(std::io::Error::other(e)));
@@ -57,20 +50,13 @@ where
                     )));
                     return;
                 };
-                let namespace = match Namespace::new(namespace) {
-                    Ok(ns) => ns,
-                    Err(e) => {
-                        let _ = resp.send(Err(std::io::Error::other(e)));
-                        return;
-                    }
-                };
 
                 rz.unregister(namespace.clone(), peer_id);
 
                 let _ = resp.send(Ok(()));
             }
             RendezvousCommand::Discover {
-                namespace,
+                namespace: ns,
                 peer_id,
                 cookie,
                 ttl,
@@ -81,17 +67,6 @@ where
                         "rendezvous client is not enabled",
                     )));
                     return;
-                };
-
-                let ns = match namespace {
-                    Some(ns) => match Namespace::new(ns) {
-                        Ok(ns) => Some(ns),
-                        Err(e) => {
-                            let _ = resp.send(Err(std::io::Error::other(e)));
-                            return;
-                        }
-                    },
-                    None => None,
                 };
 
                 rz.discover(ns.clone(), cookie, ttl, peer_id);
