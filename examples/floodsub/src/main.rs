@@ -26,7 +26,7 @@ async fn main() -> std::io::Result<()> {
     let peer_id = keypair.public().to_peer_id();
 
     let opt = Opt::parse();
-    let connexa = DefaultConnexaBuilder::with_existing_identity(&keypair)
+    let connexa = DefaultConnexaBuilder::with_existing_identity(&keypair)?
         .enable_tcp()
         .enable_quic()
         .with_floodsub()
