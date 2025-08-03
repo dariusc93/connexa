@@ -1,5 +1,5 @@
 use clap::Parser;
-use connexa::prelude::{DefaultConnexaBuilder, Multiaddr, PeerId, Protocol, identity::Keypair};
+use connexa::prelude::{DefaultConnexaBuilder, Multiaddr, PeerId, Protocol};
 use std::io;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
@@ -49,16 +49,15 @@ async fn main() -> io::Result<()> {
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
     let opt = Opt::parse();
-    let keypair = generate_ed25519(opt.seed);
     let connexa = match opt.mode {
-        Mode::Server => DefaultConnexaBuilder::with_existing_identity(&keypair)?
+        Mode::Server => DefaultConnexaBuilder::with_existing_identity(opt.seed)?
             .enable_tcp()
             .enable_quic()
             .with_ping()
             .with_identify()
             .with_relay_server()
             .build()?,
-        Mode::Dial | Mode::Listen => DefaultConnexaBuilder::with_existing_identity(&keypair)?
+        Mode::Dial | Mode::Listen => DefaultConnexaBuilder::with_existing_identity(opt.seed)?
             .enable_tcp()
             .enable_quic()
             .with_ping()
@@ -67,7 +66,7 @@ async fn main() -> io::Result<()> {
             .build()?,
     };
 
-    let peer_id = keypair.public().to_peer_id();
+    let peer_id = connexa.keypair().public().to_peer_id();
     println!("Peer ID: {peer_id}");
 
     let base_addr = Multiaddr::empty().with(Protocol::Ip4(Ipv4Addr::new(0, 0, 0, 0)));
@@ -138,16 +137,4 @@ async fn main() -> io::Result<()> {
     }
     tokio::signal::ctrl_c().await?;
     Ok(())
-}
-
-fn generate_ed25519(secret_key_seed: Option<u8>) -> Keypair {
-    match secret_key_seed {
-        Some(seed) => {
-            let mut bytes = [0u8; 32];
-            bytes[0] = seed;
-
-            Keypair::ed25519_from_bytes(bytes).expect("only errors on wrong length")
-        }
-        None => Keypair::generate_ed25519(),
-    }
 }

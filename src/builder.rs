@@ -822,6 +822,8 @@ impl ToKeypair for &Keypair {
     }
 }
 
+// should only be used in testing environments and not in productions
+#[cfg(feature = "testing")]
 impl ToKeypair for u8 {
     fn to_keypair(self) -> std::io::Result<Keypair> {
         let mut bytes = [0u8; 32];
@@ -843,10 +845,10 @@ impl ToKeypair for Vec<u8> {
     }
 }
 
-impl ToKeypair for Option<Keypair> {
+impl<K: ToKeypair> ToKeypair for Option<K> {
     fn to_keypair(self) -> std::io::Result<Keypair> {
         match self {
-            Some(kp) => Ok(kp),
+            Some(kp) => kp.to_keypair(),
             None => Ok(Keypair::generate_ed25519()),
         }
     }
