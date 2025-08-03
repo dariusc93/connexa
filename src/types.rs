@@ -394,18 +394,18 @@ pub enum StreamCommand {
 #[derive(Debug)]
 pub enum RendezvousCommand {
     Register {
-        namespace: String,
+        namespace: libp2p::rendezvous::Namespace,
         peer_id: PeerId,
         ttl: Option<u64>,
         resp: oneshot::Sender<Result<()>>,
     },
     Unregister {
-        namespace: String,
+        namespace: libp2p::rendezvous::Namespace,
         peer_id: PeerId,
         resp: oneshot::Sender<Result<()>>,
     },
     Discover {
-        namespace: Option<String>,
+        namespace: Option<libp2p::rendezvous::Namespace>,
         peer_id: PeerId,
         cookie: Option<Cookie>,
         ttl: Option<u64>,

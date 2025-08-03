@@ -107,6 +107,7 @@ pub mod prelude {
 
     #[cfg(feature = "rendezvous")]
     pub mod rendezvous {
+        pub use crate::handle::rendezvous::IntoNamespace;
         pub use libp2p::rendezvous::{
             Cookie, ErrorCode, MAX_NAMESPACE, MAX_TTL, MIN_TTL, Namespace, Registration,
         };

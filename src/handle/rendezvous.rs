@@ -1,7 +1,8 @@
 use crate::handle::Connexa;
 use crate::types::RendezvousCommand;
+use bytes::Bytes;
 use futures::channel::oneshot;
-use libp2p::rendezvous::Cookie;
+use libp2p::rendezvous::{Cookie, Namespace};
 use libp2p::{Multiaddr, PeerId};
 use std::io;
 
@@ -22,10 +23,13 @@ where
     pub async fn register(
         &self,
         peer_id: PeerId,
-        namespace: impl Into<String>,
+        namespace: impl IntoNamespace,
         ttl: Option<u64>,
     ) -> io::Result<()> {
-        let namespace = namespace.into();
+        let namespace = namespace.into_namespace()?.ok_or(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "namespace is not provided",
+        ))?;
 
         let (tx, rx) = oneshot::channel();
         self.connexa
@@ -49,9 +53,13 @@ where
     pub async fn unregister(
         &self,
         peer_id: PeerId,
-        namespace: impl Into<String>,
+        namespace: impl IntoNamespace,
     ) -> io::Result<()> {
-        let namespace = namespace.into();
+        let namespace = namespace.into_namespace()?.ok_or(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "namespace is not provided",
+        ))?;
+
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
@@ -73,11 +81,11 @@ where
     pub async fn discovery(
         &self,
         peer_id: PeerId,
-        namespace: impl Into<Option<String>>,
+        namespace: impl IntoNamespace,
         ttl: Option<u64>,
         cookie: Option<Cookie>,
     ) -> io::Result<(Cookie, Vec<(PeerId, Vec<Multiaddr>)>)> {
-        let namespace = namespace.into();
+        let namespace = namespace.into_namespace()?;
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
@@ -95,5 +103,86 @@ where
             .await?;
 
         rx.await.map_err(io::Error::other)?
+    }
+}
+
+pub trait IntoNamespace {
+    fn into_namespace(self) -> io::Result<Option<Namespace>>;
+}
+
+impl IntoNamespace for String {
+    fn into_namespace(self) -> io::Result<Option<Namespace>> {
+        Namespace::new(self).map_err(io::Error::other).map(Some)
+    }
+}
+
+impl IntoNamespace for &String {
+    fn into_namespace(self) -> io::Result<Option<Namespace>> {
+        Namespace::new(self.clone())
+            .map_err(io::Error::other)
+            .map(Some)
+    }
+}
+
+impl IntoNamespace for Namespace {
+    fn into_namespace(self) -> io::Result<Option<Namespace>> {
+        Ok(Some(self))
+    }
+}
+
+impl IntoNamespace for &Namespace {
+    fn into_namespace(self) -> io::Result<Option<Namespace>> {
+        Ok(Some(self.clone()))
+    }
+}
+
+impl IntoNamespace for &str {
+    fn into_namespace(self) -> io::Result<Option<Namespace>> {
+        Namespace::new(self.to_string())
+            .map_err(io::Error::other)
+            .map(Some)
+    }
+}
+
+impl IntoNamespace for () {
+    fn into_namespace(self) -> io::Result<Option<Namespace>> {
+        Ok(None)
+    }
+}
+
+impl IntoNamespace for Vec<u8> {
+    fn into_namespace(self) -> io::Result<Option<Namespace>> {
+        let str = String::from_utf8_lossy(&self);
+        str.into_namespace()
+    }
+}
+
+impl IntoNamespace for &[u8] {
+    fn into_namespace(self) -> io::Result<Option<Namespace>> {
+        let str = String::from_utf8_lossy(self);
+        str.into_namespace()
+    }
+}
+
+impl IntoNamespace for Bytes {
+    fn into_namespace(self) -> io::Result<Option<Namespace>> {
+        let str = String::from_utf8_lossy(&self);
+        str.into_namespace()
+    }
+}
+
+impl IntoNamespace for &Bytes {
+    fn into_namespace(self) -> io::Result<Option<Namespace>> {
+        let str = String::from_utf8_lossy(self);
+        str.into_namespace()
+    }
+}
+
+impl<N: IntoNamespace> IntoNamespace for Option<N> {
+    fn into_namespace(self) -> io::Result<Option<Namespace>> {
+        match self {
+            Some(n) => n.into_namespace(),
+            None => Ok(None),
+        }
     }
 }

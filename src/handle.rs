@@ -8,7 +8,7 @@ pub(crate) mod floodsub;
 #[cfg(feature = "gossipsub")]
 pub(crate) mod gossipsub;
 #[cfg(feature = "rendezvous")]
-mod rendezvous;
+pub(crate) mod rendezvous;
 #[cfg(feature = "request-response")]
 pub(crate) mod request_response;
 #[cfg(feature = "stream")]
