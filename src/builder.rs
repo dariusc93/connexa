@@ -845,6 +845,24 @@ impl IntoKeypair for Vec<u8> {
     }
 }
 
+impl<R: std::io::Read> IntoKeypair for std::io::BufReader<R> {
+    fn into_keypair(mut self) -> std::io::Result<Keypair> {
+        use std::io::Read;
+        let mut kp_bytes = Vec::new();
+        match self.read_to_end(&mut kp_bytes) {
+            Ok(0) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "empty keypair",
+                ));
+            }
+            Ok(_) => {}
+            Err(e) => return Err(e),
+        };
+
+        kp_bytes.into_keypair()
+    }
+}
 
 #[cfg(feature = "keypair_base64_encoding")]
 impl IntoKeypair for String {
