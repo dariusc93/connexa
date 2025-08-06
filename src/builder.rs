@@ -845,6 +845,31 @@ impl IntoKeypair for Vec<u8> {
     }
 }
 
+
+#[cfg(feature = "keypair_base64_encoding")]
+impl IntoKeypair for String {
+    fn into_keypair(self) -> std::io::Result<Keypair> {
+        self.as_str().into_keypair()
+    }
+}
+
+#[cfg(feature = "keypair_base64_encoding")]
+impl IntoKeypair for &str {
+    fn into_keypair(self) -> std::io::Result<Keypair> {
+        use base64::{
+            Engine,
+            alphabet::STANDARD,
+            engine::{GeneralPurpose, general_purpose::PAD},
+        };
+
+        let engine = GeneralPurpose::new(&STANDARD, PAD);
+        let keypair_bytes = engine.decode(self).map_err(std::io::Error::other)?;
+        let keypair =
+            Keypair::from_protobuf_encoding(&keypair_bytes).map_err(std::io::Error::other)?;
+        Ok(keypair)
+    }
+}
+
 impl<K: IntoKeypair> IntoKeypair for Option<K> {
     fn into_keypair(self) -> std::io::Result<Keypair> {
         match self {
