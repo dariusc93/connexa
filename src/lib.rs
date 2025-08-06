@@ -159,6 +159,11 @@ pub mod prelude {
         pub use libp2p::core::{ConnectedPoint, Endpoint};
         #[cfg(feature = "noise")]
         pub use libp2p::noise;
+        #[cfg(feature = "pnet")]
+        pub use libp2p::pnet;
+        #[cfg(feature = "quic")]
+        #[cfg(not(target_arch = "wasm32"))]
+        pub use libp2p::quic;
         #[cfg(feature = "tcp")]
         #[cfg(not(target_arch = "wasm32"))]
         pub use libp2p::tcp;
