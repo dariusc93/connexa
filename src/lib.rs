@@ -114,6 +114,7 @@ pub mod prelude {
     }
 
     #[cfg(feature = "mdns")]
+    #[cfg(not(target_arch = "wasm32"))]
     pub mod mdns {
         pub use libp2p::mdns::{Config, Event};
     }
@@ -138,6 +139,7 @@ pub mod prelude {
     }
 
     #[cfg(feature = "upnp")]
+    #[cfg(not(target_arch = "wasm32"))]
     pub mod upnp {
         pub use libp2p::upnp::Event;
     }
@@ -158,8 +160,10 @@ pub mod prelude {
         #[cfg(feature = "noise")]
         pub use libp2p::noise;
         #[cfg(feature = "tcp")]
+        #[cfg(not(target_arch = "wasm32"))]
         pub use libp2p::tcp;
         #[cfg(feature = "websocket")]
+        #[cfg(not(target_arch = "wasm32"))]
         pub use libp2p::websocket;
         #[cfg(feature = "yamux")]
         pub use libp2p::yamux;
