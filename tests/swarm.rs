@@ -8,7 +8,6 @@ use std::time::Duration;
 
 use crate::common::spawn_connexa_with_default_key;
 
-
 #[tokio::test]
 async fn test_listen_on_address() {
     let node = spawn_connexa_with_default_key().await;

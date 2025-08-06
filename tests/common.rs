@@ -1,10 +1,15 @@
+use std::time::Duration;
+
 use connexa::builder::IntoKeypair;
 use connexa::handle::Connexa;
 use connexa::prelude::identity::Keypair;
 use connexa::prelude::{DefaultConnexaBuilder, Multiaddr};
-use futures::{TryFutureExt, TryStreamExt};
 use futures::stream::FuturesUnordered;
+use futures::{TryFutureExt, TryStreamExt};
 use libp2p::PeerId;
+
+#[allow(dead_code)]
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub async fn spawn_connexa(keypair: impl IntoKeypair) -> std::io::Result<Connexa> {
     let connexa = DefaultConnexaBuilder::with_existing_identity(keypair)?
@@ -12,7 +17,10 @@ pub async fn spawn_connexa(keypair: impl IntoKeypair) -> std::io::Result<Connexa
         .with_gossipsub()
         .with_blacklist()
         .with_identify()
-        .with_kademlia()
+        .with_kademlia_with_config("/ipfs/kad/1.0.0", |mut config| {
+            config.set_record_filtering(libp2p::kad::StoreInserts::FilterBoth);
+            config
+        })
         .with_relay()
         .with_relay_server()
         .with_autonat_v1()
@@ -52,7 +60,8 @@ pub async fn spawn_connexa_nodes<const N: usize>(
             let addr = addr.with_p2p(peer_id).unwrap();
             Ok(Some((connexa, peer_id, addr)))
         })
-        .try_collect::<Vec<_>>().and_then(|nodes| async move {
+        .try_collect::<Vec<_>>()
+        .and_then(|nodes| async move {
             let nodes: [_; N] = nodes.try_into().expect("array length is correct");
             Ok(nodes)
         })

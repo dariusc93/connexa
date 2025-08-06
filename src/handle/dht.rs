@@ -227,6 +227,12 @@ impl ToRecordKey for RecordKey {
     }
 }
 
+impl ToRecordKey for &RecordKey {
+    fn to_record_key(self) -> RecordKey {
+        self.clone()
+    }
+}
+
 impl ToRecordKey for String {
     fn to_record_key(self) -> RecordKey {
         self.into_bytes().into()
@@ -278,5 +284,11 @@ impl<R: ToRecordKey> ToOptionalRecordKey for R {
 impl<R: ToRecordKey> ToOptionalRecordKey for Option<R> {
     fn to_record_key(self) -> Option<RecordKey> {
         self.map(|r| r.to_record_key())
+    }
+}
+
+impl ToOptionalRecordKey for () {
+    fn to_record_key(self) -> Option<RecordKey> {
+        None
     }
 }
