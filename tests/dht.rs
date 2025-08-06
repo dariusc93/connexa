@@ -40,8 +40,8 @@ async fn test_dht_mode() {
 
     // Get initial mode
     let mode = node.dht().mode().await.unwrap();
-    // Default mode should be either Client or Server
-    assert!(matches!(mode, Mode::Client | Mode::Server));
+    // Default mode should be either Client or Server depending on node availability
+    assert_eq!(mode, Mode::Server);
 
     // Set to Server mode
     node.dht().set_mode(Mode::Server).await.unwrap();
@@ -67,10 +67,6 @@ async fn test_dht_add_address() {
 #[tokio::test]
 async fn test_dht_put_and_get() {
     let (node1, node2, peer_id1, _peer_id2) = create_connected_nodes().await;
-
-    // Set nodes to Server mode for DHT operations
-    node1.dht().set_mode(Mode::Server).await.unwrap();
-    node2.dht().set_mode(Mode::Server).await.unwrap();
 
     // Create a test key and value
     let key = "test-key";
@@ -175,7 +171,7 @@ async fn test_dht_listener_with_specific_key() {
     let key = RecordKey::from(b"specific-key".to_vec());
 
     // Listen for events related to specific key
-    let mut listener = node2.dht().listener(key.clone()).await.unwrap();
+    let mut listener = node2.dht().listener(&key).await.unwrap();
 
     // Spawn a task to generate events
     let node_clone = node1.clone();
@@ -183,7 +179,7 @@ async fn test_dht_listener_with_specific_key() {
     tokio::spawn(async move {
         node_clone
             .dht()
-            .put(key_clone, &b"data"[..], Quorum::One)
+            .put(&key_clone, &b"data"[..], Quorum::One)
             .await
             .unwrap();
     });
