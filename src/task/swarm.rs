@@ -14,7 +14,10 @@ where
     C::ToSwarm: Debug,
 {
     pub fn process_swarm_event(&mut self, event: SwarmEvent<BehaviourEvent<C>>) {
-        (self.swarm_event_callback)(&event);
+        let Some(swarm) = self.swarm.as_mut() else {
+            return;
+        };
+        (self.swarm_event_callback)(swarm, &event, &mut self.context);
         match event {
             SwarmEvent::Behaviour(event) => self.process_swarm_behaviour_event(event),
             SwarmEvent::ConnectionEstablished {

@@ -58,7 +58,7 @@ where
     file_descriptor_limits: Option<FileDescLimit>,
     custom_task_callback: TTaskCallback<B, Ctx, Cmd>,
     custom_event_callback: TEventCallback<B, Ctx>,
-    swarm_event_callback: TSwarmEventCallback<B>,
+    swarm_event_callback: TSwarmEventCallback<B, Ctx>,
     custom_pollable_callback: TPollableCallback<B, Ctx>,
     config: Config,
     swarm_config: Box<dyn FnOnce(libp2p::swarm::Config) -> libp2p::swarm::Config>,
@@ -200,7 +200,7 @@ where
             file_descriptor_limits: None,
             custom_task_callback: Box::new(|_, _, _| ()),
             custom_event_callback: Box::new(|_, _, _| ()),
-            swarm_event_callback: Box::new(|_| ()),
+            swarm_event_callback: Box::new(|_, _, _| ()),
             custom_pollable_callback: Box::new(|_, _, _| Poll::Pending),
             config: Config::default(),
             protocols: Protocols::default(),
@@ -261,7 +261,13 @@ where
     /// Handles libp2p swarm events
     pub fn set_swarm_event_callback<F>(mut self, f: F) -> Self
     where
-        F: Fn(&SwarmEvent<behaviour::BehaviourEvent<B>>) + 'static + Send,
+        F: Fn(
+                &mut Swarm<behaviour::Behaviour<B>>,
+                &SwarmEvent<behaviour::BehaviourEvent<B>>,
+                &mut Ctx,
+            )
+            + 'static
+            + Send,
     {
         self.swarm_event_callback = Box::new(f);
         self

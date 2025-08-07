@@ -14,7 +14,7 @@ async fn main() {
     let connexa = DefaultConnexaBuilder::new_identity()
         .enable_webrtc()
         .with_ping()
-        .set_swarm_event_callback(|event| {
+        .set_swarm_event_callback(|_, event, _| {
             println!("swarm event: {event:?}");
         })
         .build()

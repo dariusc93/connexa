@@ -22,8 +22,11 @@ pub(crate) type TPollableCallback<B, Ctx> = Box<
         + 'static
         + Send,
 >;
-pub(crate) type TSwarmEventCallback<B> =
-    Box<dyn Fn(&SwarmEvent<BehaviourEvent<B>>) + 'static + Send>;
+pub(crate) type TSwarmEventCallback<B, Ctx> = Box<
+    dyn Fn(&mut Swarm<behaviour::Behaviour<B>>, &SwarmEvent<BehaviourEvent<B>>, &mut Ctx)
+        + 'static
+        + Send,
+>;
 
 pub mod dummy {
     pub use crate::behaviour::dummy::{Behaviour, DummyHandler};

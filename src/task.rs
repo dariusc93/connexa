@@ -113,7 +113,7 @@ where
     pub context: X,
     pub custom_task_callback: TTaskCallback<C, X, T>,
     pub custom_event_callback: TEventCallback<C, X>,
-    pub swarm_event_callback: TSwarmEventCallback<C>,
+    pub swarm_event_callback: TSwarmEventCallback<C, X>,
     pub custom_pollable_callback: TPollableCallback<C, X>,
 
     pub connection_listeners: Vec<mpsc::Sender<ConnectionEvent>>,
@@ -217,7 +217,7 @@ where
             custom_event_callback: Box::new(|_, _, _| ()),
             custom_task_callback: Box::new(|_, _, _| ()),
             custom_pollable_callback: Box::new(|_, _, _| Poll::Pending),
-            swarm_event_callback: Box::new(|_| ()),
+            swarm_event_callback: Box::new(|_, _, _| ()),
             connection_listeners: Vec::new(),
             listener_addresses: HashMap::new(),
             #[cfg(feature = "kad")]
@@ -290,7 +290,9 @@ where
 
     pub fn set_swarm_event_callback<F>(&mut self, callback: F)
     where
-        F: Fn(&SwarmEvent<BehaviourEvent<C>>) + Send + 'static,
+        F: Fn(&mut Swarm<behaviour::Behaviour<C>>, &SwarmEvent<BehaviourEvent<C>>, &mut X)
+            + 'static
+            + Send,
     {
         self.swarm_event_callback = Box::new(callback);
     }
