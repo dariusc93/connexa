@@ -43,6 +43,7 @@ pub enum Command<T = ()> {
     Whitelist(WhitelistCommand),
     Blacklist(BlacklistCommand),
     ConnectionLimits(ConnectionLimitsCommand),
+    Peerstore(PeerstoreCommand),
     Custom(T),
 }
 
@@ -116,6 +117,12 @@ impl<T> From<BlacklistCommand> for Command<T> {
 impl<T> From<ConnectionLimitsCommand> for Command<T> {
     fn from(cmd: ConnectionLimitsCommand) -> Self {
         Command::ConnectionLimits(cmd)
+    }
+}
+
+impl<T> From<PeerstoreCommand> for Command<T> {
+    fn from(value: PeerstoreCommand) -> Self {
+        Command::Peerstore(value)
     }
 }
 
@@ -543,5 +550,27 @@ pub enum BlacklistCommand {
     },
     List {
         resp: oneshot::Sender<Result<Vec<PeerId>>>,
+    },
+}
+
+#[derive(Debug)]
+pub enum PeerstoreCommand {
+    Add {
+        peer_id: PeerId,
+        addr: Multiaddr,
+        resp: oneshot::Sender<Result<BoxFuture<'static, std::io::Result<()>>>>,
+    },
+    RemoveAddress {
+        peer_id: PeerId,
+        addr: Multiaddr,
+        resp: oneshot::Sender<Result<BoxFuture<'static, std::io::Result<()>>>>,
+    },
+    Remove {
+        peer_id: PeerId,
+        resp: oneshot::Sender<Result<BoxFuture<'static, std::io::Result<Vec<Multiaddr>>>>>,
+    },
+    List {
+        peer_id: PeerId,
+        resp: oneshot::Sender<Result<BoxFuture<'static, std::io::Result<Vec<Multiaddr>>>>>,
     },
 }

@@ -7,6 +7,7 @@ pub(crate) mod dht;
 pub(crate) mod floodsub;
 #[cfg(feature = "gossipsub")]
 pub(crate) mod gossipsub;
+mod peer_store;
 #[cfg(feature = "rendezvous")]
 pub(crate) mod rendezvous;
 #[cfg(feature = "request-response")]
@@ -25,6 +26,7 @@ use crate::handle::dht::ConnexaDht;
 use crate::handle::floodsub::ConnexaFloodsub;
 #[cfg(feature = "gossipsub")]
 use crate::handle::gossipsub::ConnexaGossipsub;
+use crate::handle::peer_store::ConnexaPeerstore;
 #[cfg(feature = "rendezvous")]
 use crate::handle::rendezvous::ConnexaRendezvous;
 #[cfg(feature = "request-response")]
@@ -139,6 +141,11 @@ where
     /// Returns a handle to manage peer blacklist functionality  
     pub fn blacklist(&self) -> ConnexaBlacklist<T> {
         ConnexaBlacklist::new(self)
+    }
+
+    /// Returns a handle to the peer store
+    pub fn peer_store(&self) -> ConnexaPeerstore<T> {
+        ConnexaPeerstore::new(self)
     }
 
     /// Keypair that was used during initialization

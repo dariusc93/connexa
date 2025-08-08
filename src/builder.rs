@@ -174,6 +174,7 @@ pub(crate) struct Protocols {
     pub(crate) connection_limits: bool,
     pub(crate) allow_list: bool,
     pub(crate) deny_list: bool,
+    pub(crate) peer_store: bool,
 }
 
 impl<B, Ctx, Cmd> ConnexaBuilder<B, Ctx, Cmd>
@@ -292,6 +293,12 @@ where
     {
         self.protocols.kad = true;
         self.config.kademlia_config = (protocol.into(), Box::new(f));
+        self
+    }
+
+    /// Enables peer store
+    pub fn with_peer_store(mut self) -> Self {
+        self.protocols.peer_store = true;
         self
     }
 

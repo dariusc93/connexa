@@ -1,0 +1,13 @@
+[package]
+name = "peer-store"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[package.metadata.release]
+release = false
+
+[dependencies]
+tokio.workspace = true
+futures.workspace = true
+connexa = { path = "../../", default-features = false, features = ["ed25519", "yamux", "noise"] }
