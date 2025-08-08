@@ -41,7 +41,7 @@ pub mod prelude {
     pub use crate::types::*;
     pub use libp2p::{Multiaddr, PeerId, Stream, StreamProtocol, multiaddr::Protocol};
 
-    use crate::prelude::peer_store::memory::MemoryStore;
+    use crate::prelude::peer_store::store::memory::MemoryStore;
     pub use libp2p::identity;
 
     pub mod swarm {
@@ -50,7 +50,7 @@ pub mod prelude {
     }
 
     pub mod peer_store {
-        pub use crate::behaviour::peer_store::{memory, store};
+        pub use crate::behaviour::peer_store::store;
     }
 
     #[cfg(feature = "kad")]

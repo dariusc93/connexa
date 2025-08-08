@@ -1,5 +1,5 @@
 use connexa::prelude::DefaultConnexaBuilder;
-use connexa::prelude::peer_store::memory::MemoryStore;
+use connexa::prelude::peer_store::store::memory::MemoryStore;
 use connexa::prelude::swarm::dial_opts::DialOpts;
 
 #[tokio::main]
@@ -69,7 +69,7 @@ async fn main() -> std::io::Result<()> {
 
     connexa_a.swarm().dial(opt).await.unwrap();
 
-    // give the task time to process the spawn events. 
+    // give the task time to process the spawn events.
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     let addrs_a = connexa_b.peer_store().list(peer_a_id).await?;
