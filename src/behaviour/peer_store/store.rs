@@ -1,3 +1,5 @@
+pub mod memory;
+
 use libp2p::swarm::FromSwarm;
 use libp2p::{Multiaddr, PeerId};
 use std::fmt::Debug;

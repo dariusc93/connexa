@@ -1,8 +1,7 @@
-pub mod memory;
 pub mod store;
 
-use crate::behaviour::peer_store::memory::MemoryStore;
 use crate::behaviour::peer_store::store::Store;
+use crate::behaviour::peer_store::store::memory::MemoryStore;
 use crate::prelude::swarm::derive_prelude::PortUse;
 use crate::prelude::swarm::{
     ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler, THandlerInEvent,

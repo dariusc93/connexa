@@ -45,7 +45,7 @@ pub mod prelude {
     }
 
     pub mod peer_store {
-        pub use crate::behaviour::peer_store::{memory, store};
+        pub use crate::behaviour::peer_store::store;
     }
 
     #[cfg(feature = "kad")]
