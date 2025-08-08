@@ -44,6 +44,7 @@ use crate::types::{DHTCommand, DHTEvent, RecordHandle};
 #[cfg(feature = "floodsub")]
 use crate::types::{FloodsubEvent, FloodsubMessage, PubsubFloodsubPublish};
 
+use crate::prelude::PeerstoreCommand;
 #[cfg(feature = "gossipsub")]
 use crate::types::GossipsubEvent;
 #[cfg(feature = "stream")]
@@ -504,6 +505,49 @@ where
                     *connection_limits.limits_mut() = limits;
 
                     let _ = resp.send(Ok(()));
+                }
+            },
+            Command::Peerstore(command) => match command {
+                PeerstoreCommand::Add {
+                    peer_id,
+                    addr,
+                    resp,
+                } => {
+                    let Some(store) = swarm.behaviour_mut().peer_store.as_mut() else {
+                        let _ = resp.send(Err(std::io::Error::other("peerstore not enabled")));
+                        return;
+                    };
+
+                    let fut = store.insert(peer_id, addr);
+                    let _ = resp.send(Ok(fut));
+                }
+                PeerstoreCommand::RemoveAddress {
+                    peer_id,
+                    addr,
+                    resp,
+                } => {
+                    let Some(store) = swarm.behaviour_mut().peer_store.as_mut() else {
+                        let _ = resp.send(Err(std::io::Error::other("peerstore not enabled")));
+                        return;
+                    };
+                    let fut = store.remove_address(&peer_id, &addr);
+                    let _ = resp.send(Ok(fut));
+                }
+                PeerstoreCommand::Remove { peer_id, resp } => {
+                    let Some(store) = swarm.behaviour_mut().peer_store.as_mut() else {
+                        let _ = resp.send(Err(std::io::Error::other("peerstore not enabled")));
+                        return;
+                    };
+                    let fut = store.remove(&peer_id);
+                    let _ = resp.send(Ok(fut));
+                }
+                PeerstoreCommand::List { peer_id, resp } => {
+                    let Some(store) = swarm.behaviour_mut().peer_store.as_mut() else {
+                        let _ = resp.send(Err(std::io::Error::other("peerstore not enabled")));
+                        return;
+                    };
+                    let fut = store.address(&peer_id);
+                    let _ = resp.send(Ok(fut));
                 }
             },
             #[cfg(feature = "gossipsub")]

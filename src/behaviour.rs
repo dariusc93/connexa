@@ -1,4 +1,5 @@
 pub mod dummy;
+mod peer_store;
 #[cfg(feature = "request-response")]
 pub mod request_response;
 #[cfg(feature = "request-response")]
@@ -41,6 +42,8 @@ pub struct Behaviour<C> {
     pub allow_list: Toggle<libp2p_allow_block_list::Behaviour<AllowedPeers>>,
     pub deny_list: Toggle<libp2p_allow_block_list::Behaviour<BlockedPeers>>,
     pub connection_limits: Toggle<libp2p_connection_limits::Behaviour>,
+
+    pub peer_store: Toggle<peer_store::Behaviour>,
 
     #[cfg(feature = "relay")]
     // networking
@@ -312,11 +315,17 @@ where
             })
             .into();
 
+        let peer_store = protocols
+            .peer_store
+            .then(|| peer_store::Behaviour::default())
+            .into();
+
         #[allow(unused_mut)]
         let mut behaviour = Behaviour {
             allow_list,
             deny_list,
             connection_limits,
+            peer_store,
             #[cfg(not(target_arch = "wasm32"))]
             #[cfg(feature = "mdns")]
             mdns,
