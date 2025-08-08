@@ -21,6 +21,17 @@ pub struct MemoryStore {
     timer: FutureMap<(PeerId, Multiaddr), Delay>,
 }
 
+impl FromIterator<(PeerId, Multiaddr)> for MemoryStore {
+    fn from_iter<T: IntoIterator<Item = (PeerId, Multiaddr)>>(iter: T) -> Self {
+        let mut store = Self::default();
+        for (peer_id, addr) in iter {
+            store.persistent.insert(peer_id);
+            store.peers.entry(peer_id).or_default().insert(addr);
+        }
+        store
+    }
+}
+
 // Note that we use this because the trait returns a future, which would allow the implementation to either use `async` to desugar to `fn -> impl Future`
 // or allow custom futures (ie here we use `Ready` since this is in-memory and is expected to be ready). This, however, may change in the future.
 // See https://github.com/rust-lang/rust/issues/121718 for more information

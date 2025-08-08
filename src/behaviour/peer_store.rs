@@ -1,5 +1,5 @@
-mod memory;
-mod store;
+pub mod memory;
+pub mod store;
 
 use crate::behaviour::peer_store::memory::MemoryStore;
 use crate::behaviour::peer_store::store::Store;

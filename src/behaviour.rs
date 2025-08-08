@@ -1,5 +1,5 @@
 pub mod dummy;
-mod peer_store;
+pub mod peer_store;
 #[cfg(feature = "request-response")]
 pub mod request_response;
 #[cfg(feature = "request-response")]

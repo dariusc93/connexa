@@ -44,6 +44,10 @@ pub mod prelude {
         pub use libp2p::swarm::*;
     }
 
+    pub mod peer_store {
+        pub use crate::behaviour::peer_store::{memory, store};
+    }
+
     #[cfg(feature = "kad")]
     pub mod dht {
         pub use crate::handle::dht::{ToOptionalRecordKey, ToRecordKey};
