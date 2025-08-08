@@ -1,3 +1,4 @@
+use crate::behaviour::peer_store::store::Store;
 use crate::task::ConnexaTask;
 use crate::types::RendezvousCommand;
 use futures::SinkExt;
@@ -7,11 +8,12 @@ use libp2p::rendezvous::{Namespace, Registration};
 use libp2p::swarm::NetworkBehaviour;
 use std::fmt::Debug;
 
-impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>
+impl<X, C: NetworkBehaviour, S, T> ConnexaTask<X, C, S, T>
 where
     X: Default + Send + 'static,
     C: Send,
     C::ToSwarm: Debug,
+    S: Store,
 {
     pub fn process_rendezvous_command(&mut self, command: RendezvousCommand) {
         let swarm = self.swarm.as_mut().expect("swarm is active");

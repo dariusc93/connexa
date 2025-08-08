@@ -9,13 +9,15 @@ use libp2p::kad::{
 use std::fmt::Debug;
 use std::io;
 
+use crate::behaviour::peer_store::store::Store;
 use libp2p::swarm::NetworkBehaviour;
 
-impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>
+impl<X, C: NetworkBehaviour, S, T> ConnexaTask<X, C, S, T>
 where
     X: Default + Send + 'static,
     C: Send,
     C::ToSwarm: Debug,
+    S: Store,
 {
     pub fn process_kademlia_command(&mut self, command: DHTCommand) {
         let swarm = self.swarm.as_mut().unwrap();
