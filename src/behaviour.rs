@@ -30,6 +30,7 @@ type ClientTransport = ();
 
 use libp2p::swarm::behaviour::toggle::Toggle;
 
+use crate::behaviour::peer_store::store::Store;
 use crate::builder::{Config, Protocols};
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkBehaviour;
@@ -37,13 +38,16 @@ use libp2p_allow_block_list::{AllowedPeers, BlockedPeers};
 use std::fmt::Debug;
 
 #[derive(NetworkBehaviour)]
-pub struct Behaviour<C> {
+pub struct Behaviour<C, S>
+where
+    S: Store,
+{
     // connection management
     pub allow_list: Toggle<libp2p_allow_block_list::Behaviour<AllowedPeers>>,
     pub deny_list: Toggle<libp2p_allow_block_list::Behaviour<BlockedPeers>>,
     pub connection_limits: Toggle<libp2p_connection_limits::Behaviour>,
 
-    pub peer_store: Toggle<peer_store::Behaviour>,
+    pub peer_store: Toggle<peer_store::Behaviour<S>>,
 
     #[cfg(feature = "relay")]
     // networking
@@ -117,15 +121,16 @@ pub struct Behaviour<C> {
     pub custom: Toggle<C>,
 }
 
-impl<C> Behaviour<C>
+impl<C, S> Behaviour<C, S>
 where
     C: NetworkBehaviour,
     <C as NetworkBehaviour>::ToSwarm: Debug + Send,
+    S: Store,
 {
     pub(crate) fn new(
         keypair: &Keypair,
         custom_behaviour: Option<C>,
-        config: Config,
+        config: Config<S>,
         protocols: Protocols,
     ) -> std::io::Result<(Self, Option<ClientTransport>)> {
         if protocols.allow_list && protocols.deny_list {
@@ -317,7 +322,9 @@ where
 
         let peer_store = protocols
             .peer_store
-            .then(|| peer_store::Behaviour::default())
+            .then(|| config.peer_store)
+            .map(Option::unwrap)
+            .map(peer_store::Behaviour::new)
             .into();
 
         #[allow(unused_mut)]

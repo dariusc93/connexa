@@ -1,5 +1,6 @@
 use crate::behaviour;
 use crate::behaviour::BehaviourEvent;
+use crate::behaviour::peer_store::store::Store;
 use crate::prelude::ConnectionEvent;
 use crate::task::ConnexaTask;
 use libp2p::swarm::NetworkBehaviour;
@@ -7,13 +8,14 @@ use libp2p::swarm::SwarmEvent;
 use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 
-impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>
+impl<X, C: NetworkBehaviour, S, T> ConnexaTask<X, C, S, T>
 where
     X: Default + Send + 'static,
     C: Send,
     C::ToSwarm: Debug,
+    S: Store,
 {
-    pub fn process_swarm_event(&mut self, event: SwarmEvent<BehaviourEvent<C>>) {
+    pub fn process_swarm_event(&mut self, event: SwarmEvent<BehaviourEvent<C, S>>) {
         let Some(swarm) = self.swarm.as_mut() else {
             return;
         };
@@ -179,7 +181,7 @@ where
         }
     }
 
-    pub fn process_swarm_behaviour_event(&mut self, event: BehaviourEvent<C>) {
+    pub fn process_swarm_behaviour_event(&mut self, event: BehaviourEvent<C, S>) {
         let Some(swarm) = self.swarm.as_mut() else {
             return;
         };

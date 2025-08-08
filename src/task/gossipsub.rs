@@ -1,3 +1,4 @@
+use crate::behaviour::peer_store::store::Store;
 use crate::prelude::GossipsubMessage;
 use crate::task::ConnexaTask;
 use crate::types::{GossipsubCommand, GossipsubEvent};
@@ -8,11 +9,12 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>
+impl<X, C: NetworkBehaviour, S, T> ConnexaTask<X, C, S, T>
 where
     X: Default + Send + 'static,
     C: Send,
     C::ToSwarm: Debug,
+    S: Store,
 {
     pub fn process_gossipsub_command(&mut self, command: GossipsubCommand) {
         let swarm = self.swarm.as_mut().unwrap();

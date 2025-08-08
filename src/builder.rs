@@ -37,6 +37,7 @@ use libp2p_connection_limits::ConnectionLimits;
 use std::fmt::Debug;
 use std::task::{Context, Poll};
 // Since this used for quic duration, we will feature gate it to satisfy lint
+use crate::behaviour::peer_store::store::Store;
 #[cfg(feature = "quic")]
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
@@ -48,26 +49,27 @@ pub enum FileDescLimit {
     Custom(u64),
 }
 
-pub struct ConnexaBuilder<B, Ctx, Cmd>
+pub struct ConnexaBuilder<B, Ctx, Cmd, S>
 where
     B: NetworkBehaviour,
+    S: Store,
 {
     keypair: Keypair,
     context: Ctx,
     custom_behaviour: Option<B>,
     file_descriptor_limits: Option<FileDescLimit>,
-    custom_task_callback: TTaskCallback<B, Ctx, Cmd>,
-    custom_event_callback: TEventCallback<B, Ctx>,
-    swarm_event_callback: TSwarmEventCallback<B, Ctx>,
-    custom_pollable_callback: TPollableCallback<B, Ctx>,
-    config: Config,
+    custom_task_callback: TTaskCallback<B, Ctx, Cmd, S>,
+    custom_event_callback: TEventCallback<B, Ctx, S>,
+    swarm_event_callback: TSwarmEventCallback<B, Ctx, S>,
+    custom_pollable_callback: TPollableCallback<B, Ctx, S>,
+    config: Config<S>,
     swarm_config: Box<dyn FnOnce(libp2p::swarm::Config) -> libp2p::swarm::Config>,
     transport_config: TransportConfig,
     custom_transport: Option<TTransport>,
     protocols: Protocols,
 }
 
-pub(crate) struct Config {
+pub(crate) struct Config<S: Store> {
     #[cfg(feature = "kad")]
     pub kademlia_config: (String, Box<dyn FnOnce(KadConfig) -> KadConfig>),
     #[cfg(feature = "gossipsub")]
@@ -97,9 +99,10 @@ pub(crate) struct Config {
     pub allow_list: Vec<PeerId>,
     pub deny_list: Vec<PeerId>,
     pub connection_limits: Box<dyn FnOnce(ConnectionLimits) -> ConnectionLimits>,
+    pub peer_store: Option<S>,
 }
 
-impl Default for Config {
+impl<S: Store> Default for Config<S> {
     fn default() -> Self {
         Self {
             #[cfg(feature = "kad")]
@@ -128,6 +131,7 @@ impl Default for Config {
             allow_list: Vec::new(),
             deny_list: Vec::new(),
             connection_limits: Box::new(|config| config),
+            peer_store: None,
         }
     }
 }
@@ -177,13 +181,14 @@ pub(crate) struct Protocols {
     pub(crate) peer_store: bool,
 }
 
-impl<B, Ctx, Cmd> ConnexaBuilder<B, Ctx, Cmd>
+impl<B, Ctx, Cmd, S> ConnexaBuilder<B, Ctx, Cmd, S>
 where
     B: NetworkBehaviour,
     B: Send,
     B::ToSwarm: Debug,
     Ctx: Default + Unpin + Send + Sync + 'static,
     Cmd: Send + Sync + 'static,
+    S: Store,
 {
     /// Create a new instance
     pub fn new_identity() -> Self {
@@ -231,7 +236,7 @@ where
     /// Set a callback for custom task events.
     pub fn set_custom_task_callback<F>(mut self, f: F) -> Self
     where
-        F: Fn(&mut Swarm<behaviour::Behaviour<B>>, &mut Ctx, Cmd) + 'static + Send,
+        F: Fn(&mut Swarm<behaviour::Behaviour<B, S>>, &mut Ctx, Cmd) + 'static + Send,
     {
         self.custom_task_callback = Box::new(f);
         self
@@ -240,7 +245,7 @@ where
     /// Handles events from the custom behaviour.
     pub fn set_custom_event_callback<F>(mut self, f: F) -> Self
     where
-        F: Fn(&mut Swarm<behaviour::Behaviour<B>>, &mut Ctx, B::ToSwarm) + 'static + Send,
+        F: Fn(&mut Swarm<behaviour::Behaviour<B, S>>, &mut Ctx, B::ToSwarm) + 'static + Send,
     {
         self.custom_event_callback = Box::new(f);
         self
@@ -251,7 +256,7 @@ where
     /// it would be no-op since this is just to process futures or streams that may be held in context
     pub fn set_pollable_callback<F>(mut self, f: F) -> Self
     where
-        F: Fn(&mut Context<'_>, &mut Swarm<behaviour::Behaviour<B>>, &mut Ctx) -> Poll<()>
+        F: Fn(&mut Context<'_>, &mut Swarm<behaviour::Behaviour<B, S>>, &mut Ctx) -> Poll<()>
             + Send
             + 'static,
     {
@@ -263,8 +268,8 @@ where
     pub fn set_swarm_event_callback<F>(mut self, f: F) -> Self
     where
         F: Fn(
-                &mut Swarm<behaviour::Behaviour<B>>,
-                &SwarmEvent<behaviour::BehaviourEvent<B>>,
+                &mut Swarm<behaviour::Behaviour<B, S>>,
+                &SwarmEvent<behaviour::BehaviourEvent<B, S>>,
                 &mut Ctx,
             )
             + 'static
@@ -297,8 +302,9 @@ where
     }
 
     /// Enables peer store
-    pub fn with_peer_store(mut self) -> Self {
+    pub fn with_peer_store(mut self, store: S) -> Self {
         self.protocols.peer_store = true;
+        self.config.peer_store = Some(store);
         self
     }
 

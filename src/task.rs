@@ -44,6 +44,7 @@ use crate::types::{DHTCommand, DHTEvent, RecordHandle};
 #[cfg(feature = "floodsub")]
 use crate::types::{FloodsubEvent, FloodsubMessage, PubsubFloodsubPublish};
 
+use crate::behaviour::peer_store::store::Store;
 use crate::prelude::PeerstoreCommand;
 #[cfg(feature = "gossipsub")]
 use crate::types::GossipsubEvent;
@@ -104,18 +105,19 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-pub struct ConnexaTask<X, C: NetworkBehaviour, T = ()>
+pub struct ConnexaTask<X, C: NetworkBehaviour, S, T = ()>
 where
     C: Send,
     C::ToSwarm: Debug,
+    S: Store,
 {
-    pub swarm: Optional<Swarm<behaviour::Behaviour<C>>>,
+    pub swarm: Optional<Swarm<behaviour::Behaviour<C, S>>>,
     pub command_receiver: Optional<mpsc::Receiver<Command<T>>>,
     pub context: X,
-    pub custom_task_callback: TTaskCallback<C, X, T>,
-    pub custom_event_callback: TEventCallback<C, X>,
-    pub swarm_event_callback: TSwarmEventCallback<C, X>,
-    pub custom_pollable_callback: TPollableCallback<C, X>,
+    pub custom_task_callback: TTaskCallback<C, X, T, S>,
+    pub custom_event_callback: TEventCallback<C, X, S>,
+    pub swarm_event_callback: TSwarmEventCallback<C, X, S>,
+    pub custom_pollable_callback: TPollableCallback<C, X, S>,
 
     pub connection_listeners: Vec<mpsc::Sender<ConnectionEvent>>,
 
@@ -203,13 +205,14 @@ where
     pub cleanup_interval: Duration,
 }
 
-impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>
+impl<X, C: NetworkBehaviour, S, T> ConnexaTask<X, C, S, T>
 where
     X: Default + Send + 'static,
     C: Send,
     C::ToSwarm: Debug,
+    S: Store,
 {
-    pub fn new(swarm: Swarm<behaviour::Behaviour<C>>) -> Self {
+    pub fn new(swarm: Swarm<behaviour::Behaviour<C, S>>) -> Self {
         let duration = Duration::from_secs(10);
         Self {
             swarm: Optional::new(swarm),
@@ -277,21 +280,21 @@ where
 
     pub fn set_event_callback<F>(&mut self, callback: F)
     where
-        F: Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, C::ToSwarm) + Send + 'static,
+        F: Fn(&mut Swarm<behaviour::Behaviour<C, S>>, &mut X, C::ToSwarm) + Send + 'static,
     {
         self.custom_event_callback = Box::new(callback);
     }
 
     pub fn set_task_callback<F>(&mut self, callback: F)
     where
-        F: Fn(&mut Swarm<behaviour::Behaviour<C>>, &mut X, T) + Send + 'static,
+        F: Fn(&mut Swarm<behaviour::Behaviour<C, S>>, &mut X, T) + Send + 'static,
     {
         self.custom_task_callback = Box::new(callback);
     }
 
     pub fn set_swarm_event_callback<F>(&mut self, callback: F)
     where
-        F: Fn(&mut Swarm<behaviour::Behaviour<C>>, &SwarmEvent<BehaviourEvent<C>>, &mut X)
+        F: Fn(&mut Swarm<behaviour::Behaviour<C, S>>, &SwarmEvent<BehaviourEvent<C, S>>, &mut X)
             + 'static
             + Send,
     {
@@ -300,7 +303,7 @@ where
 
     pub fn set_pollable_callback<F>(&mut self, callback: F)
     where
-        F: Fn(&mut Context<'_>, &mut Swarm<behaviour::Behaviour<C>>, &mut X) -> Poll<()>
+        F: Fn(&mut Context<'_>, &mut Swarm<behaviour::Behaviour<C, S>>, &mut X) -> Poll<()>
             + Send
             + 'static,
     {
@@ -575,12 +578,13 @@ where
     }
 }
 
-impl<X, C: NetworkBehaviour, T> Future for ConnexaTask<X, C, T>
+impl<X, C: NetworkBehaviour, S, T> Future for ConnexaTask<X, C, S, T>
 where
     X: Default + Unpin + Send + 'static,
     C: Send,
     C::ToSwarm: Debug,
     T: 'static,
+    S: Store,
 {
     type Output = ();
 

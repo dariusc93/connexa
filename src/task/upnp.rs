@@ -1,13 +1,15 @@
+use crate::behaviour::peer_store::store::Store;
 use crate::task::ConnexaTask;
 use libp2p::swarm::NetworkBehaviour;
 use libp2p::upnp::Event as UpnpEvent;
 use std::fmt::Debug;
 
-impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>
+impl<X, C: NetworkBehaviour, S, T> ConnexaTask<X, C, S, T>
 where
     X: Default + Send + 'static,
     C: Send,
     C::ToSwarm: Debug,
+    S: Store,
 {
     pub fn process_upnp_event(&mut self, event: UpnpEvent) {
         match event {

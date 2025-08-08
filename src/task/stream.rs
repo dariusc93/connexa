@@ -1,13 +1,15 @@
+use crate::behaviour::peer_store::store::Store;
 use crate::task::ConnexaTask;
 use crate::types::StreamCommand;
 use libp2p::swarm::NetworkBehaviour;
 use std::fmt::Debug;
 
-impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>
+impl<X, C: NetworkBehaviour, S, T> ConnexaTask<X, C, S, T>
 where
     X: Default + Send + 'static,
     C: Send,
     C::ToSwarm: Debug,
+    S: Store,
 {
     pub fn process_stream_command(&mut self, command: StreamCommand) {
         let swarm = self.swarm.as_mut().unwrap();

@@ -1,3 +1,4 @@
+use crate::behaviour::peer_store::store::Store;
 use crate::prelude::{FloodsubMessage, PubsubFloodsubPublish};
 use crate::task::ConnexaTask;
 use crate::types::{FloodsubCommand, FloodsubEvent};
@@ -6,11 +7,12 @@ use libp2p::floodsub::Event;
 use libp2p::swarm::NetworkBehaviour;
 use std::fmt::Debug;
 
-impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>
+impl<X, C: NetworkBehaviour, S, T> ConnexaTask<X, C, S, T>
 where
     X: Default + Send + 'static,
     C: Send,
     C::ToSwarm: Debug,
+    S: Store,
 {
     pub fn process_floodsub_command(&mut self, command: FloodsubCommand) {
         let swarm = self.swarm.as_mut().unwrap();

@@ -1,4 +1,5 @@
 use crate::behaviour;
+use crate::behaviour::peer_store::store::Store;
 use crate::task::ConnexaTask;
 use crate::types::AutonatCommand;
 use libp2p::Swarm;
@@ -8,11 +9,13 @@ use libp2p::autonat::v2::server::Event as AutonatV2ServerEvent;
 use libp2p::swarm::NetworkBehaviour;
 use std::fmt::Debug;
 use std::io;
-impl<X, C: NetworkBehaviour, T> ConnexaTask<X, C, T>
+
+impl<X, C: NetworkBehaviour, S, T> ConnexaTask<X, C, S, T>
 where
     X: Default + Send + 'static,
     C: Send,
     C::ToSwarm: Debug,
+    S: Store,
 {
     pub fn process_autonat_v1_command(&mut self, command: AutonatCommand) {
         let Some(swarm) = self.swarm.as_mut() else {

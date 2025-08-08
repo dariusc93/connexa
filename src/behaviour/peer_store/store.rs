@@ -3,7 +3,7 @@ use libp2p::{Multiaddr, PeerId};
 use std::fmt::Debug;
 use std::task::{Context, Poll};
 
-pub trait Store: 'static {
+pub trait Store: Send + Sync + 'static {
     type Event: Debug + Send;
     fn insert(
         &mut self,
