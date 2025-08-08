@@ -5,7 +5,7 @@ use connexa::prelude::swarm::dial_opts::DialOpts;
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     let connexa_a = DefaultConnexaBuilder::new_identity()
-        .with_peer_store(MemoryStore::default())
+        .with_peer_store()
         .enable_memory_transport()
         .build()?;
 
@@ -19,7 +19,7 @@ async fn main() -> std::io::Result<()> {
     let node_a_addrs = connexa_a.swarm().get_listening_addresses(id_a).await?;
 
     let connexa_b = DefaultConnexaBuilder::new_identity()
-        .with_peer_store(MemoryStore::default())
+        .with_peer_store()
         .enable_memory_transport()
         .build()?;
 

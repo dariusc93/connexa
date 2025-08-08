@@ -302,7 +302,15 @@ where
     }
 
     /// Enables peer store
-    pub fn with_peer_store(mut self, store: S) -> Self {
+    pub fn with_peer_store(self) -> Self
+    where
+        S: Default,
+    {
+        self.with_peer_store_with_store(S::default())
+    }
+
+    /// Enables peer store
+    pub fn with_peer_store_with_store(mut self, store: S) -> Self {
         self.protocols.peer_store = true;
         self.config.peer_store = Some(store);
         self
