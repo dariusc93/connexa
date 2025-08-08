@@ -1,3 +1,4 @@
+pub mod dummy;
 pub mod memory;
 
 use libp2p::swarm::FromSwarm;
