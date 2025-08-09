@@ -22,7 +22,7 @@ enum Command {
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    let connexa = ConnexaBuilder::<behaviour::Behaviour, Context, Command>::new_identity()
+    let connexa = ConnexaBuilder::<behaviour::Behaviour, Context, Command, ()>::new_identity()
         .with_custom_behaviour(|_| behaviour::Behaviour::new())
         .set_custom_event_callback(|_, context, event| {
             let Event::StateChange { id, old, new } = event;
