@@ -1,5 +1,4 @@
 use connexa::prelude::DefaultConnexaBuilder;
-use connexa::prelude::peer_store::store::memory::MemoryStore;
 use connexa::prelude::swarm::dial_opts::DialOpts;
 
 #[tokio::main]
