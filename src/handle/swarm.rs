@@ -1,6 +1,5 @@
 use crate::handle::Connexa;
 use crate::types::{ConnectionEvent, SwarmCommand};
-use either::Either;
 use futures::StreamExt;
 use futures::channel::oneshot;
 use futures::stream::BoxStream;
