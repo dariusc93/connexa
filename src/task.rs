@@ -45,6 +45,7 @@ use crate::types::{DHTCommand, DHTEvent, RecordHandle};
 use crate::types::{FloodsubEvent, FloodsubMessage, PubsubFloodsubPublish};
 
 use crate::behaviour::peer_store::store::Store;
+use crate::handle::swarm::ConnectionTarget;
 use crate::prelude::PeerstoreCommand;
 #[cfg(feature = "gossipsub")]
 use crate::types::GossipsubEvent;
@@ -334,14 +335,14 @@ where
                     let _ = resp.send(is_connected);
                 }
                 SwarmCommand::Disconnect { target_type, resp } => match target_type {
-                    Either::Left(peer_id) => {
+                    ConnectionTarget::PeerId(peer_id) => {
                         if swarm.disconnect_peer_id(peer_id).is_err() {
                             let _ = resp.send(Err(std::io::Error::other("peer is not connected")));
                             return;
                         }
                         self.pending_disconnection_by_peer_id.insert(peer_id, resp);
                     }
-                    Either::Right(connection_id) => {
+                    ConnectionTarget::ConnectionId(connection_id) => {
                         if !swarm.close_connection(connection_id) {
                             let _ = resp.send(Err(std::io::Error::other("not a valid connection")));
                             return;

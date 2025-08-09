@@ -41,6 +41,8 @@ pub mod prelude {
     pub use crate::types::*;
     pub use libp2p::{Multiaddr, PeerId, Stream, StreamProtocol, multiaddr::Protocol};
 
+    pub use crate::handle::swarm::ConnectionTarget;
+
     use crate::prelude::peer_store::store::memory::MemoryStore;
     pub use libp2p::identity;
 

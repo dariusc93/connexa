@@ -45,7 +45,7 @@ where
     /// Disconnects from a peer specified by either PeerId or ConnectionId
     pub async fn disconnect(
         &self,
-        target_type: impl Into<Either<PeerId, ConnectionId>>,
+        target_type: impl Into<ConnectionTarget>,
     ) -> crate::handle::Result<()> {
         let target_type = target_type.into();
         let (tx, rx) = oneshot::channel();
@@ -213,5 +213,23 @@ where
             .await?;
 
         rx.await.map_err(std::io::Error::other).map(|rx| rx.boxed())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ConnectionTarget {
+    PeerId(PeerId),
+    ConnectionId(ConnectionId),
+}
+
+impl From<PeerId> for ConnectionTarget {
+    fn from(peer_id: PeerId) -> Self {
+        Self::PeerId(peer_id)
+    }
+}
+
+impl From<ConnectionId> for ConnectionTarget {
+    fn from(connection_id: ConnectionId) -> Self {
+        Self::ConnectionId(connection_id)
     }
 }

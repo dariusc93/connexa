@@ -167,11 +167,7 @@ async fn test_disconnect_by_peer_id() {
 
     // Disconnect by PeerId
 
-    node2
-        .swarm()
-        .disconnect(Either::Left(node1_peer_id))
-        .await
-        .unwrap();
+    node2.swarm().disconnect(node1_peer_id).await.unwrap();
 
     // Verify disconnection
     let is_connected = node2.swarm().is_connected(node1_peer_id).await.unwrap();
@@ -193,11 +189,7 @@ async fn test_disconnect_by_connection_id() {
     assert!(is_connected);
 
     // Disconnect by ConnectionId
-    node2
-        .swarm()
-        .disconnect(Either::Right(connection_id))
-        .await
-        .unwrap();
+    node2.swarm().disconnect(connection_id).await.unwrap();
 
     // Verify disconnection
     let is_connected = node2.swarm().is_connected(node1_peer_id).await.unwrap();

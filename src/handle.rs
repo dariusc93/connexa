@@ -14,7 +14,7 @@ pub(crate) mod rendezvous;
 pub(crate) mod request_response;
 #[cfg(feature = "stream")]
 pub(crate) mod stream;
-mod swarm;
+pub(crate) mod swarm;
 mod whitelist;
 
 #[cfg(feature = "autonat")]

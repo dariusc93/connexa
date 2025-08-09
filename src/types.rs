@@ -1,4 +1,5 @@
 #![allow(unused_imports)]
+use crate::handle::swarm::ConnectionTarget;
 use bytes::Bytes;
 use either::Either;
 use futures::channel::{mpsc, oneshot};
@@ -137,7 +138,7 @@ pub enum SwarmCommand {
         resp: oneshot::Sender<bool>,
     },
     Disconnect {
-        target_type: Either<PeerId, ConnectionId>,
+        target_type: ConnectionTarget,
         resp: oneshot::Sender<Result<()>>,
     },
     ConnectedPeers {
