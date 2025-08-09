@@ -322,7 +322,7 @@ where
 
         let peer_store = protocols
             .peer_store
-            .then(|| config.peer_store)
+            .then_some(config.peer_store)
             .map(Option::unwrap)
             .map(peer_store::Behaviour::new)
             .into();
