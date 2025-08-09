@@ -87,64 +87,64 @@ where
     T: Send + Sync + 'static,
 {
     /// Returns a handle for swarm functions
-    pub fn swarm(&self) -> ConnexaSwarm<T> {
+    pub fn swarm(&self) -> ConnexaSwarm<'_, T> {
         ConnexaSwarm::new(self)
     }
 
     /// Returns a handle for autonat functions
     #[cfg(feature = "autonat")]
-    pub fn autonat(&self) -> ConnexaAutonat<T> {
+    pub fn autonat(&self) -> ConnexaAutonat<'_, T> {
         ConnexaAutonat::new(self)
     }
 
     /// Returns a handle for floodsub functions
     #[cfg(feature = "floodsub")]
-    pub fn floodsub(&self) -> ConnexaFloodsub<T> {
+    pub fn floodsub(&self) -> ConnexaFloodsub<'_, T> {
         ConnexaFloodsub::new(self)
     }
 
     /// Returns a handle for gossipsub functions   
     #[cfg(feature = "gossipsub")]
-    pub fn gossipsub(&self) -> ConnexaGossipsub<T> {
+    pub fn gossipsub(&self) -> ConnexaGossipsub<'_, T> {
         ConnexaGossipsub::new(self)
     }
 
     /// Returns a handle for dht functions  
     #[cfg(feature = "kad")]
-    pub fn dht(&self) -> ConnexaDht<T> {
+    pub fn dht(&self) -> ConnexaDht<'_, T> {
         ConnexaDht::new(self)
     }
 
     /// Returns a handle for request-response functions
     #[cfg(feature = "request-response")]
-    pub fn request_response(&self) -> ConnexaRequestResponse<T> {
+    pub fn request_response(&self) -> ConnexaRequestResponse<'_, T> {
         ConnexaRequestResponse::new(self)
     }
 
     /// Returns a handle for stream functions
     #[cfg(feature = "stream")]
-    pub fn stream(&self) -> ConnexaStream<T> {
+    pub fn stream(&self) -> ConnexaStream<'_, T> {
         ConnexaStream::new(self)
     }
 
     /// Returns a handle for rendezvous functions
     #[cfg(feature = "rendezvous")]
-    pub fn rendezvous(&self) -> ConnexaRendezvous<T> {
+    pub fn rendezvous(&self) -> ConnexaRendezvous<'_, T> {
         ConnexaRendezvous::new(self)
     }
 
     /// Returns a handle to manage peer whitelist functionality
-    pub fn whitelist(&self) -> ConnexaWhitelist<T> {
+    pub fn whitelist(&self) -> ConnexaWhitelist<'_, T> {
         ConnexaWhitelist::new(self)
     }
 
     /// Returns a handle to manage peer blacklist functionality  
-    pub fn blacklist(&self) -> ConnexaBlacklist<T> {
+    pub fn blacklist(&self) -> ConnexaBlacklist<'_, T> {
         ConnexaBlacklist::new(self)
     }
 
     /// Returns a handle to the peer store
-    pub fn peer_store(&self) -> ConnexaPeerstore<T> {
+    pub fn peer_store(&self) -> ConnexaPeerstore<'_, T> {
         ConnexaPeerstore::new(self)
     }
 
