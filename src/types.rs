@@ -356,6 +356,11 @@ pub enum DHTCommand {
         resp: oneshot::Sender<Result<()>>,
     },
 
+    RemovePeer {
+        peer_id: PeerId,
+        resp: oneshot::Sender<Result<()>>,
+    },
+
     Get {
         key: RecordKey,
         resp: oneshot::Sender<Result<mpsc::Receiver<Result<PeerRecord>>>>,

@@ -182,6 +182,23 @@ where
                     }
                 }
             }
+            DHTCommand::RemovePeer { peer_id, resp } => {
+                let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    return;
+                };
+
+                match kad.remove_peer(&peer_id).is_some() {
+                    true => {
+                        let _ = resp.send(Ok(()));
+                    }
+                    false => {
+                        let _ = resp.send(Err(std::io::Error::other(
+                            "failed to remove peer from routing table",
+                        )));
+                    }
+                }
+            }
             DHTCommand::Get { key, resp } => {
                 let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
                     let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));

@@ -222,6 +222,17 @@ where
             .await?;
         rx.await.map_err(std::io::Error::other)?
     }
+
+    /// Removes a peer from the routing table
+    pub async fn remove_peer(&self, peer_id: PeerId) -> std::io::Result<()> {
+        let (tx, rx) = oneshot::channel();
+        self.connexa
+            .to_task
+            .clone()
+            .send(DHTCommand::RemovePeer { peer_id, resp: tx }.into())
+            .await?;
+        rx.await.map_err(std::io::Error::other)?
+    }
 }
 
 pub trait ToRecordKey {
