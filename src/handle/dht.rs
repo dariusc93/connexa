@@ -204,6 +204,24 @@ where
             .await?;
         rx.await.map_err(std::io::Error::other)?
     }
+
+    /// Removes an address from the routing table for a specific peer
+    pub async fn remove_address(&self, peer_id: PeerId, addr: Multiaddr) -> std::io::Result<()> {
+        let (tx, rx) = oneshot::channel();
+        self.connexa
+            .to_task
+            .clone()
+            .send(
+                DHTCommand::RemoveAddress {
+                    peer_id,
+                    addr,
+                    resp: tx,
+                }
+                .into(),
+            )
+            .await?;
+        rx.await.map_err(std::io::Error::other)?
+    }
 }
 
 pub trait ToRecordKey {

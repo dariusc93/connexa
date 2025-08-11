@@ -161,6 +161,27 @@ where
 
                 let _ = resp.send(ret);
             }
+            DHTCommand::RemoveAddress {
+                peer_id,
+                addr,
+                resp,
+            } => {
+                let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    return;
+                };
+
+                match kad.remove_address(&peer_id, &addr).is_some() {
+                    true => {
+                        let _ = resp.send(Ok(()));
+                    }
+                    false => {
+                        let _ = resp.send(Err(std::io::Error::other(
+                            "failed to remove peer from routing table",
+                        )));
+                    }
+                }
+            }
             DHTCommand::Get { key, resp } => {
                 let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
                     let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));

@@ -350,6 +350,12 @@ pub enum DHTCommand {
         resp: oneshot::Sender<Result<()>>,
     },
 
+    RemoveAddress {
+        peer_id: PeerId,
+        addr: Multiaddr,
+        resp: oneshot::Sender<Result<()>>,
+    },
+
     Get {
         key: RecordKey,
         resp: oneshot::Sender<Result<mpsc::Receiver<Result<PeerRecord>>>>,
