@@ -29,7 +29,7 @@ pub trait Store: Send + Sync + 'static {
         address: &Multiaddr,
     ) -> impl Future<Output = std::io::Result<()>> + Send + 'static;
 
-    /// Get all addresses associated peer
+    /// Get all addresses associated with a peer
     fn address(
         &self,
         peer_id: &PeerId,
