@@ -4,7 +4,6 @@ use crate::prelude::swarm::{ConnectionClosed, FromSwarm, NewExternalAddrOfPeer};
 use futures::future::{Ready, ready};
 use futures::{FutureExt, StreamExt};
 use futures_timer::Delay;
-use indexmap::map::Entry;
 use indexmap::{IndexMap, IndexSet};
 use libp2p::swarm::ConnectionId;
 use libp2p::{Multiaddr, PeerId};
@@ -40,11 +39,12 @@ impl Store for MemoryStore {
     type Event = ();
 
     fn insert(&mut self, peer_id: PeerId, address: Multiaddr) -> Ready<std::io::Result<()>> {
+        self.persistent.insert(peer_id);
+        // remove cleanup timer since the address is manually stored.
+        self.timer.remove(&(peer_id, address.clone()));
+
         let result = match self.peers.entry(peer_id).or_default().insert(address) {
-            true => {
-                self.persistent.insert(peer_id);
-                Ok(())
-            }
+            true => Ok(()),
             false => Err(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,
                 "address already exists",
@@ -75,23 +75,26 @@ impl Store for MemoryStore {
         peer_id: &PeerId,
         address: &Multiaddr,
     ) -> Ready<std::io::Result<()>> {
-        if let Entry::Occupied(mut entry) = self.peers.entry(*peer_id) {
-            if entry.get_mut().shift_remove(address) {
-                return ready(Err(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "address not found",
-                )));
-            }
-            if entry.get().is_empty() {
-                entry.shift_remove();
-                self.persistent.shift_remove(peer_id);
-            }
-            return ready(Ok(()));
+        let Some(list) = self.peers.get_mut(peer_id) else {
+            return ready(Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "peer not found",
+            )));
+        };
+
+        if !list.shift_remove(address) {
+            return ready(Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "address not found",
+            )));
         }
-        ready(Err(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "peer not found",
-        )))
+
+        if list.is_empty() {
+            self.peers.shift_remove(peer_id);
+            self.persistent.shift_remove(peer_id);
+        }
+
+        ready(Ok(()))
     }
 
     fn address(&self, peer_id: &PeerId) -> Ready<std::io::Result<Vec<Multiaddr>>> {
@@ -163,23 +166,32 @@ impl Store for MemoryStore {
             }) => {
                 let remote_addr = endpoint.get_remote_address();
 
-                if let Entry::Occupied(mut entry) = self.connections.entry(*peer_id) {
-                    let list = entry.get_mut();
-                    if let Entry::Occupied(mut ma_entry) = list.entry(remote_addr.clone()) {
-                        let connections = ma_entry.get_mut();
-                        connections.shift_remove(connection_id);
-                        if connections.is_empty() {
-                            ma_entry.shift_remove();
-                            self.timer.insert(
-                                (*peer_id, remote_addr.clone()),
-                                Delay::new(std::time::Duration::from_secs(60)),
-                            );
-                        }
-                    }
-                    if list.is_empty() {
-                        entry.shift_remove();
-                    }
+                let Some(connections) = self.connections.get_mut(peer_id) else {
+                    return;
+                };
+
+                let Some(list) = connections.get_mut(remote_addr) else {
+                    return;
+                };
+
+                list.shift_remove(connection_id);
+
+                if !list.is_empty() {
+                    return;
                 }
+
+                connections.shift_remove(remote_addr);
+                if !connections.is_empty() {
+                    return;
+                }
+                self.connections.shift_remove(peer_id);
+                if !self.persistent.contains(peer_id) {
+                    self.timer.insert(
+                        (*peer_id, remote_addr.clone()),
+                        Delay::new(std::time::Duration::from_secs(60)),
+                    );
+                }
+                self.connections.shrink_to_fit();
             }
             _ => {}
         }
