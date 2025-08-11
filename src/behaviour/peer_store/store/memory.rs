@@ -104,6 +104,18 @@ impl Store for MemoryStore {
         ready(Ok(Vec::from_iter(addrs)))
     }
 
+    fn list_all(&self) -> Ready<std::io::Result<Vec<(PeerId, Vec<Multiaddr>)>>> {
+        let list = self
+            .peers
+            .iter()
+            .map(|(peer_id, list)| {
+                let list = Vec::from_iter(list.clone());
+                (*peer_id, list)
+            })
+            .collect::<Vec<_>>();
+        ready(Ok(list))
+    }
+
     fn in_memory_address(&self, peer_id: &PeerId) -> Vec<Multiaddr> {
         self.peers
             .get(peer_id)

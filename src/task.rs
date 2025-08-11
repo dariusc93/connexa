@@ -553,6 +553,14 @@ where
                     let fut = store.address(&peer_id);
                     let _ = resp.send(Ok(fut));
                 }
+                PeerstoreCommand::ListAll { resp } => {
+                    let Some(store) = swarm.behaviour_mut().peer_store.as_mut() else {
+                        let _ = resp.send(Err(std::io::Error::other("peerstore not enabled")));
+                        return;
+                    };
+                    let fut = store.list_all();
+                    let _ = resp.send(Ok(fut));
+                }
             },
             #[cfg(feature = "gossipsub")]
             Command::Gossipsub(command) => self.process_gossipsub_command(command),

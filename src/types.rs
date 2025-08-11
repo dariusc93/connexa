@@ -574,4 +574,9 @@ pub enum PeerstoreCommand {
         peer_id: PeerId,
         resp: oneshot::Sender<Result<BoxFuture<'static, std::io::Result<Vec<Multiaddr>>>>>,
     },
+    ListAll {
+        resp: oneshot::Sender<
+            Result<BoxFuture<'static, std::io::Result<Vec<(PeerId, Vec<Multiaddr>)>>>>,
+        >,
+    },
 }

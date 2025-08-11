@@ -70,4 +70,14 @@ where
             .await?;
         rx.await.map_err(std::io::Error::other)??.await
     }
+
+    pub async fn list_all(&self) -> std::io::Result<Vec<(PeerId, Vec<Multiaddr>)>> {
+        let (tx, rx) = oneshot::channel();
+        self.connexa
+            .to_task
+            .clone()
+            .send(PeerstoreCommand::ListAll { resp: tx }.into())
+            .await?;
+        rx.await.map_err(std::io::Error::other)??.await
+    }
 }

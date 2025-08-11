@@ -61,6 +61,10 @@ where
     pub fn address(&self, peer_id: &PeerId) -> BoxFuture<'static, std::io::Result<Vec<Multiaddr>>> {
         self.store.address(peer_id).boxed()
     }
+
+    pub fn list_all(&self) -> BoxFuture<'static, std::io::Result<Vec<(PeerId, Vec<Multiaddr>)>>> {
+        self.store.list_all().boxed()
+    }
 }
 
 impl<S> NetworkBehaviour for Behaviour<S>

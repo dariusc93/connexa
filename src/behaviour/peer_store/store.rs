@@ -35,6 +35,11 @@ pub trait Store: Send + Sync + 'static {
         peer_id: &PeerId,
     ) -> impl Future<Output = std::io::Result<Vec<Multiaddr>>> + Send + 'static;
 
+    /// Get all addresses in the peer store
+    fn list_all(
+        &self,
+    ) -> impl Future<Output = std::io::Result<Vec<(PeerId, Vec<Multiaddr>)>>> + Send + 'static;
+
     /// Get all in-memory address associated with a peer.
     /// Note that this function assumes that the addresses are stored in memory
     fn in_memory_address(&self, peer_id: &PeerId) -> Vec<Multiaddr>;

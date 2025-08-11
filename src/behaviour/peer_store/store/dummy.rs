@@ -39,6 +39,12 @@ impl Store for Dummy {
         futures::future::ready(Err(std::io::Error::from(std::io::ErrorKind::Other)))
     }
 
+    fn list_all(
+        &self,
+    ) -> impl Future<Output = std::io::Result<Vec<(PeerId, Vec<Multiaddr>)>>> + Send + 'static {
+        futures::future::ready(Err(std::io::Error::from(std::io::ErrorKind::Other)))
+    }
+
     fn in_memory_address(&self, _: &PeerId) -> Vec<Multiaddr> {
         vec![]
     }
@@ -80,6 +86,12 @@ impl Store for () {
         &self,
         _: &PeerId,
     ) -> impl Future<Output = std::io::Result<Vec<Multiaddr>>> + Send + 'static {
+        futures::future::ready(Err(std::io::Error::from(std::io::ErrorKind::Other)))
+    }
+
+    fn list_all(
+        &self,
+    ) -> impl Future<Output = std::io::Result<Vec<(PeerId, Vec<Multiaddr>)>>> + Send + 'static {
         futures::future::ready(Err(std::io::Error::from(std::io::ErrorKind::Other)))
     }
 
