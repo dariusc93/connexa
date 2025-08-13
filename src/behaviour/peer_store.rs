@@ -1,7 +1,8 @@
 pub mod store;
 
-use crate::behaviour::peer_store::store::Store;
 use crate::behaviour::peer_store::store::memory::MemoryStore;
+use crate::behaviour::peer_store::store::{Event, Store};
+use crate::prelude::peer_store::store::StoreId;
 use crate::prelude::swarm::derive_prelude::PortUse;
 use crate::prelude::swarm::{
     ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler, THandlerInEvent,
@@ -10,7 +11,9 @@ use crate::prelude::swarm::{
 use crate::prelude::transport::Endpoint;
 use crate::prelude::{Multiaddr, PeerId};
 use futures::FutureExt;
+use futures::channel::oneshot;
 use futures::future::BoxFuture;
+use std::collections::HashMap;
 use std::task::{Context, Poll, Waker};
 
 pub struct Behaviour<S = MemoryStore>
@@ -18,6 +21,7 @@ where
     S: 'static,
 {
     store: S,
+    pending_response: HashMap<StoreId, EventResponse>,
     waker: Option<Waker>,
 }
 
@@ -26,8 +30,27 @@ impl Default for Behaviour<MemoryStore> {
         Self {
             waker: None,
             store: MemoryStore::default(),
+            pending_response: Default::default(),
         }
     }
+}
+
+enum EventResponse {
+    Inserted {
+        resp: oneshot::Sender<std::io::Result<()>>,
+    },
+    Removed {
+        resp: oneshot::Sender<std::io::Result<Vec<Multiaddr>>>,
+    },
+    RemovedAddress {
+        resp: oneshot::Sender<std::io::Result<()>>,
+    },
+    Get {
+        resp: oneshot::Sender<std::io::Result<Vec<Multiaddr>>>,
+    },
+    ListAll {
+        resp: oneshot::Sender<std::io::Result<Vec<(PeerId, Vec<Multiaddr>)>>>,
+    },
 }
 
 impl<S> Behaviour<S>
@@ -35,7 +58,11 @@ where
     S: Store,
 {
     pub fn new(store: S) -> Self {
-        Self { waker: None, store }
+        Self {
+            waker: None,
+            store,
+            pending_response: Default::default(),
+        }
     }
 
     pub fn insert(
@@ -43,27 +70,170 @@ where
         peer_id: PeerId,
         address: Multiaddr,
     ) -> BoxFuture<'static, std::io::Result<()>> {
-        self.store.insert(peer_id, address).boxed()
+        let (tx, rx) = oneshot::channel();
+        let id = self.store.insert(peer_id, address);
+        self.pending_response
+            .insert(id, EventResponse::Inserted { resp: tx });
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
+        async move {
+            match rx.await {
+                Ok(res) => res,
+                Err(c) => Err(std::io::Error::other(c)),
+            }
+        }
+        .boxed()
     }
+
     pub fn remove(
         &mut self,
         peer_id: &PeerId,
     ) -> BoxFuture<'static, std::io::Result<Vec<Multiaddr>>> {
-        self.store.remove(peer_id).boxed()
+        let (tx, rx) = oneshot::channel();
+        let id = self.store.remove(peer_id);
+        self.pending_response
+            .insert(id, EventResponse::Removed { resp: tx });
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
+        async move {
+            match rx.await {
+                Ok(res) => res,
+                Err(c) => Err(std::io::Error::other(c)),
+            }
+        }
+        .boxed()
     }
+
     pub fn remove_address(
         &mut self,
         peer_id: &PeerId,
         address: &Multiaddr,
     ) -> BoxFuture<'static, std::io::Result<()>> {
-        self.store.remove_address(peer_id, address).boxed()
-    }
-    pub fn address(&self, peer_id: &PeerId) -> BoxFuture<'static, std::io::Result<Vec<Multiaddr>>> {
-        self.store.address(peer_id).boxed()
+        let (tx, rx) = oneshot::channel();
+        let id = self.store.remove_address(peer_id, address);
+        self.pending_response
+            .insert(id, EventResponse::RemovedAddress { resp: tx });
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
+        async move {
+            match rx.await {
+                Ok(res) => res,
+                Err(c) => Err(std::io::Error::other(c)),
+            }
+        }
+        .boxed()
     }
 
-    pub fn list_all(&self) -> BoxFuture<'static, std::io::Result<Vec<(PeerId, Vec<Multiaddr>)>>> {
-        self.store.list_all().boxed()
+    pub fn address(
+        &mut self,
+        peer_id: &PeerId,
+    ) -> BoxFuture<'static, std::io::Result<Vec<Multiaddr>>> {
+        let (tx, rx) = oneshot::channel();
+        let id = self.store.address(peer_id);
+        self.pending_response
+            .insert(id, EventResponse::Get { resp: tx });
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
+        async move {
+            match rx.await {
+                Ok(res) => res,
+                Err(c) => Err(std::io::Error::other(c)),
+            }
+        }
+        .boxed()
+    }
+
+    pub fn list_all(
+        &mut self,
+    ) -> BoxFuture<'static, std::io::Result<Vec<(PeerId, Vec<Multiaddr>)>>> {
+        let (tx, rx) = oneshot::channel();
+        let id = self.store.list_all();
+        self.pending_response
+            .insert(id, EventResponse::ListAll { resp: tx });
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
+        async move {
+            match rx.await {
+                Ok(res) => res,
+                Err(c) => Err(std::io::Error::other(c)),
+            }
+        }
+        .boxed()
+    }
+
+    pub fn store(&self) -> &S {
+        &self.store
+    }
+
+    pub fn store_mut(&mut self) -> &mut S {
+        &mut self.store
+    }
+
+    fn process_event(&mut self, event: Event<S::Event>) {
+        match event {
+            Event::Inserted { id } => {
+                if let Some(EventResponse::Inserted { resp }) = self.pending_response.remove(&id) {
+                    let _ = resp.send(Ok(()));
+                }
+            }
+            Event::Removed {
+                id,
+                peer_id: _,
+                addresses,
+            } => {
+                if let Some(EventResponse::Removed { resp }) = self.pending_response.remove(&id) {
+                    let _ = resp.send(Ok(addresses));
+                }
+            }
+            Event::RemovedAddress { id } => {
+                if let Some(EventResponse::RemovedAddress { resp }) =
+                    self.pending_response.remove(&id)
+                {
+                    let _ = resp.send(Ok(()));
+                }
+            }
+            Event::Get {
+                id,
+                peer_id: _,
+                addresses,
+            } => {
+                if let Some(EventResponse::Get { resp }) = self.pending_response.remove(&id) {
+                    let _ = resp.send(Ok(addresses));
+                }
+            }
+            Event::ListAll { id, list } => {
+                if let Some(EventResponse::ListAll { resp }) = self.pending_response.remove(&id) {
+                    let _ = resp.send(Ok(list));
+                }
+            }
+            Event::Error { id, error } => {
+                let resp = self.pending_response.remove(&id).expect("entry is valid");
+
+                match resp {
+                    EventResponse::Inserted { resp } => {
+                        let _ = resp.send(Err(error));
+                    }
+                    EventResponse::Removed { resp } => {
+                        let _ = resp.send(Err(error));
+                    }
+                    EventResponse::RemovedAddress { resp } => {
+                        let _ = resp.send(Err(error));
+                    }
+                    EventResponse::Get { resp } => {
+                        let _ = resp.send(Err(error));
+                    }
+                    EventResponse::ListAll { resp } => {
+                        let _ = resp.send(Err(error));
+                    }
+                }
+            }
+            Event::Custom(_) => {}
+        }
     }
 }
 
@@ -120,19 +290,27 @@ where
         _: ConnectionId,
         _: THandlerOutEvent<Self>,
     ) {
-        todo!()
     }
 
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        match self.store.poll(cx) {
-            Poll::Ready(ev) => Poll::Ready(ToSwarm::GenerateEvent(ev)),
-            Poll::Pending => {
-                self.waker = Some(cx.waker().clone());
-                Poll::Pending
+        loop {
+            match self.store.poll(cx) {
+                Poll::Ready(ev) => match ev {
+                    Event::Custom(custom) => return Poll::Ready(ToSwarm::GenerateEvent(custom)),
+                    event => {
+                        self.process_event(event);
+                    }
+                },
+                Poll::Pending => {
+                    self.waker = Some(cx.waker().clone());
+                    break;
+                }
             }
         }
+
+        Poll::Pending
     }
 }

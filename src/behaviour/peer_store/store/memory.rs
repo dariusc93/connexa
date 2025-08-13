@@ -1,14 +1,16 @@
+use super::Event;
 use crate::behaviour::peer_store::store::Store;
+use crate::prelude::peer_store::store::StoreId;
 use crate::prelude::swarm::derive_prelude::ConnectionEstablished;
 use crate::prelude::swarm::{ConnectionClosed, FromSwarm, NewExternalAddrOfPeer};
-use futures::future::{Ready, ready};
-use futures::{FutureExt, StreamExt};
+use futures::StreamExt;
 use futures_timer::Delay;
 use indexmap::{IndexMap, IndexSet};
 use libp2p::swarm::ConnectionId;
 use libp2p::{Multiaddr, PeerId};
 use pollable_map::futures::FutureMap;
-use std::task::{Context, Poll};
+use std::collections::VecDeque;
+use std::task::{Context, Poll, Waker};
 
 #[derive(Default)]
 pub struct MemoryStore {
@@ -18,6 +20,8 @@ pub struct MemoryStore {
     connections: IndexMap<PeerId, IndexMap<Multiaddr, IndexSet<ConnectionId>>>,
     persistent: IndexSet<PeerId>,
     timer: FutureMap<(PeerId, Multiaddr), Delay>,
+    events: VecDeque<Event<<Self as Store>::Event>>,
+    waker: Option<Waker>,
 }
 
 impl FromIterator<(PeerId, Multiaddr)> for MemoryStore {
@@ -38,55 +42,67 @@ impl FromIterator<(PeerId, Multiaddr)> for MemoryStore {
 impl Store for MemoryStore {
     type Event = ();
 
-    fn insert(&mut self, peer_id: PeerId, address: Multiaddr) -> Ready<std::io::Result<()>> {
+    fn insert(&mut self, peer_id: PeerId, address: Multiaddr) -> StoreId {
+        let id = StoreId::next();
+
         self.persistent.insert(peer_id);
         // remove cleanup timer since the address is manually stored.
         self.timer.remove(&(peer_id, address.clone()));
 
-        let result = match self.peers.entry(peer_id).or_default().insert(address) {
-            true => Ok(()),
-            false => Err(std::io::Error::new(
-                std::io::ErrorKind::AlreadyExists,
-                "address already exists",
-            )),
+        let event = match self.peers.entry(peer_id).or_default().insert(address) {
+            true => Event::Inserted { id },
+            false => Event::Error {
+                id,
+                error: std::io::Error::new(
+                    std::io::ErrorKind::AlreadyExists,
+                    "address already exists",
+                ),
+            },
         };
-        ready(result)
+        self.events.push_back(event);
+        id
     }
 
-    fn remove(&mut self, peer_id: &PeerId) -> Ready<std::io::Result<Vec<Multiaddr>>> {
-        let result = {
-            let list = self.peers.shift_remove(peer_id);
-            match list {
-                Some(list) => {
-                    self.persistent.shift_remove(peer_id);
-                    Ok(Vec::from_iter(list))
+    fn remove(&mut self, peer_id: &PeerId) -> StoreId {
+        let id = StoreId::next();
+
+        let list = self.peers.shift_remove(peer_id);
+        let event = match list {
+            Some(list) => {
+                self.persistent.shift_remove(peer_id);
+                Event::Removed {
+                    id,
+                    peer_id: *peer_id,
+                    addresses: Vec::from_iter(list),
                 }
-                None => Err(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "peer not found",
-                )),
             }
+            None => Event::Error {
+                id,
+                error: std::io::Error::new(std::io::ErrorKind::NotFound, "peer not found"),
+            },
         };
-        ready(result)
+
+        self.events.push_back(event);
+
+        id
     }
 
-    fn remove_address(
-        &mut self,
-        peer_id: &PeerId,
-        address: &Multiaddr,
-    ) -> Ready<std::io::Result<()>> {
+    fn remove_address(&mut self, peer_id: &PeerId, address: &Multiaddr) -> StoreId {
+        let id = StoreId::next();
         let Some(list) = self.peers.get_mut(peer_id) else {
-            return ready(Err(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "peer not found",
-            )));
+            self.events.push_back(Event::Error {
+                id,
+                error: std::io::Error::new(std::io::ErrorKind::NotFound, "peer not found"),
+            });
+            return id;
         };
 
         if !list.shift_remove(address) {
-            return ready(Err(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "address not found",
-            )));
+            self.events.push_back(Event::Error {
+                id,
+                error: std::io::Error::new(std::io::ErrorKind::NotFound, "address not found"),
+            });
+            return id;
         }
 
         if list.is_empty() {
@@ -94,20 +110,32 @@ impl Store for MemoryStore {
             self.persistent.shift_remove(peer_id);
         }
 
-        ready(Ok(()))
+        self.events.push_back(Event::RemovedAddress { id });
+
+        id
     }
 
-    fn address(&self, peer_id: &PeerId) -> Ready<std::io::Result<Vec<Multiaddr>>> {
+    fn address(&mut self, peer_id: &PeerId) -> StoreId {
+        let id = StoreId::next();
         let Some(addrs) = self.peers.get(peer_id).cloned() else {
-            return ready(Err(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "peer not found",
-            )));
+            self.events.push_back(Event::Error {
+                id,
+                error: std::io::Error::new(std::io::ErrorKind::NotFound, "peer not found"),
+            });
+            return id;
         };
-        ready(Ok(Vec::from_iter(addrs)))
+        let list = Vec::from_iter(addrs);
+
+        self.events.push_back(Event::Get {
+            id,
+            peer_id: *peer_id,
+            addresses: list,
+        });
+        id
     }
 
-    fn list_all(&self) -> Ready<std::io::Result<Vec<(PeerId, Vec<Multiaddr>)>>> {
+    fn list_all(&mut self) -> StoreId {
+        let id = StoreId::next();
         let list = self
             .peers
             .iter()
@@ -116,7 +144,8 @@ impl Store for MemoryStore {
                 (*peer_id, list)
             })
             .collect::<Vec<_>>();
-        ready(Ok(list))
+        self.events.push_back(Event::ListAll { id, list });
+        id
     }
 
     fn in_memory_address(&self, peer_id: &PeerId) -> Vec<Multiaddr> {
@@ -197,16 +226,29 @@ impl Store for MemoryStore {
         }
     }
 
-    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Self::Event> {
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Event<Self::Event>> {
+        if let Some(event) = self.events.pop_front() {
+            return Poll::Ready(event);
+        }
+
         while let Poll::Ready(Some(((peer_id, addr), _))) = self.timer.poll_next_unpin(cx) {
-            if let Err(e) = self
-                .remove_address(&peer_id, &addr)
-                .now_or_never()
-                .expect("future ready")
-            {
-                tracing::error!(%peer_id, %addr, error = %e, "failed to remove address from store");
+            if self.persistent.contains(&peer_id) {
+                continue;
+            }
+
+            let Some(list) = self.peers.get_mut(&peer_id) else {
+                continue;
+            };
+
+            list.shift_remove(&addr);
+
+            if list.is_empty() {
+                self.peers.shift_remove(&peer_id);
             }
         }
+
+        self.waker = Some(cx.waker().clone());
+
         Poll::Pending
     }
 }
