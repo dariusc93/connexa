@@ -1,16 +1,16 @@
+use crate::behaviour::peer_store::store::Store;
 use crate::prelude::{DHTEvent, RecordHandle};
 use crate::task::ConnexaTask;
 use crate::types::DHTCommand;
 use futures::channel::{mpsc, oneshot};
+use libp2p::kad::store::RecordStore;
 use libp2p::kad::{
     AddProviderOk, BootstrapError, BootstrapOk, Event as KademliaEvent, GetClosestPeersOk,
     GetProvidersOk, GetRecordOk, InboundRequest, PutRecordOk, QueryResult, Record, RoutingUpdate,
 };
+use libp2p::swarm::NetworkBehaviour;
 use std::fmt::Debug;
 use std::io;
-
-use crate::behaviour::peer_store::store::Store;
-use libp2p::swarm::NetworkBehaviour;
 
 impl<X, C: NetworkBehaviour, S, T> ConnexaTask<X, C, S, T>
 where
@@ -235,6 +235,50 @@ where
                 };
 
                 self.pending_dht_put_record.insert(id, resp);
+            }
+            DHTCommand::PutTo {
+                key,
+                data,
+                target,
+                quorum,
+                resp,
+            } => {
+                let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    return;
+                };
+                // We check and confirm that the record exist first since this is not your usual dht operation
+                // and records that are provided here are not stored by `Behaviour::put_record_to`
+                {
+                    let store = kad.store_mut();
+                    if !store.records().any(|r| r.key == key) {
+                        let _ = resp.send(Err(io::Error::other("record not found")));
+                        return;
+                    }
+                }
+
+                let record = Record::new(key, data.into());
+
+                let id = kad.put_record_to(record, target.into_iter(), quorum);
+
+                self.pending_dht_put_record.insert(id, resp);
+            }
+            DHTCommand::Remove { key, resp } => {
+                let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
+                    let _ = resp.send(Err(io::Error::other("kademlia is not enabled")));
+                    return;
+                };
+                {
+                    let store = kad.store_mut();
+                    if !store.records().any(|r| r.key == key) {
+                        let _ = resp.send(Err(io::Error::other("record not found")));
+                        return;
+                    }
+                }
+
+                kad.remove_record(&key);
+
+                let _ = resp.send(Ok(()));
             }
         }
     }

@@ -163,6 +163,54 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
+    /// Stores a record in the DHT targeting specific peers with a specified quorum.
+    /// Note that this operation does not store a record in the record store and will
+    /// require that the record exist before using this method.
+    ///
+    /// See [Behaviour::put_record_to](libp2p::kad::Behaviour::put_record_to) for more information
+    pub async fn put_to(
+        &self,
+        target: impl ExactSizeIterator<Item=PeerId>,
+        key: impl ToRecordKey,
+        data: impl Into<Bytes>,
+        quorum: Quorum,
+    ) -> std::io::Result<()> {
+        let key = key.to_record_key();
+        let data = data.into();
+        let target = target.collect::<Vec<_>>();
+
+        let (tx, rx) = oneshot::channel();
+
+        self.connexa
+            .to_task
+            .clone()
+            .send(
+                DHTCommand::PutTo {
+                    target,
+                    key,
+                    data,
+                    quorum,
+                    resp: tx,
+                }
+                    .into(),
+            )
+            .await?;
+        rx.await.map_err(std::io::Error::other)?
+    }
+
+    /// Removes a record from the local record store
+    pub async fn remove_record(&self, key: impl ToRecordKey) -> std::io::Result<()> {
+        let key = key.to_record_key();
+        let (tx, rx) = oneshot::channel();
+
+        self.connexa
+            .to_task
+            .clone()
+            .send(DHTCommand::Remove { key, resp: tx }.into())
+            .await?;
+        rx.await.map_err(std::io::Error::other)?
+    }
+
     /// Sets the DHT mode (Client/Server)
     /// Mode can be None to disable DHT
     pub async fn set_mode(&self, mode: impl Into<Option<Mode>>) -> std::io::Result<()> {

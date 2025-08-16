@@ -360,13 +360,23 @@ pub enum DHTCommand {
         peer_id: PeerId,
         resp: oneshot::Sender<Result<()>>,
     },
-
     Get {
         key: RecordKey,
         resp: oneshot::Sender<Result<mpsc::Receiver<Result<PeerRecord>>>>,
     },
     Put {
         key: RecordKey,
+        data: Bytes,
+        quorum: Quorum,
+        resp: oneshot::Sender<Result<()>>,
+    },
+    Remove {
+        key: RecordKey,
+        resp: oneshot::Sender<Result<()>>,
+    },
+    PutTo {
+        key: RecordKey,
+        target: Vec<PeerId>,
         data: Bytes,
         quorum: Quorum,
         resp: oneshot::Sender<Result<()>>,
