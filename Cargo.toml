@@ -56,7 +56,7 @@ members = ["examples/browser-webrtc", "examples/custom-behaviour-and-context", "
 
 [workspace.dependencies]
 async-rt = "0.1.8"
-async-trait = { version = "0.1.88" }
+async-trait = { version = "0.1.89" }
 base64 = "0.22.1"
 bytes = "1.10.1"
 cid = "0.11.1"
@@ -66,7 +66,7 @@ futures-timer = "3.0.0"
 getrandom = { version = "0.2.15" }
 getrandom_03 = { version = "0.3.3", package = "getrandom" }
 hickory-resolver = "0.25.0-alpha.5"
-indexmap = "2.9.0"
+indexmap = "2.10.0"
 libp2p = { version = "0.56.0" }
 libp2p-allow-block-list = "0.6.0"
 libp2p-connection-limits = "0.6.0"
@@ -76,7 +76,7 @@ libp2p-webrtc-websys = "0.4.0"
 pollable-map = "0.1.7"
 pem = { version = "3.0.5" }
 rand = "0.8.5"
-rand_09 = { version = "0.9.1", package = "rand" }
+rand_09 = { version = "0.9.2", package = "rand" }
 rcgen = { version = "0.14.3", features = ["pem", "x509-parser"] }
 rlimit = "0.10.2"
 send_wrapper = "0.6.0"
@@ -84,7 +84,7 @@ serde = { version = "1.0.219" }
 serde-wasm-bindgen = "0.6.5"
 tracing = { version = "0.1.41" }
 
-tokio = { default-features = false, version = "1.45.1" }
+tokio = { default-features = false, version = "1.47.1" }
 wasm-bindgen-futures = { version = "0.4.50" }
 
 
