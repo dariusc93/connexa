@@ -170,7 +170,7 @@ where
     /// See [Behaviour::put_record_to](libp2p::kad::Behaviour::put_record_to) for more information
     pub async fn put_to(
         &self,
-        target: impl ExactSizeIterator<Item=PeerId>,
+        target: impl ExactSizeIterator<Item = PeerId>,
         key: impl ToRecordKey,
         data: impl Into<Bytes>,
         quorum: Quorum,
@@ -192,7 +192,7 @@ where
                     quorum,
                     resp: tx,
                 }
-                    .into(),
+                .into(),
             )
             .await?;
         rx.await.map_err(std::io::Error::other)?
@@ -212,7 +212,7 @@ where
     }
 
     /// Sets the DHT mode (Client/Server)
-    /// Mode can be None to disable DHT
+    /// Mode can be None to automatically switch between client and server based on reachability.
     pub async fn set_mode(&self, mode: impl Into<Option<Mode>>) -> std::io::Result<()> {
         let mode = mode.into();
         let (tx, rx) = oneshot::channel();
