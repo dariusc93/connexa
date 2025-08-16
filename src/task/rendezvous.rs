@@ -144,12 +144,12 @@ where
                     })
                     .collect::<Vec<_>>();
 
-                match cookie.namespace().cloned() {
+                match cookie.namespace() {
                     Some(ns) => {
                         if let Some(namespaces) =
                             self.pending_rendezvous_discover.get_mut(&rendezvous_node)
                         {
-                            if let Some(list) = namespaces.shift_remove(&ns) {
+                            if let Some(list) = namespaces.shift_remove(ns) {
                                 for ch in list {
                                     let _ = ch.send(Ok((cookie.clone(), discovered_peers.clone())));
                                 }
