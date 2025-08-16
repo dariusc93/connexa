@@ -34,6 +34,7 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
+    /// Adds a new node to the partial view of the floodsub network.
     pub async fn add_node_to_partial_view(&self, peer_id: PeerId) -> std::io::Result<()> {
         let (tx, rx) = oneshot::channel();
 
@@ -46,6 +47,7 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
+    /// Removes a node from the partial view of the floodsub network.
     pub async fn remove_node_from_partial_view(&self, peer_id: PeerId) -> std::io::Result<()> {
         let (tx, rx) = oneshot::channel();
 
