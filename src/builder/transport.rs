@@ -337,9 +337,11 @@ pub(crate) fn build_transport(
                         }
                         None => {
                             use rcgen::CertifiedKey;
-                            let CertifiedKey { cert, key_pair } =
-                                rcgen::generate_simple_self_signed(["localhost".into()])
-                                    .map_err(io::Error::other)?;
+                            let CertifiedKey {
+                                cert,
+                                signing_key: key_pair,
+                            } = rcgen::generate_simple_self_signed(["localhost".into()])
+                                .map_err(io::Error::other)?;
 
                             let priv_key =
                                 libp2p::websocket::tls::PrivateKey::new(key_pair.serialize_der());

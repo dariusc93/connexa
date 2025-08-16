@@ -1,7 +1,6 @@
 mod common;
 
 use connexa::prelude::{ConnectionEvent, Multiaddr, PeerId};
-use either::Either;
 use futures::StreamExt;
 use libp2p::swarm::dial_opts::DialOpts;
 use std::time::Duration;
