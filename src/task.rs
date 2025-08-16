@@ -633,6 +633,7 @@ where
         }
 
         // Note: could probably poll in burst instead so we could continue making progress in this future
+        //       while reducing long activities
         loop {
             match self.swarm.poll_next_unpin(cx) {
                 Poll::Ready(Some(event)) => self.process_swarm_event(event),
@@ -719,13 +720,17 @@ where
             };
 
             tracing::trace!(?key, ?record, "dht put record result");
-            if let Some(swarm) = self.swarm.as_mut() {
-                if let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() {
-                    match kad.store_mut().put(record) {
-                        Ok(_) => tracing::info!(?key, "dht put record success"),
-                        Err(e) => tracing::error!(?key, ?e, "dht put record failed"),
-                    }
-                }
+            let swarm = self.swarm.as_mut().expect("swarm is available");
+
+            let kad = swarm
+                .behaviour_mut()
+                .kademlia
+                .as_mut()
+                .expect("kad is available");
+
+            match kad.store_mut().put(record) {
+                Ok(_) => tracing::info!(?key, "dht put record success"),
+                Err(e) => tracing::error!(?key, ?e, "dht put record failed"),
             }
         }
 
@@ -747,13 +752,17 @@ where
 
             let key = record.key.clone();
             tracing::trace!(?key, ?record, "dht put record result");
-            if let Some(swarm) = self.swarm.as_mut() {
-                if let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() {
-                    match kad.store_mut().put(record) {
-                        Ok(_) => tracing::info!(?key, "dht put record success"),
-                        Err(e) => tracing::error!(?key, ?e, "dht put record failed"),
-                    }
-                }
+            let swarm = self.swarm.as_mut().expect("swarm is available");
+
+            let kad = swarm
+                .behaviour_mut()
+                .kademlia
+                .as_mut()
+                .expect("kad is available");
+
+            match kad.store_mut().put(record) {
+                Ok(_) => tracing::info!(?key, "dht put record success"),
+                Err(e) => tracing::error!(?key, ?e, "dht put record failed"),
             }
         }
 
@@ -774,13 +783,18 @@ where
             };
 
             tracing::trace!(?key, ?record, "dht provider record result");
-            if let Some(swarm) = self.swarm.as_mut() {
-                if let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() {
-                    match kad.store_mut().add_provider(record) {
-                        Ok(_) => tracing::info!(?key, "dht add provider record success"),
-                        Err(e) => tracing::error!(?key, ?e, "dht add provider record failed"),
-                    }
-                }
+
+            let swarm = self.swarm.as_mut().expect("swarm is available");
+
+            let kad = swarm
+                .behaviour_mut()
+                .kademlia
+                .as_mut()
+                .expect("kad is available");
+
+            match kad.store_mut().add_provider(record) {
+                Ok(_) => tracing::info!(?key, "dht add provider record success"),
+                Err(e) => tracing::error!(?key, ?e, "dht add provider record failed"),
             }
         }
 
@@ -803,13 +817,18 @@ where
             let key = record.key.clone();
 
             tracing::trace!(?key, ?record, "dht provider record result");
-            if let Some(swarm) = self.swarm.as_mut() {
-                if let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() {
-                    match kad.store_mut().add_provider(record) {
-                        Ok(_) => tracing::info!(?key, "dht add provider record success"),
-                        Err(e) => tracing::error!(?key, ?e, "dht add provider record failed"),
-                    }
-                }
+
+            let swarm = self.swarm.as_mut().expect("swarm is available");
+
+            let kad = swarm
+                .behaviour_mut()
+                .kademlia
+                .as_mut()
+                .expect("kad is available");
+
+            match kad.store_mut().add_provider(record) {
+                Ok(_) => tracing::info!(?key, "dht add provider record success"),
+                Err(e) => tracing::error!(?key, ?e, "dht add provider record failed"),
             }
         }
 
