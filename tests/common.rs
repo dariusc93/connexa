@@ -21,6 +21,7 @@ pub async fn spawn_connexa(keypair: impl IntoKeypair) -> std::io::Result<Connexa
             config.set_record_filtering(libp2p::kad::StoreInserts::FilterBoth);
             config
         })
+        .with_request_response(vec![])
         .with_relay()
         .with_relay_server()
         .with_autonat_v1()
@@ -42,6 +43,7 @@ pub async fn spawn_connexa(keypair: impl IntoKeypair) -> std::io::Result<Connexa
     Ok(connexa)
 }
 
+#[allow(dead_code)]
 pub async fn spawn_connexa_with_default_key() -> Connexa {
     let [(node, _, _)] = spawn_connexa_nodes_with_default_keys::<1>().await;
     node
