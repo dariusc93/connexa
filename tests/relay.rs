@@ -1,5 +1,8 @@
 use connexa::prelude::Protocol;
 use futures::StreamExt;
+use futures::future::poll_fn;
+use rand::Rng;
+use std::task::Poll;
 
 mod common;
 
@@ -81,7 +84,7 @@ async fn relay_connection_to_peer() -> std::io::Result<()> {
 }
 
 #[tokio::test]
-async fn relay_connection_to_peer_expire() -> std::io::Result<()> {
+async fn relay_connection_to_peer_exceed_data_restriction() -> std::io::Result<()> {
     let [
         (_node1, _node1_peer_id, node1_addr),
         (node2, node2_peer_id, _node2_addr),
@@ -107,5 +110,22 @@ async fn relay_connection_to_peer_expire() -> std::io::Result<()> {
     assert!(node3.swarm().is_connected(node2_peer_id).await?);
     assert!(node2.swarm().is_connected(node3_peer_id).await?);
 
+    let mut request_listener_2 = node2.request_response().listen_for_requests(()).await?;
+
+    let mut data = vec![0; 128 * 1024];
+    rand::thread_rng().fill(&mut data[..]);
+    let err = node3
+        .request_response()
+        .send_request(node2_peer_id, data)
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.kind(), std::io::ErrorKind::BrokenPipe);
+
+    // test to make sure nothing was received
+    let received_any_request =
+        poll_fn(|cx| Poll::Ready(request_listener_2.poll_next_unpin(cx).is_ready())).await;
+
+    assert!(!received_any_request);
     Ok(())
 }

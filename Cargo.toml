@@ -63,6 +63,7 @@ cid = "0.11.1"
 either = "1.15.0"
 futures = { version = "0.3.31" }
 futures-timer = "3.0.0"
+futures-timeout = "0.1.3"
 getrandom = { version = "0.2.15" }
 getrandom_03 = { version = "0.3.3", package = "getrandom" }
 hickory-resolver = "0.25.0-alpha.5"
@@ -96,6 +97,7 @@ bytes = { workspace = true }
 cid = { workspace = true, optional = true }
 either.workspace = true
 futures.workspace = true
+futures-timeout.workspace = true
 indexmap.workspace = true
 libp2p-allow-block-list.workspace = true
 libp2p-connection-limits.workspace = true
