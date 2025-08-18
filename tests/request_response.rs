@@ -1,4 +1,3 @@
-use bytes::Bytes;
 use futures::StreamExt;
 use futures_timeout::TimeoutExt;
 use std::time::Duration;
@@ -33,15 +32,13 @@ async fn send_request_to_peer() {
                 tokio::select! {
                     Some((peer_id, id, request)) = node_1_st.next() => {
                         assert_eq!(peer_id, node2_peer_id);
-                        assert_eq!(&request[..], &b"ping"[..]);
-                        let res = Bytes::copy_from_slice(b"pong");
-                        node_0.request_response().send_response(peer_id, id, res).await.expect("able to response");
+                        assert_eq!(request, "ping");
+                        node_0.request_response().send_response(peer_id, id, "pong").await.expect("able to response");
                     },
                     Some((peer_id, id, request)) = node_2_st.next() => {
                         assert_eq!(peer_id, node1_peer_id);
-                        assert_eq!(&request[..], &b"ping"[..]);
-                        let res = Bytes::copy_from_slice(b"pong");
-                        node_1.request_response().send_response(peer_id, id, res).await.expect("able to response");
+                        assert_eq!(request, "ping");
+                        node_1.request_response().send_response(peer_id, id, "pong").await.expect("able to response");
                     },
                 }
             }
@@ -55,7 +52,7 @@ async fn send_request_to_peer() {
         .await
         .expect("respond in time")
         .expect("valid response");
-    assert_eq!(&response[..], &b"pong"[..]);
+    assert_eq!(response, "pong");
 
     let response = node2
         .request_response()
@@ -64,7 +61,7 @@ async fn send_request_to_peer() {
         .await
         .expect("respond in time")
         .expect("valid response");
-    assert_eq!(&response[..], &b"pong"[..]);
+    assert_eq!(response, "pong");
 }
 
 #[tokio::test]
