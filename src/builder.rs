@@ -563,27 +563,31 @@ where
     /// Set a custom behaviour
     /// Note that if you want to communicate or interact with the behaviour, you would need to set a callback via
     /// `custom_event_callback` and `custom_task_callback`.
-    pub fn with_custom_behaviour<F>(mut self, f: F) -> Self
+    pub fn with_custom_behaviour<F>(mut self, f: F) -> std::io::Result<Self>
     where
-        F: FnOnce(&Keypair) -> B,
+        F: FnOnce(&Keypair) -> std::io::Result<B>,
         F: 'static,
     {
-        let behaviour = f(&self.keypair);
+        let behaviour = f(&self.keypair)?;
         self.custom_behaviour = Some(behaviour);
-        self
+        Ok(self)
     }
 
     /// Set a custom behaviour with context
     /// Note that if you want to communicate or interact with the behaviour that you would need to set a callback via
     /// `custom_event_callback` and `custom_task_callback`.
-    pub fn with_custom_behaviour_with_context<F, IC>(mut self, context: IC, f: F) -> Self
+    pub fn with_custom_behaviour_with_context<F, IC>(
+        mut self,
+        context: IC,
+        f: F,
+    ) -> std::io::Result<Self>
     where
-        F: FnOnce(&Keypair, IC) -> B,
+        F: FnOnce(&Keypair, IC) -> std::io::Result<B>,
         F: 'static,
     {
-        let behaviour = f(&self.keypair, context);
+        let behaviour = f(&self.keypair, context)?;
         self.custom_behaviour = Some(behaviour);
-        self
+        Ok(self)
     }
 
     /// Enables quic transport
