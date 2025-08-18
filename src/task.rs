@@ -35,66 +35,31 @@ use crate::behaviour::BehaviourEvent;
 use crate::types::{Command, ConnectionEvent, SwarmCommand};
 use crate::{TEventCallback, TPollableCallback, TSwarmEventCallback, TTaskCallback, behaviour};
 
-#[cfg(feature = "gossipsub")]
-use crate::types::GossipsubMessage;
-#[cfg(feature = "request-response")]
-use crate::types::RequestResponseCommand;
 #[cfg(feature = "kad")]
-use crate::types::{DHTCommand, DHTEvent, RecordHandle};
+use crate::types::DHTEvent;
 #[cfg(feature = "floodsub")]
-use crate::types::{FloodsubEvent, FloodsubMessage, PubsubFloodsubPublish};
+use crate::types::FloodsubEvent;
 
 use crate::behaviour::peer_store::store::Store;
 use crate::handle::swarm::ConnectionTarget;
 use crate::prelude::PeerstoreCommand;
 #[cfg(feature = "gossipsub")]
 use crate::types::GossipsubEvent;
-#[cfg(feature = "stream")]
-use crate::types::StreamCommand;
 use crate::types::{BlacklistCommand, ConnectionLimitsCommand, WhitelistCommand};
-use either::Either;
 use futures::channel::{mpsc, oneshot};
 use futures::{FutureExt, StreamExt};
 use futures_timer::Delay;
 use indexmap::IndexMap;
-#[cfg(feature = "autonat")]
-use libp2p::autonat::v1::Event as AutonatV1Event;
-#[cfg(feature = "autonat")]
-use libp2p::autonat::v2::client::Event as AutonatV2ClientEvent;
-#[cfg(feature = "autonat")]
-use libp2p::autonat::v2::server::Event as AutonatV2ServerEvent;
-#[cfg(all(feature = "relay", feature = "dcutr"))]
-use libp2p::dcutr::Event as DcutrEvent;
 #[cfg(feature = "gossipsub")]
-use libp2p::gossipsub::{MessageAcceptance, MessageId, Topic, TopicHash};
-#[cfg(feature = "identify")]
-use libp2p::identify::Event as IdentifyEvent;
+use libp2p::gossipsub::{MessageAcceptance, MessageId};
 #[cfg(feature = "kad")]
 use libp2p::kad::store::RecordStore;
 #[cfg(feature = "kad")]
-use libp2p::kad::{
-    AddProviderOk, BootstrapError, BootstrapOk, Event as KademliaEvent, GetClosestPeersOk,
-    GetProvidersOk, GetRecordOk, InboundRequest, PeerInfo, PeerRecord, ProviderRecord, PutRecordOk,
-    QueryId, QueryResult, Record, RecordKey as Key, RoutingUpdate,
-};
-#[cfg(feature = "mdns")]
-#[cfg(not(target_arch = "wasm32"))]
-use libp2p::mdns::Event as MdnsEvent;
-#[cfg(feature = "ping")]
-use libp2p::ping::Event as PingEvent;
-#[cfg(feature = "relay")]
-use libp2p::relay::Event as RelayServerEvent;
-#[cfg(feature = "relay")]
-use libp2p::relay::client::Event as RelayClientEvent;
+use libp2p::kad::{PeerInfo, PeerRecord, ProviderRecord, QueryId, Record, RecordKey as Key};
 #[cfg(feature = "rendezvous")]
-use libp2p::rendezvous::server::Event as RendezvousServerEvent;
-#[cfg(feature = "rendezvous")]
-use libp2p::rendezvous::{Namespace, client::Event as RendezvousClientEvent};
+use libp2p::rendezvous::Namespace;
 use libp2p::swarm::derive_prelude::ListenerId;
 use libp2p::swarm::{ConnectionId, NetworkBehaviour, SwarmEvent};
-#[cfg(feature = "upnp")]
-#[cfg(not(target_arch = "wasm32"))]
-use libp2p::upnp::Event as UpnpEvent;
 use libp2p::{Multiaddr, PeerId, Swarm};
 use pollable_map::futures::FutureMap;
 use pollable_map::futures::set::FutureSet;

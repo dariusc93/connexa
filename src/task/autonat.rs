@@ -1,8 +1,6 @@
-use crate::behaviour;
 use crate::behaviour::peer_store::store::Store;
 use crate::task::ConnexaTask;
 use crate::types::AutonatCommand;
-use libp2p::Swarm;
 use libp2p::autonat::v1::Event as AutonatV1Event;
 use libp2p::autonat::v2::client::Event as AutonatV2ClientEvent;
 use libp2p::autonat::v2::server::Event as AutonatV2ServerEvent;

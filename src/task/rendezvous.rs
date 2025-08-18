@@ -1,10 +1,9 @@
 use crate::behaviour::peer_store::store::Store;
 use crate::task::ConnexaTask;
 use crate::types::RendezvousCommand;
-use futures::SinkExt;
+use libp2p::rendezvous::Registration;
 use libp2p::rendezvous::client::Event as RendezvousClientEvent;
 use libp2p::rendezvous::server::Event as RendezvousServerEvent;
-use libp2p::rendezvous::{Namespace, Registration};
 use libp2p::swarm::NetworkBehaviour;
 use std::fmt::Debug;
 

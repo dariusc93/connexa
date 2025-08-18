@@ -1,4 +1,3 @@
-use crate::behaviour;
 use crate::behaviour::BehaviourEvent;
 use crate::behaviour::peer_store::store::Store;
 use crate::prelude::ConnectionEvent;

@@ -2,12 +2,10 @@ use crate::behaviour::peer_store::store::Store;
 use crate::prelude::GossipsubMessage;
 use crate::task::ConnexaTask;
 use crate::types::{GossipsubCommand, GossipsubEvent};
-use futures::channel::{mpsc, oneshot};
+use futures::channel::mpsc;
 use libp2p::gossipsub::Event;
 use libp2p::swarm::NetworkBehaviour;
 use std::fmt::Debug;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 
 impl<X, C: NetworkBehaviour, S, T> ConnexaTask<X, C, S, T>
 where
