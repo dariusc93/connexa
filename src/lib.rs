@@ -6,6 +6,7 @@ pub mod task;
 pub(crate) mod types;
 
 use crate::behaviour::BehaviourEvent;
+use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkBehaviour;
 use libp2p::swarm::{Swarm, SwarmEvent};
 use std::task::{Context, Poll};
@@ -30,6 +31,10 @@ pub(crate) type TSwarmEventCallback<B, Ctx, Store> = Box<
         )
         + 'static
         + Send,
+>;
+
+pub(crate) type TPreloadCallback<B, Ctx, Store> = Box<
+    dyn FnOnce(&Keypair, &mut Swarm<behaviour::Behaviour<B, Store>>, &mut Ctx) + 'static + Send,
 >;
 
 pub mod dummy {

@@ -11,7 +11,10 @@ use crate::builder::transport::{
 use crate::handle::Connexa;
 use crate::prelude::PeerId;
 use crate::task::ConnexaTask;
-use crate::{TEventCallback, TPollableCallback, TSwarmEventCallback, TTaskCallback, behaviour};
+use crate::{
+    TEventCallback, TPollableCallback, TPreloadCallback, TSwarmEventCallback, TTaskCallback,
+    behaviour,
+};
 use executor::ConnexaExecutor;
 #[cfg(feature = "autonat")]
 use libp2p::autonat::v1::Config as AutonatV1Config;
@@ -61,6 +64,7 @@ where
     custom_task_callback: TTaskCallback<B, Ctx, Cmd, S>,
     custom_event_callback: TEventCallback<B, Ctx, S>,
     swarm_event_callback: TSwarmEventCallback<B, Ctx, S>,
+    preload_callback: TPreloadCallback<B, Ctx, S>,
     custom_pollable_callback: TPollableCallback<B, Ctx, S>,
     config: Config<S>,
     swarm_config: Box<dyn FnOnce(libp2p::swarm::Config) -> libp2p::swarm::Config>,
@@ -207,6 +211,7 @@ where
             custom_task_callback: Box::new(|_, _, _| ()),
             custom_event_callback: Box::new(|_, _, _| ()),
             swarm_event_callback: Box::new(|_, _, _| ()),
+            preload_callback: Box::new(|_, _, _| ()),
             custom_pollable_callback: Box::new(|_, _, _| Poll::Pending),
             config: Config::default(),
             protocols: Protocols::default(),
@@ -276,6 +281,17 @@ where
             + Send,
     {
         self.swarm_event_callback = Box::new(f);
+        self
+    }
+
+    /// Sets a callback that will be executed before the swarm starts processing any events.
+    /// This can be useful for initializing state or setting up subscriptions that needs
+    /// immediate activation before any other events are processed.
+    pub fn set_preload<F>(mut self, f: F) -> Self
+    where
+        F: FnOnce(&Keypair, &mut Swarm<behaviour::Behaviour<B, S>>, &mut Ctx) + 'static + Send,
+    {
+        self.preload_callback = Box::new(f);
         self
     }
 
@@ -755,13 +771,14 @@ where
     pub fn build(self) -> std::io::Result<Connexa<Cmd>> {
         let ConnexaBuilder {
             keypair,
-            context,
+            mut context,
             custom_behaviour,
             file_descriptor_limits,
             custom_task_callback,
             custom_event_callback,
             swarm_event_callback,
             custom_pollable_callback,
+            preload_callback,
             config,
             protocols,
             swarm_config,
@@ -809,7 +826,10 @@ where
 
         let swarm = Swarm::new(transport, behaviour, peer_id, swarm_config);
 
-        let connexa_task = ConnexaTask::new(swarm);
+        let mut connexa_task = ConnexaTask::new(swarm);
+
+        let swarm = connexa_task.swarm.as_mut().expect("valid swarm");
+        preload_callback(&keypair, swarm, &mut context);
 
         let to_task = async_rt::task::spawn_coroutine_with_context(
             (
