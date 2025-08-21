@@ -542,20 +542,24 @@ where
         self
     }
 
+    /// Enables whitelist
     pub fn with_whitelist(self) -> Self {
         self.with_whitelist_with_list([])
     }
 
+    /// Enables whitelist with a preset list of whitelisted peers
     pub fn with_whitelist_with_list(mut self, list: impl IntoIterator<Item = PeerId>) -> Self {
         self.config.allow_list = list.into_iter().collect();
         self.protocols.allow_list = true;
         self
     }
 
+    /// Enables blacklist
     pub fn with_blacklist(self) -> Self {
         self.with_blacklist_with_list([])
     }
 
+    /// Enables blacklist with a preset list of blacklisted peers
     pub fn with_blacklist_with_list(mut self, list: impl IntoIterator<Item = PeerId>) -> Self {
         self.protocols.deny_list = true;
         self.config.deny_list = list.into_iter().collect();
