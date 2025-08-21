@@ -279,6 +279,7 @@ where
         self
     }
 
+    /// Set the context that will be used for a custom state
     pub fn set_context(mut self, context: Ctx) -> Self {
         self.context = context;
         self
