@@ -145,7 +145,7 @@ impl Store for MemoryStore {
             }) => {
                 // Note: because we are adding the addresses from an established connection, we will not be persisting the address unless
                 //       the address is added manually.
-                let remote_addr = endpoint.get_remote_address();
+                let remote_addr = endpoint.get_remote_address().clone();
                 self.connections
                     .entry(*peer_id)
                     .or_default()
@@ -156,6 +156,8 @@ impl Store for MemoryStore {
                     .entry(*peer_id)
                     .or_default()
                     .insert(remote_addr.clone());
+                
+                self.timer.remove(&(*peer_id, remote_addr));
                 // TODO: determine if we should remove any failed addresses from the store to keep the entry up to date?
             }
             FromSwarm::ConnectionClosed(ConnectionClosed {
