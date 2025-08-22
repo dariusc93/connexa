@@ -120,7 +120,7 @@ where
         _: ConnectionId,
         _: THandlerOutEvent<Self>,
     ) {
-        todo!()
+        unreachable!("does not handle events")
     }
 
     fn poll(
