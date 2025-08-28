@@ -10,6 +10,8 @@ use crate::prelude::swarm::{
 };
 use crate::prelude::transport::Endpoint;
 use either::Either;
+use futures::FutureExt;
+use futures_timer::Delay;
 use indexmap::{IndexMap, IndexSet};
 use libp2p::core::transport::ListenerId;
 use libp2p::multiaddr::Protocol;
@@ -18,15 +20,32 @@ use libp2p::{Multiaddr, PeerId};
 use rand::prelude::IteratorRandom;
 use std::collections::VecDeque;
 use std::task::{Context, Poll, Waker};
+use std::time::Duration;
 
-#[derive(Default)]
+const MAX_CAP: usize = 100;
+
 pub struct Behaviour {
     config: Config,
     info: IndexMap<PeerId, Vec<PeerInfo>>,
     listener_to_info: IndexMap<ListenerId, (PeerId, ConnectionId)>,
     events: VecDeque<ToSwarm<<Self as NetworkBehaviour>::ToSwarm, THandlerInEvent<Self>>>,
     pending_target: IndexSet<PeerId>,
+    capacity_cleanup: Delay,
     waker: Option<Waker>,
+}
+
+impl Default for Behaviour {
+    fn default() -> Self {
+        Self {
+            config: Config::default(),
+            info: IndexMap::new(),
+            listener_to_info: IndexMap::new(),
+            events: VecDeque::new(),
+            pending_target: IndexSet::new(),
+            capacity_cleanup: Delay::new(Duration::from_secs(60)),
+            waker: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -34,6 +53,7 @@ pub struct Behaviour {
 pub struct Config {
     pub max_reservation: Option<u8>,
     pub auto_reservation: bool,
+    pub capacity_cleanup_interval: Duration,
 }
 
 impl Default for Config {
@@ -41,6 +61,10 @@ impl Default for Config {
         Self {
             max_reservation: None,
             auto_reservation: true,
+            capacity_cleanup_interval: Duration::from_secs(60),
+        }
+    }
+}
         }
     }
 }
@@ -507,6 +531,22 @@ impl NetworkBehaviour for Behaviour {
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
+        }
+
+        if self.capacity_cleanup.poll_unpin(cx).is_ready() {
+            if (self.events.is_empty() || self.events.len() < MAX_CAP)
+                && self.events.capacity() > MAX_CAP
+            {
+                self.events.shrink_to_fit();
+            }
+
+            if (self.info.is_empty() || self.info.len() < MAX_CAP) && self.info.capacity() > MAX_CAP
+            {
+                self.info.shrink_to_fit();
+            }
+
+            self.capacity_cleanup
+                .reset(self.config.capacity_cleanup_interval);
         }
 
         self.waker.replace(cx.waker().clone());
