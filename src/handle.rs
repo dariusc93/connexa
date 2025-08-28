@@ -8,6 +8,7 @@ pub(crate) mod floodsub;
 #[cfg(feature = "gossipsub")]
 pub(crate) mod gossipsub;
 mod peer_store;
+mod relay;
 #[cfg(feature = "rendezvous")]
 pub(crate) mod rendezvous;
 #[cfg(feature = "request-response")]
@@ -27,6 +28,7 @@ use crate::handle::floodsub::ConnexaFloodsub;
 #[cfg(feature = "gossipsub")]
 use crate::handle::gossipsub::ConnexaGossipsub;
 use crate::handle::peer_store::ConnexaPeerstore;
+use crate::handle::relay::ConnexaRelay;
 #[cfg(feature = "rendezvous")]
 use crate::handle::rendezvous::ConnexaRendezvous;
 #[cfg(feature = "request-response")]
@@ -131,6 +133,12 @@ where
     #[cfg(feature = "rendezvous")]
     pub fn rendezvous(&self) -> ConnexaRendezvous<'_, T> {
         ConnexaRendezvous::new(self)
+    }
+
+    /// Returns a handle for relay functions
+    #[cfg(feature = "relay")]
+    pub fn relay(&self) -> ConnexaRelay<'_, T> {
+        ConnexaRelay::new(self)
     }
 
     /// Returns a handle to manage peer whitelist functionality
