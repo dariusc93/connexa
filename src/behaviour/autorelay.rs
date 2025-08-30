@@ -62,6 +62,14 @@ pub struct Config {
     pub auto_reservation: bool,
 }
 
+#[derive(Default, Debug, Clone, Copy)]
+pub enum Selection {
+    #[default]
+    InOrder,
+    Random,
+    LowestLatency,
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -155,7 +163,7 @@ impl Behaviour {
 
     pub fn enable_autorelay(&mut self) {
         self.config.auto_reservation = true;
-        self.meet_reservation_target(true);
+        self.meet_reservation_target(true, Selection::Random);
         if let Some(waker) = self.waker.take() {
             waker.wake();
         }
@@ -249,7 +257,6 @@ impl Behaviour {
 
         let mut rng = rand::thread_rng();
 
-        // TODO: Have a option to select either in order or at random
         let info = connections
             .iter_mut()
             .choose(&mut rng)
@@ -281,7 +288,7 @@ impl Behaviour {
     }
 
     #[allow(clippy::manual_saturating_arithmetic)]
-    fn meet_reservation_target(&mut self, auto: bool) {
+    fn meet_reservation_target(&mut self, auto: bool, selection: Selection) {
         if !self.config.auto_reservation {
             return;
         }
@@ -339,13 +346,11 @@ impl Behaviour {
             return;
         }
 
-        let targets_count = targets.len();
+        let targets_count = std::cmp::min(targets.len(), max);
 
         if targets_count == 0 {
             return;
         }
-
-        let mut rng = rand::thread_rng();
 
         let remaining_targets_needed = targets_count
             .checked_sub(self.pending_target.len())
@@ -355,11 +360,25 @@ impl Behaviour {
             return;
         }
 
-        let targets = targets
-            .into_iter()
-            .choose_multiple(&mut rng, remaining_targets_needed);
+        let mut rng = rand::thread_rng();
 
-        for peer_id in targets {
+        let new_targets = match selection {
+            Selection::InOrder => {
+                // TODO: Maybe use take and collect instead?
+                targets
+                    .into_iter()
+                    .take(remaining_targets_needed)
+                    .collect::<Vec<_>>()
+            }
+            Selection::Random => targets
+                .into_iter()
+                .choose_multiple(&mut rng, remaining_targets_needed),
+            Selection::LowestLatency => {
+                unimplemented!()
+            }
+        };
+
+        for peer_id in new_targets {
             if !self.select_connection_for_reservation(&peer_id) {
                 continue;
             }
@@ -594,7 +613,7 @@ impl NetworkBehaviour for Behaviour {
                 peer_info.relay_status = RelayStatus::Supported {
                     status: ReservationStatus::Idle,
                 };
-                self.meet_reservation_target(true);
+                self.meet_reservation_target(true, Selection::InOrder);
             }
             Out::Unsupported => {
                 let previous_status = peer_info.relay_status;
