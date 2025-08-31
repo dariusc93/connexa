@@ -13,7 +13,6 @@ use crate::prelude::transport::Endpoint;
 use either::Either;
 use futures::FutureExt;
 use futures_timer::Delay;
-use indexmap::map::Entry;
 use indexmap::{IndexMap, IndexSet};
 use libp2p::core::transport::ListenerId;
 use libp2p::multiaddr::Protocol;
@@ -23,6 +22,7 @@ use libp2p::{Multiaddr, PeerId};
 use rand::prelude::IteratorRandom;
 use std::collections::VecDeque;
 use std::hash::{Hash, Hasher};
+use std::num::NonZeroU8;
 use std::task::{Context, Poll, Waker};
 use std::time::Duration;
 
@@ -58,8 +58,8 @@ impl Default for Behaviour {
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct Config {
-    pub max_reservation: Option<u8>,
-    pub auto_reservation: bool,
+    pub max_reservation: NonZeroU8,
+    pub enable_auto_relay: bool,
 }
 
 #[derive(Default, Debug, Clone, Copy)]
@@ -68,13 +68,14 @@ pub enum Selection {
     InOrder,
     Random,
     LowestLatency,
+    Peer(PeerId),
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            max_reservation: None,
-            auto_reservation: true,
+            max_reservation: NonZeroU8::new(2).expect("not zero"),
+            enable_auto_relay: true,
         }
     }
 }
@@ -162,7 +163,7 @@ impl Behaviour {
     }
 
     pub fn enable_autorelay(&mut self) {
-        self.config.auto_reservation = true;
+        self.config.enable_auto_relay = true;
         self.meet_reservation_target(Selection::Random);
         if let Some(waker) = self.waker.take() {
             waker.wake();
@@ -170,7 +171,7 @@ impl Behaviour {
     }
 
     pub fn disable_autorelay(&mut self) {
-        self.config.auto_reservation = false;
+        self.config.enable_auto_relay = false;
         if let Some(waker) = self.waker.take() {
             waker.wake();
         }
@@ -289,17 +290,11 @@ impl Behaviour {
 
     #[allow(clippy::manual_saturating_arithmetic)]
     fn meet_reservation_target(&mut self, selection: Selection) {
-        if !self.config.auto_reservation {
+        if !self.config.enable_auto_relay {
             return;
         }
 
-        let max = self.config.max_reservation.unwrap_or(2) as usize;
-
-        // if max target reservation is 0, this would be no different from disabling auto reservation,
-        // which would help prevent a possible DoS due to having multiple reservation acquired.
-        if max == 0 {
-            return;
-        }
+        let max = self.config.max_reservation.get() as usize;
 
         // TODO: check to determine if we have any active connections and if not, dial any static relays and let it be handled internally
         let no_supported_relays = self.info.is_empty()
@@ -376,6 +371,7 @@ impl Behaviour {
             Selection::Random => targets
                 .into_iter()
                 .choose_multiple(&mut rng, remaining_targets_needed),
+            Selection::Peer(peer_id) => targets.into_iter().filter(|&id| id == peer_id).collect(),
             Selection::LowestLatency => {
                 unimplemented!()
             }
