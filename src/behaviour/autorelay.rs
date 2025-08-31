@@ -17,7 +17,7 @@ use indexmap::{IndexMap, IndexSet};
 use libp2p::core::transport::ListenerId;
 use libp2p::multiaddr::Protocol;
 use libp2p::swarm::dial_opts::DialOpts;
-use libp2p::swarm::{ConnectionId, ListenOpts, NetworkBehaviour, NewListenAddr};
+use libp2p::swarm::{ConnectionId, ExternalAddresses, ListenOpts, NetworkBehaviour, NewListenAddr};
 use libp2p::{Multiaddr, PeerId};
 use rand::prelude::IteratorRandom;
 use std::collections::VecDeque;
@@ -35,6 +35,7 @@ pub struct Behaviour {
     static_relays: IndexMap<PeerId, IndexSet<Multiaddr>>,
     listener_to_info: IndexMap<ListenerId, (PeerId, ConnectionId)>,
     events: VecDeque<ToSwarm<<Self as NetworkBehaviour>::ToSwarm, THandlerInEvent<Self>>>,
+    external_addresses: ExternalAddresses,
     pending_target: IndexSet<PeerId>,
     capacity_cleanup: Delay,
     waker: Option<Waker>,
@@ -50,6 +51,7 @@ impl Default for Behaviour {
             events: VecDeque::new(),
             pending_target: IndexSet::new(),
             capacity_cleanup: Delay::new(CLEANUP_INTERVAL),
+            external_addresses: ExternalAddresses::default(),
             waker: None,
         }
     }
@@ -294,18 +296,32 @@ impl Behaviour {
             return;
         }
 
+        // check to determine if there is a public external address that could possibly let us know the node
+        // is reachable
+        if self
+            .external_addresses
+            .iter()
+            .any(|addr| addr.is_public() && !addr.is_relayed())
+        {
+            return;
+        }
+
         let max = self.config.max_reservation.get() as usize;
 
         // TODO: check to determine if we have any active connections and if not, dial any static relays and let it be handled internally
-        let no_supported_relays = self.info.is_empty()
-            || self.info.iter().all(|(_, infos)| {
-                !infos.is_empty()
-                    || infos
+        let peers_not_supported = self.info.is_empty()
+            || self
+                .info
+                .iter()
+                .filter(|(_, infos)| {
+                    infos
                         .iter()
                         .all(|info| info.relay_status == RelayStatus::NotSupported)
-            });
+                })
+                .count()
+                == 0;
 
-        if no_supported_relays {
+        if peers_not_supported {
             if self.static_relays.is_empty() {
                 // TODO: Emit an event informing swarm about being in need of relays?
                 // however this would require separate functions to add relays to the autorelay state and possibly confirm if theres any existing connections
@@ -443,6 +459,7 @@ impl NetworkBehaviour for Behaviour {
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
+        let _change = self.external_addresses.on_swarm_event(&event);
         match event {
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
