@@ -30,7 +30,6 @@ const MAX_CAP: usize = 100;
 const CLEANUP_INTERVAL: Duration = Duration::from_secs(60);
 
 pub struct Behaviour {
-    config: Config,
     info: IndexMap<PeerId, VecDeque<PeerInfo>>,
     static_relays: IndexMap<PeerId, IndexSet<Multiaddr>>,
     listener_to_info: IndexMap<ListenerId, (PeerId, ConnectionId)>,
@@ -38,13 +37,15 @@ pub struct Behaviour {
     external_addresses: ExternalAddresses,
     pending_target: IndexSet<PeerId>,
     capacity_cleanup: Delay,
+    max_reservation: NonZeroU8,
+    override_autorelay: bool,
+    enable_auto_relay: bool,
     waker: Option<Waker>,
 }
 
 impl Default for Behaviour {
     fn default() -> Self {
         Self {
-            config: Config::default(),
             info: IndexMap::new(),
             static_relays: IndexMap::new(),
             listener_to_info: IndexMap::new(),
@@ -52,7 +53,10 @@ impl Default for Behaviour {
             pending_target: IndexSet::new(),
             capacity_cleanup: Delay::new(CLEANUP_INTERVAL),
             external_addresses: ExternalAddresses::default(),
+            override_autorelay: false,
             waker: None,
+            enable_auto_relay: true,
+            max_reservation: NonZeroU8::new(2).expect("not zero"),
         }
     }
 }
@@ -130,7 +134,8 @@ enum ReservationStatus {
 impl Behaviour {
     pub fn new_with_config(config: Config) -> Self {
         Self {
-            config,
+            enable_auto_relay: config.enable_auto_relay,
+            max_reservation: config.max_reservation,
             ..Default::default()
         }
     }
@@ -165,7 +170,7 @@ impl Behaviour {
     }
 
     pub fn enable_autorelay(&mut self) {
-        self.config.enable_auto_relay = true;
+        self.enable_auto_relay = true;
         self.meet_reservation_target(Selection::Random);
         if let Some(waker) = self.waker.take() {
             waker.wake();
@@ -173,7 +178,7 @@ impl Behaviour {
     }
 
     pub fn disable_autorelay(&mut self) {
-        self.config.enable_auto_relay = false;
+        self.enable_auto_relay = false;
         if let Some(waker) = self.waker.take() {
             waker.wake();
         }
@@ -292,7 +297,7 @@ impl Behaviour {
 
     #[allow(clippy::manual_saturating_arithmetic)]
     fn meet_reservation_target(&mut self, selection: Selection) {
-        if !self.config.enable_auto_relay {
+        if !self.enable_auto_relay {
             return;
         }
 
@@ -306,7 +311,7 @@ impl Behaviour {
             return;
         }
 
-        let max = self.config.max_reservation.get() as usize;
+        let max = self.max_reservation.get() as usize;
 
         // TODO: check to determine if we have any active connections and if not, dial any static relays and let it be handled internally
         let peers_not_supported = self.info.is_empty()
