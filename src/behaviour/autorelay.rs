@@ -96,7 +96,7 @@ impl PeerInfo {
                 true
             }
             false => {
-                self.relay_status = RelayStatus::None;
+                self.relay_status = RelayStatus::Pending;
                 false
             }
         }
@@ -114,7 +114,7 @@ impl Hash for PeerInfo {
 enum RelayStatus {
     Supported { status: ReservationStatus },
     NotSupported,
-    None,
+    Pending,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -163,7 +163,7 @@ impl Behaviour {
 
     pub fn enable_autorelay(&mut self) {
         self.config.auto_reservation = true;
-        self.meet_reservation_target(true, Selection::Random);
+        self.meet_reservation_target(Selection::Random);
         if let Some(waker) = self.waker.take() {
             waker.wake();
         }
@@ -234,7 +234,7 @@ impl Behaviour {
                 status: ReservationStatus::Idle,
             }
             | RelayStatus::NotSupported
-            | RelayStatus::None => {}
+            | RelayStatus::Pending => {}
         }
 
         info.relay_status = RelayStatus::NotSupported;
@@ -288,7 +288,7 @@ impl Behaviour {
     }
 
     #[allow(clippy::manual_saturating_arithmetic)]
-    fn meet_reservation_target(&mut self, auto: bool, selection: Selection) {
+    fn meet_reservation_target(&mut self, selection: Selection) {
         if !self.config.auto_reservation {
             return;
         }
@@ -297,14 +297,20 @@ impl Behaviour {
 
         // if max target reservation is 0, this would be no different from disabling auto reservation,
         // which would help prevent a possible DoS due to having multiple reservation acquired.
-        if max == 0 && auto {
+        if max == 0 {
             return;
         }
 
         // TODO: check to determine if we have any active connections and if not, dial any static relays and let it be handled internally
-        let have_connections = self.info.iter().any(|(_, infos)| !infos.is_empty());
+        let no_supported_relays = self.info.is_empty()
+            || self.info.iter().all(|(_, infos)| {
+                !infos.is_empty()
+                    || infos
+                        .iter()
+                        .all(|info| info.relay_status == RelayStatus::NotSupported)
+            });
 
-        if !have_connections && auto {
+        if no_supported_relays {
             if self.static_relays.is_empty() {
                 // TODO: Emit an event informing swarm about being in need of relays?
                 // however this would require separate functions to add relays to the autorelay state and possibly confirm if theres any existing connections
@@ -363,13 +369,10 @@ impl Behaviour {
         let mut rng = rand::thread_rng();
 
         let new_targets = match selection {
-            Selection::InOrder => {
-                // TODO: Maybe use take and collect instead?
-                targets
-                    .into_iter()
-                    .take(remaining_targets_needed)
-                    .collect::<Vec<_>>()
-            }
+            Selection::InOrder => targets
+                .into_iter()
+                .take(remaining_targets_needed)
+                .collect::<Vec<_>>(),
             Selection::Random => targets
                 .into_iter()
                 .choose_multiple(&mut rng, remaining_targets_needed),
@@ -457,7 +460,7 @@ impl NetworkBehaviour for Behaviour {
                 let mut info = PeerInfo {
                     connection_id,
                     address: addr,
-                    relay_status: RelayStatus::None,
+                    relay_status: RelayStatus::Pending,
                 };
 
                 // in the event that the address is from a peer going through a relay, automatically disqualify the connection
@@ -613,7 +616,7 @@ impl NetworkBehaviour for Behaviour {
                 peer_info.relay_status = RelayStatus::Supported {
                     status: ReservationStatus::Idle,
                 };
-                self.meet_reservation_target(true, Selection::InOrder);
+                self.meet_reservation_target(Selection::InOrder);
             }
             Out::Unsupported => {
                 let previous_status = peer_info.relay_status;
