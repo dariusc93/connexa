@@ -19,6 +19,7 @@ use libp2p::multiaddr::Protocol;
 use libp2p::swarm::dial_opts::DialOpts;
 use libp2p::swarm::{ConnectionId, ExternalAddresses, ListenOpts, NetworkBehaviour, NewListenAddr};
 use libp2p::{Multiaddr, PeerId};
+use pollable_map::optional::Optional;
 use rand::prelude::IteratorRandom;
 use std::collections::VecDeque;
 use std::hash::{Hash, Hasher};
@@ -28,6 +29,7 @@ use std::time::Duration;
 
 const MAX_CAP: usize = 100;
 const CLEANUP_INTERVAL: Duration = Duration::from_secs(60);
+const BACKOFF_INTERVAL: Duration = Duration::from_secs(5);
 
 pub struct Behaviour {
     info: IndexMap<PeerId, VecDeque<PeerInfo>>,
@@ -40,6 +42,7 @@ pub struct Behaviour {
     max_reservation: NonZeroU8,
     override_autorelay: bool,
     enable_auto_relay: bool,
+    backoff: Optional<Delay>,
     waker: Option<Waker>,
 }
 
@@ -56,6 +59,7 @@ impl Default for Behaviour {
             override_autorelay: false,
             waker: None,
             enable_auto_relay: true,
+            backoff: Optional::default(),
             max_reservation: NonZeroU8::new(2).expect("not zero"),
         }
     }
@@ -307,24 +311,22 @@ impl Behaviour {
             .external_addresses
             .iter()
             .any(|addr| addr.is_public() && !addr.is_relayed())
+            && !self.override_autorelay
         {
             return;
         }
 
         let max = self.max_reservation.get() as usize;
 
-        // TODO: check to determine if we have any active connections and if not, dial any static relays and let it be handled internally
         let peers_not_supported = self.info.is_empty()
-            || self
-                .info
-                .iter()
-                .filter(|(_, infos)| {
-                    infos
-                        .iter()
-                        .all(|info| info.relay_status == RelayStatus::NotSupported)
+            || self.info.iter().all(|(_, infos)| {
+                infos.iter().all(|info| {
+                    matches!(
+                        info.relay_status,
+                        RelayStatus::NotSupported | RelayStatus::Pending
+                    )
                 })
-                .count()
-                == 0;
+            });
 
         if peers_not_supported {
             if self.static_relays.is_empty() {
@@ -464,7 +466,22 @@ impl NetworkBehaviour for Behaviour {
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
-        let _change = self.external_addresses.on_swarm_event(&event);
+        let change = self.external_addresses.on_swarm_event(&event);
+        if change {
+            if self
+                .external_addresses
+                .iter()
+                .any(|addr| addr.is_public() && !addr.is_relayed())
+            {
+                self.override_autorelay = true;
+                self.backoff.replace(Delay::new(BACKOFF_INTERVAL));
+            } else if self.external_addresses.iter().any(|addr| !addr.is_public()) {
+                self.backoff.take();
+                self.override_autorelay = false;
+            }
+            return;
+        }
+
         match event {
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
@@ -665,6 +682,10 @@ impl NetworkBehaviour for Behaviour {
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
+        }
+
+        if self.backoff.poll_unpin(cx).is_ready() {
+            self.meet_reservation_target(Selection::InOrder);
         }
 
         if self.capacity_cleanup.poll_unpin(cx).is_ready() {
