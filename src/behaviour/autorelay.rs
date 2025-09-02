@@ -32,7 +32,7 @@ const CLEANUP_INTERVAL: Duration = Duration::from_secs(60);
 const BACKOFF_INTERVAL: Duration = Duration::from_secs(5);
 
 pub struct Behaviour {
-    info: IndexMap<PeerId, VecDeque<PeerInfo>>,
+    info: IndexMap<(PeerId, ConnectionId), PeerInfo>,
     static_relays: IndexMap<PeerId, IndexSet<Multiaddr>>,
     listener_to_info: IndexMap<ListenerId, (PeerId, ConnectionId)>,
     events: VecDeque<ToSwarm<<Self as NetworkBehaviour>::ToSwarm, THandlerInEvent<Self>>>,
@@ -191,28 +191,22 @@ impl Behaviour {
     pub fn get_all_supported_targets(&self) -> impl Iterator<Item = &PeerId> {
         self.info
             .iter()
-            .filter(|(_, infos)| {
-                infos
-                    .iter()
-                    .any(|info| matches!(info.relay_status, RelayStatus::Supported { .. }))
-            })
-            .map(|(peer_id, _)| peer_id)
+            .filter(|(_, info)| matches!(info.relay_status, RelayStatus::Supported { .. }))
+            .map(|((peer_id, _), _)| peer_id)
     }
 
-    pub fn get_potential_targets(&self) -> impl Iterator<Item = &PeerId> {
+    pub fn get_potential_targets(&self) -> impl Iterator<Item = (&PeerId, &ConnectionId)> {
         self.info
             .iter()
-            .filter(|(_, infos)| {
-                infos.iter().any(|info| {
-                    matches!(
-                        info.relay_status,
-                        RelayStatus::Supported {
-                            status: ReservationStatus::Idle
-                        }
-                    )
-                })
+            .filter(|(_, info)| {
+                matches!(
+                    info.relay_status,
+                    RelayStatus::Supported {
+                        status: ReservationStatus::Idle
+                    }
+                )
             })
-            .map(|(peer_id, _)| peer_id)
+            .map(|((peer_id, connection_id), _)| (peer_id, connection_id))
     }
 
     fn disable_reservation(&mut self, id: ListenerId) {
@@ -220,14 +214,7 @@ impl Behaviour {
             return;
         };
 
-        let Some(connections) = self.info.get_mut(&peer_id) else {
-            return;
-        };
-
-        let Some(info) = connections
-            .iter_mut()
-            .find(|info| info.connection_id == connection_id)
-        else {
+        let Some(info) = self.info.get_mut(&(peer_id, connection_id)) else {
             return;
         };
 
@@ -265,11 +252,7 @@ impl Behaviour {
             .collect::<Vec<_>>();
 
         for (listener_id, peer_id, connection_id) in relay_listeners {
-            let Some(connection) = self.info.get_mut(&peer_id).and_then(|connections| {
-                connections
-                    .iter_mut()
-                    .find(|info| info.connection_id == connection_id)
-            }) else {
+            let Some(connection) = self.info.get_mut(&(peer_id, connection_id)) else {
                 continue;
             };
 
@@ -289,26 +272,22 @@ impl Behaviour {
         }
     }
 
-    fn select_connection_for_reservation(&mut self, peer_id: &PeerId) -> bool {
+    fn select_connection_for_reservation(
+        &mut self,
+        (peer_id, connection_id): &(PeerId, ConnectionId),
+    ) -> bool {
         if self.pending_target.contains(peer_id) {
             return false;
         }
 
-        let Some(connections) = self.info.get_mut(peer_id) else {
-            return false;
-        };
-
-        if connections.is_empty() {
-            self.info.shift_remove(peer_id);
+        if self.info.is_empty() {
             tracing::warn!(%peer_id, "no connections present. removing entry");
             return false;
         }
 
-        let mut rng = rand::thread_rng();
-
-        let info = connections
-            .iter_mut()
-            .choose(&mut rng)
+        let info = self
+            .info
+            .get_mut(&(*peer_id, *connection_id))
             .expect("connection is present");
 
         let addr_with_peer_id = match info.address.clone().with_p2p(*peer_id) {
@@ -356,11 +335,10 @@ impl Behaviour {
         let max = self.max_reservation.get() as usize;
 
         let peers_not_supported = self.info.is_empty()
-            || self.info.iter().all(|(_, infos)| {
-                infos
-                    .iter()
-                    .all(|info| info.relay_status == RelayStatus::NotSupported)
-            });
+            || self
+                .info
+                .iter()
+                .all(|(_, info)| info.relay_status == RelayStatus::NotSupported);
 
         if peers_not_supported {
             if self.static_relays.is_empty() {
@@ -381,14 +359,12 @@ impl Behaviour {
             .info
             .iter()
             .filter(|(_, info)| {
-                info.iter().any(|info| {
-                    matches!(
-                        info.relay_status,
-                        RelayStatus::Supported {
-                            status: ReservationStatus::Active { .. }
-                        }
-                    )
-                })
+                matches!(
+                    info.relay_status,
+                    RelayStatus::Supported {
+                        status: ReservationStatus::Active { .. }
+                    }
+                )
             })
             .count();
 
@@ -396,7 +372,10 @@ impl Behaviour {
             return;
         }
 
-        let targets = self.get_potential_targets().copied().collect::<Vec<_>>();
+        let targets = self
+            .get_potential_targets()
+            .map(|(peer_id, connection_id)| (*peer_id, *connection_id))
+            .collect::<Vec<_>>();
 
         let pending_target_len = self.pending_target.len();
 
@@ -428,14 +407,17 @@ impl Behaviour {
             Selection::Random => targets
                 .into_iter()
                 .choose_multiple(&mut rng, remaining_targets_needed),
-            Selection::Peer(peer_id) => targets.into_iter().filter(|&id| id == peer_id).collect(),
+            Selection::Peer(peer_id) => targets
+                .into_iter()
+                .filter(|(id, _)| *id == peer_id)
+                .collect(),
             Selection::LowestLatency => {
                 unimplemented!()
             }
         };
 
-        for peer_id in new_targets {
-            if !self.select_connection_for_reservation(&peer_id) {
+        for (peer_id, connection_id) in new_targets {
+            if !self.select_connection_for_reservation(&(peer_id, connection_id)) {
                 continue;
             }
 
@@ -529,7 +511,6 @@ impl NetworkBehaviour for Behaviour {
                 endpoint,
                 ..
             }) => {
-                let infos = self.info.entry(peer_id).or_default();
                 let addr = endpoint.get_remote_address().clone();
 
                 let mut info = PeerInfo {
@@ -541,15 +522,15 @@ impl NetworkBehaviour for Behaviour {
                 // in the event that the address is from a peer going through a relay, automatically disqualify the connection
                 // from being used as a potential relay since there is no support for multi-HOP
                 if info.check_for_disqualifying_address() {
-                    infos.push_back(info);
+                    self.info.insert((peer_id, connection_id), info);
                 } else {
                     match self.static_relays.get(&peer_id) {
                         Some(addrs) if addrs.contains(&info.address) => {
                             // prioritize static relays so it would have a higher chance of being selected first
-                            infos.push_front(info);
+                            self.info.insert_before(0, (peer_id, connection_id), info);
                         }
                         _ => {
-                            infos.push_back(info);
+                            self.info.insert((peer_id, connection_id), info);
                         }
                     }
                 }
@@ -559,14 +540,7 @@ impl NetworkBehaviour for Behaviour {
                 connection_id,
                 ..
             }) => {
-                let Some(infos) = self.info.get_mut(&peer_id) else {
-                    return;
-                };
-
-                infos
-                    .iter()
-                    .position(|info| info.connection_id == connection_id)
-                    .map(|index| infos.remove(index));
+                self.info.shift_remove(&(peer_id, connection_id));
 
                 if let Some(listener_id) = self
                     .listener_to_info
@@ -575,10 +549,6 @@ impl NetworkBehaviour for Behaviour {
                     .map(|(id, _)| *id)
                 {
                     self.listener_to_info.shift_remove(&listener_id);
-                }
-
-                if infos.is_empty() {
-                    self.info.shift_remove(&peer_id);
                 }
             }
             FromSwarm::DialFailure(DialFailure {
@@ -592,14 +562,7 @@ impl NetworkBehaviour for Behaviour {
                     return;
                 };
 
-                let Some(infos) = self.info.get_mut(&peer_id) else {
-                    return;
-                };
-
-                infos
-                    .iter()
-                    .position(|info| info.connection_id == connection_id)
-                    .map(|index| infos.remove(index));
+                self.info.shift_remove(&(peer_id, connection_id));
             }
             FromSwarm::AddressChange(AddressChange {
                 peer_id,
@@ -614,13 +577,7 @@ impl NetworkBehaviour for Behaviour {
 
                 let info = self
                     .info
-                    .get_mut(&peer_id)
-                    .and_then(|infos| {
-                        infos
-                            .iter()
-                            .position(|info| info.connection_id == connection_id)
-                            .and_then(|index| infos.get_mut(index))
-                    })
+                    .get_mut(&(peer_id, connection_id))
                     .expect("connection is present");
 
                 info.address = new_addr.clone();
@@ -635,15 +592,9 @@ impl NetworkBehaviour for Behaviour {
                     return;
                 };
 
-                let Some(infos) = self.info.get_mut(peer_id) else {
+                let Some(info) = self.info.get_mut(&(*peer_id, *connection_id)) else {
                     return;
                 };
-
-                let info = infos
-                    .iter()
-                    .position(|info| info.connection_id == *connection_id)
-                    .and_then(|index| infos.get_mut(index))
-                    .expect("connection is present");
 
                 let RelayStatus::Supported {
                     status: ReservationStatus::Pending { id },
@@ -675,15 +626,9 @@ impl NetworkBehaviour for Behaviour {
     ) {
         let Either::Left(event) = event;
 
-        let Some(infos) = self.info.get_mut(&peer_id) else {
+        let Some(peer_info) = self.info.get_mut(&(peer_id, connection_id)) else {
             return;
         };
-
-        let peer_info = infos
-            .iter()
-            .position(|info| info.connection_id == connection_id)
-            .and_then(|index| infos.get_mut(index))
-            .expect("connection is present");
 
         match event {
             Out::Supported => {
