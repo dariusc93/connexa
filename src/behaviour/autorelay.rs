@@ -236,20 +236,57 @@ impl Behaviour {
                 status: ReservationStatus::Active { .. },
             } => {
                 // TODO: Determine if we should disconnect then reconnect?
+                info.relay_status = RelayStatus::Supported {
+                    status: ReservationStatus::Idle,
+                };
             }
             RelayStatus::Supported {
                 status: ReservationStatus::Pending { .. },
             } => {
+                info.relay_status = RelayStatus::Supported {
+                    status: ReservationStatus::Idle,
+                };
+            }
+            RelayStatus::Pending => {
                 self.pending_target.shift_remove(&peer_id);
             }
             RelayStatus::Supported {
                 status: ReservationStatus::Idle,
             }
-            | RelayStatus::NotSupported
-            | RelayStatus::Pending => {}
+            | RelayStatus::NotSupported => {}
         }
+    }
 
-        info.relay_status = RelayStatus::NotSupported;
+    fn disable_all_reservations(&mut self) {
+        let relay_listeners = self
+            .listener_to_info
+            .iter()
+            .map(|(id, (peer_id, conn_id))| (*id, *peer_id, *conn_id))
+            .collect::<Vec<_>>();
+
+        for (listener_id, peer_id, connection_id) in relay_listeners {
+            let Some(connection) = self.info.get_mut(&peer_id).and_then(|connections| {
+                connections
+                    .iter_mut()
+                    .find(|info| info.connection_id == connection_id)
+            }) else {
+                continue;
+            };
+
+            assert!(matches!(
+                connection.relay_status,
+                RelayStatus::Supported {
+                    status: ReservationStatus::Active { id } | ReservationStatus::Pending { id }
+                } if id == listener_id
+            ));
+
+            connection.relay_status = RelayStatus::Supported {
+                status: ReservationStatus::Idle,
+            };
+
+            self.events
+                .push_back(ToSwarm::RemoveListener { id: listener_id });
+        }
     }
 
     fn select_connection_for_reservation(&mut self, peer_id: &PeerId) -> bool {
@@ -320,12 +357,9 @@ impl Behaviour {
 
         let peers_not_supported = self.info.is_empty()
             || self.info.iter().all(|(_, infos)| {
-                infos.iter().all(|info| {
-                    matches!(
-                        info.relay_status,
-                        RelayStatus::NotSupported | RelayStatus::Pending
-                    )
-                })
+                infos
+                    .iter()
+                    .all(|info| info.relay_status == RelayStatus::NotSupported)
             });
 
         if peers_not_supported {
@@ -474,9 +508,15 @@ impl NetworkBehaviour for Behaviour {
                 .any(|addr| addr.is_public() && !addr.is_relayed())
             {
                 self.override_autorelay = true;
-                self.backoff.replace(Delay::new(BACKOFF_INTERVAL));
-            } else if self.external_addresses.iter().any(|addr| !addr.is_public()) {
+                self.disable_all_reservations();
                 self.backoff.take();
+            } else if self.external_addresses.iter().count() == 0
+                || self
+                    .external_addresses
+                    .iter()
+                    .any(|addr| !addr.is_public() || addr.is_relayed())
+            {
+                self.backoff.replace(Delay::new(BACKOFF_INTERVAL));
                 self.override_autorelay = false;
             }
             return;
@@ -528,7 +568,6 @@ impl NetworkBehaviour for Behaviour {
                     .position(|info| info.connection_id == connection_id)
                     .map(|index| infos.remove(index));
 
-                // TODO: Determine if we should remove it here or leave it for the listener events to handle its removal
                 if let Some(listener_id) = self
                     .listener_to_info
                     .iter()
@@ -656,7 +695,6 @@ impl NetworkBehaviour for Behaviour {
             Out::Unsupported => {
                 let previous_status = peer_info.relay_status;
                 peer_info.relay_status = RelayStatus::NotSupported;
-
                 // if there is a change in protocol support during an active reservation,
                 // we should disconnect to remove the reservation
                 if matches!(previous_status, RelayStatus::Supported { .. }) {
