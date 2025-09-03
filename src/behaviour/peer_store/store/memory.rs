@@ -15,7 +15,7 @@ pub struct MemoryStore {
     peers: IndexMap<PeerId, IndexSet<Multiaddr>>,
     // Note: we do this to act as a "reference counter" to the same address connected to the peer
     //       before we proceed to mark the address for removal.
-    connections: IndexMap<PeerId, IndexMap<Multiaddr, IndexSet<ConnectionId>>>,
+    connections: IndexMap<(PeerId, ConnectionId), Multiaddr>,
     persistent: IndexSet<PeerId>,
     timer: FutureMap<(PeerId, Multiaddr), Delay>,
 }
@@ -147,16 +147,13 @@ impl Store for MemoryStore {
                 //       the address is added manually.
                 let remote_addr = endpoint.get_remote_address().clone();
                 self.connections
-                    .entry(*peer_id)
-                    .or_default()
-                    .entry(remote_addr.clone())
-                    .or_default()
-                    .insert(*connection_id);
+                    .insert((*peer_id, *connection_id), remote_addr.clone());
+
                 self.peers
                     .entry(*peer_id)
                     .or_default()
                     .insert(remote_addr.clone());
-                
+
                 self.timer.remove(&(*peer_id, remote_addr));
                 // TODO: determine if we should remove any failed addresses from the store to keep the entry up to date?
             }
@@ -168,31 +165,15 @@ impl Store for MemoryStore {
             }) => {
                 let remote_addr = endpoint.get_remote_address();
 
-                let Some(connections) = self.connections.get_mut(peer_id) else {
-                    return;
-                };
+                self.connections.shift_remove(&(*peer_id, *connection_id));
 
-                let Some(list) = connections.get_mut(remote_addr) else {
-                    return;
-                };
-
-                list.shift_remove(connection_id);
-
-                if !list.is_empty() {
-                    return;
-                }
-
-                connections.shift_remove(remote_addr);
-                if !connections.is_empty() {
-                    return;
-                }
-                self.connections.shift_remove(peer_id);
                 if !self.persistent.contains(peer_id) {
                     self.timer.insert(
                         (*peer_id, remote_addr.clone()),
                         Delay::new(std::time::Duration::from_secs(60)),
                     );
                 }
+
                 self.connections.shrink_to_fit();
             }
             _ => {}
