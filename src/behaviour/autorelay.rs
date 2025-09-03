@@ -37,7 +37,7 @@ pub struct Behaviour {
     listener_to_info: IndexMap<ListenerId, (PeerId, ConnectionId)>,
     events: VecDeque<ToSwarm<<Self as NetworkBehaviour>::ToSwarm, THandlerInEvent<Self>>>,
     external_addresses: ExternalAddresses,
-    pending_target: IndexSet<PeerId>,
+    pending_target: IndexSet<(PeerId, ConnectionId)>,
     capacity_cleanup: Delay,
     max_reservation: NonZeroU8,
     override_autorelay: bool,
@@ -233,11 +233,10 @@ impl Behaviour {
                 info.relay_status = RelayStatus::Supported {
                     status: ReservationStatus::Idle,
                 };
+                self.pending_target.shift_remove(&(peer_id, connection_id));
             }
-            RelayStatus::Pending => {
-                self.pending_target.shift_remove(&peer_id);
-            }
-            RelayStatus::Supported {
+            RelayStatus::Pending
+            | RelayStatus::Supported {
                 status: ReservationStatus::Idle,
             }
             | RelayStatus::NotSupported => {}
@@ -274,9 +273,10 @@ impl Behaviour {
 
     fn select_connection_for_reservation(
         &mut self,
-        (peer_id, connection_id): &(PeerId, ConnectionId),
+        peer_id: PeerId,
+        connection_id: ConnectionId,
     ) -> bool {
-        if self.pending_target.contains(peer_id) {
+        if self.pending_target.contains(&(peer_id, connection_id)) {
             return false;
         }
 
@@ -287,10 +287,10 @@ impl Behaviour {
 
         let info = self
             .info
-            .get_mut(&(*peer_id, *connection_id))
+            .get_mut(&(peer_id, connection_id))
             .expect("connection is present");
 
-        let addr_with_peer_id = match info.address.clone().with_p2p(*peer_id) {
+        let addr_with_peer_id = match info.address.clone().with_p2p(peer_id) {
             Ok(addr) => addr,
             Err(addr) => {
                 tracing::warn!(%addr, "address unexpectedly contains a different peer id than the connection");
@@ -308,9 +308,9 @@ impl Behaviour {
             status: ReservationStatus::Pending { id },
         };
         self.listener_to_info
-            .insert(id, (*peer_id, info.connection_id));
+            .insert(id, (peer_id, info.connection_id));
         self.events.push_back(ToSwarm::ListenOn { opts });
-        self.pending_target.insert(*peer_id);
+        self.pending_target.insert((peer_id, connection_id));
 
         true
     }
@@ -417,7 +417,7 @@ impl Behaviour {
         };
 
         for (peer_id, connection_id) in new_targets {
-            if !self.select_connection_for_reservation(&(peer_id, connection_id)) {
+            if !self.select_connection_for_reservation(peer_id, connection_id) {
                 continue;
             }
 
@@ -607,7 +607,10 @@ impl NetworkBehaviour for Behaviour {
                     status: ReservationStatus::Active { id },
                 };
 
-                debug_assert!(self.pending_target.shift_remove(peer_id));
+                debug_assert!(
+                    self.pending_target
+                        .shift_remove(&(*peer_id, *connection_id))
+                );
             }
             FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, .. })
             | FromSwarm::ListenerError(ListenerError { listener_id, .. })
