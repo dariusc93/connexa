@@ -1,3 +1,4 @@
+#[cfg(feature = "relay")]
 pub mod autorelay;
 pub mod dummy;
 pub mod peer_store;

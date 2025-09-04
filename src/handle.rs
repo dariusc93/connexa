@@ -8,6 +8,7 @@ pub(crate) mod floodsub;
 #[cfg(feature = "gossipsub")]
 pub(crate) mod gossipsub;
 mod peer_store;
+#[cfg(feature = "relay")]
 mod relay;
 #[cfg(feature = "rendezvous")]
 pub(crate) mod rendezvous;
@@ -28,6 +29,7 @@ use crate::handle::floodsub::ConnexaFloodsub;
 #[cfg(feature = "gossipsub")]
 use crate::handle::gossipsub::ConnexaGossipsub;
 use crate::handle::peer_store::ConnexaPeerstore;
+#[cfg(feature = "relay")]
 use crate::handle::relay::ConnexaRelay;
 #[cfg(feature = "rendezvous")]
 use crate::handle::rendezvous::ConnexaRendezvous;
