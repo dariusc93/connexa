@@ -315,7 +315,6 @@ impl Behaviour {
         true
     }
 
-    #[allow(clippy::manual_saturating_arithmetic)]
     fn meet_reservation_target(&mut self, selection: Selection) {
         if !self.enable_auto_relay {
             return;
@@ -645,7 +644,7 @@ impl NetworkBehaviour for Behaviour {
                 peer_info.relay_status = RelayStatus::NotSupported;
                 // if there is a change in protocol support during an active reservation,
                 // we should disconnect to remove the reservation
-                if matches!(previous_status, RelayStatus::Supported { .. }) {
+                if matches!(previous_status, RelayStatus::Supported { status: ReservationStatus::Active { .. } }) {
                     self.events.push_back(ToSwarm::CloseConnection {
                         peer_id,
                         connection: CloseConnection::One(connection_id),
