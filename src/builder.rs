@@ -96,6 +96,9 @@ pub(crate) struct Config<S: Store> {
     pub autonat_v2_client_config: Box<dyn FnOnce(AutonatV2ClientConfig) -> AutonatV2ClientConfig>,
     #[cfg(feature = "relay")]
     pub relay_server_config: Box<dyn FnOnce(RelayServerConfig) -> RelayServerConfig>,
+    #[cfg(feature = "relay")]
+    pub autorelay_config:
+        Box<dyn FnOnce(behaviour::autorelay::Config) -> behaviour::autorelay::Config>,
     #[cfg(feature = "identify")]
     pub identify_config: (String, Box<dyn FnOnce(IdentifyConfig) -> IdentifyConfig>),
     #[cfg(feature = "request-response")]
@@ -128,6 +131,8 @@ impl<S: Store> Default for Config<S> {
             autonat_v2_client_config: Box::new(|config| config),
             #[cfg(feature = "relay")]
             relay_server_config: Box::new(|config| config),
+            #[cfg(feature = "relay")]
+            autorelay_config: Box::new(|config| config),
             #[cfg(feature = "identify")]
             identify_config: (String::from("/ipfs/id"), Box::new(|config| config)),
             #[cfg(feature = "request-response")]
@@ -152,6 +157,8 @@ pub(crate) struct Protocols {
     pub(crate) relay_client: bool,
     #[cfg(feature = "relay")]
     pub(crate) relay_server: bool,
+    #[cfg(feature = "relay")]
+    pub(crate) autorelay: bool,
     #[cfg(feature = "dcutr")]
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) dcutr: bool,
@@ -345,6 +352,24 @@ where
     #[cfg(feature = "relay")]
     pub fn with_relay(mut self) -> Self {
         self.protocols.relay_client = true;
+        self
+    }
+
+    /// Enable autorelay
+    #[cfg(feature = "relay")]
+    pub fn with_autorelay(mut self) -> Self {
+        self.protocols.autorelay = true;
+        self
+    }
+
+    /// Enable autorelay
+    #[cfg(feature = "relay")]
+    pub fn with_autorelay_with_config<F>(mut self, f: F) -> Self
+    where
+        F: FnOnce(behaviour::autorelay::Config) -> behaviour::autorelay::Config + 'static,
+    {
+        self.config.autorelay_config = Box::new(f);
+        self.protocols.autorelay = true;
         self
     }
 

@@ -535,6 +535,10 @@ where
             Command::Autonat(autonat_command) => self.process_autonat_v1_command(autonat_command),
             #[cfg(feature = "kad")]
             Command::Dht(dht_command) => self.process_kademlia_command(dht_command),
+            #[cfg(feature = "relay")]
+            Command::AutoRelay(autorelay_command) => {
+                self.process_autorelay_commands(autorelay_command)
+            }
             #[cfg(feature = "stream")]
             Command::Stream(stream_command) => self.process_stream_command(stream_command),
             #[cfg(feature = "request-response")]
