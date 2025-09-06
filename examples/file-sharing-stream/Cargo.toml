@@ -1,0 +1,16 @@
+[package]
+name = "file-sharing-stream"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[package.metadata.release]
+release = false
+
+[dependencies]
+tokio.workspace = true
+tokio-util = { version = "0.7.16", features = ["compat"] }
+futures.workspace = true
+connexa = { path = "../../", default-features = false, features = ["ed25519", "tcp", "quic", "yamux", "noise", "stream"] }
+clap = { version = "4.5.39", features = ["derive"] }
+unsigned-varint = { version = "0.8.0", features = ["futures", "std"] }
