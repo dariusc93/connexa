@@ -86,10 +86,10 @@ async fn main() -> std::io::Result<()> {
         }
     }
 
-    let mut incoming_streams = connexa.stream().new_stream(PROTOCOL).await?;
-
     match opt.argument {
         CliArgument::Provide { path, name } => {
+            let mut incoming_streams = connexa.stream().new_stream(PROTOCOL).await?;
+
             assert!(path.is_file());
             while let Some((peer, stream)) = incoming_streams.next().await {
                 let path = path.clone();
