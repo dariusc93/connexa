@@ -20,6 +20,18 @@ where
         match result {
             Ok(duration) => {
                 tracing::info!("ping to {} at {} took {:?}", peer, connection, duration);
+
+                #[cfg(feature = "relay")]
+                if let Some(autorelay) = self
+                    .swarm
+                    .as_mut()
+                    .expect("swarm valid")
+                    .behaviour_mut()
+                    .autorelay
+                    .as_mut()
+                {
+                    autorelay.set_peer_ping(peer, connection, duration);
+                }
             }
             Err(e) => {
                 // TODO: Possibly disconnect peer since if there is an error?

@@ -95,6 +95,7 @@ struct PeerInfo {
     connection_id: ConnectionId,
     address: Multiaddr,
     relay_status: RelayStatus,
+    latency: [Duration; 5],
 }
 
 impl PeerInfo {
@@ -111,6 +112,16 @@ impl PeerInfo {
                 false
             }
         }
+    }
+
+    pub fn average_latency(&self) -> u128 {
+        let avg: u128 = self
+            .latency
+            .iter()
+            .map(|duration| duration.as_millis())
+            .sum();
+        let div = self.latency.iter().filter(|i| !i.is_zero()).count() as u128;
+        avg / div
     }
 }
 
@@ -188,14 +199,28 @@ impl Behaviour {
         }
     }
 
-    pub fn get_all_supported_targets(&self) -> impl Iterator<Item = &PeerId> {
+    pub fn get_all_supported_targets(&self) -> impl Iterator<Item = (&PeerId, &ConnectionId)> {
         self.info
             .iter()
             .filter(|(_, info)| matches!(info.relay_status, RelayStatus::Supported { .. }))
-            .map(|((peer_id, _), _)| peer_id)
+            .map(|((peer_id, connection_id), _)| (peer_id, connection_id))
     }
 
-    pub fn get_potential_targets(&self) -> impl Iterator<Item = (&PeerId, &ConnectionId)> {
+    pub fn set_peer_ping(
+        &mut self,
+        peer_id: PeerId,
+        connection_id: ConnectionId,
+        duration: Duration,
+    ) {
+        let Some(info) = self.info.get_mut(&(peer_id, connection_id)) else {
+            return;
+        };
+
+        info.latency.rotate_left(1);
+        info.latency[4] = duration;
+    }
+
+    fn get_potential_targets(&self) -> impl Iterator<Item = (&PeerId, &ConnectionId, &PeerInfo)> {
         self.info
             .iter()
             .filter(|(_, info)| {
@@ -206,7 +231,7 @@ impl Behaviour {
                     }
                 )
             })
-            .map(|((peer_id, connection_id), _)| (peer_id, connection_id))
+            .map(|((peer_id, connection_id), info)| (peer_id, connection_id, info))
     }
 
     fn disable_reservation(&mut self, id: ListenerId) {
@@ -346,7 +371,9 @@ impl Behaviour {
                 return;
             }
             for (peer_id, addrs) in self.static_relays.iter() {
-                let opts = DialOpts::peer_id(*peer_id).addresses(Vec::from_iter(addrs.clone())).build();
+                let opts = DialOpts::peer_id(*peer_id)
+                    .addresses(Vec::from_iter(addrs.clone()))
+                    .build();
                 self.events.push_back(ToSwarm::Dial { opts });
             }
             return;
@@ -371,7 +398,7 @@ impl Behaviour {
 
         let targets = self
             .get_potential_targets()
-            .map(|(peer_id, connection_id)| (*peer_id, *connection_id))
+            .map(|(peer_id, connection_id, info)| (*peer_id, *connection_id, info))
             .collect::<Vec<_>>();
 
         let pending_target_len = self.pending_target.len();
@@ -399,17 +426,31 @@ impl Behaviour {
         let new_targets = match selection {
             Selection::InOrder => targets
                 .into_iter()
+                .map(|(peer_id, connection_id, _)| (peer_id, connection_id))
                 .take(remaining_targets_needed)
                 .collect::<Vec<_>>(),
             Selection::Random => targets
                 .into_iter()
+                .map(|(peer_id, connection_id, _)| (peer_id, connection_id))
                 .choose_multiple(&mut rng, remaining_targets_needed),
             Selection::Peer(peer_id) => targets
                 .into_iter()
-                .filter(|(id, _)| *id == peer_id)
-                .collect(),
+                .filter(|(id, _, _)| *id == peer_id)
+                .map(|(peer_id, connection_id, _)| (peer_id, connection_id))
+                .collect::<Vec<_>>(),
             Selection::LowestLatency => {
-                unimplemented!()
+                let mut targets = targets;
+                targets.sort_by(|(_, _, info1), (_, _, info2)| {
+                    let avg1 = info1.average_latency();
+                    let avg2 = info2.average_latency();
+                    avg1.cmp(&avg2)
+                });
+
+                targets
+                    .into_iter()
+                    .take(remaining_targets_needed)
+                    .map(|(peer_id, connection_id, _)| (peer_id, connection_id))
+                    .collect::<Vec<_>>()
             }
         };
 
@@ -514,6 +555,7 @@ impl NetworkBehaviour for Behaviour {
                     connection_id,
                     address: addr,
                     relay_status: RelayStatus::Pending,
+                    latency: [Duration::ZERO; 5],
                 };
 
                 // in the event that the address is from a peer going through a relay, automatically disqualify the connection
