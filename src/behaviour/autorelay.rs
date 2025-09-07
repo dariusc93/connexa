@@ -346,10 +346,8 @@ impl Behaviour {
                 return;
             }
             for (peer_id, addrs) in self.static_relays.iter() {
-                for addr in addrs.iter().cloned() {
-                    let opts = DialOpts::peer_id(*peer_id).addresses(vec![addr]).build();
-                    self.events.push_back(ToSwarm::Dial { opts });
-                }
+                let opts = DialOpts::peer_id(*peer_id).addresses(Vec::from_iter(addrs.clone())).build();
+                self.events.push_back(ToSwarm::Dial { opts });
             }
             return;
         }
