@@ -508,13 +508,13 @@ impl NetworkBehaviour for Behaviour {
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        let Some(addrs) = maybe_peer.and_then(|peer_id| self.static_relays.get_mut(&peer_id))
+        // To prevent providing addresses from active connections, we will only focus on addresses added here that are considered to be fixed/static relays.
+        let Some(addrs) = maybe_peer
+            .and_then(|peer_id| self.static_relays.get(&peer_id).cloned())
+            .map(Vec::from_iter)
         else {
             return Ok(vec![]);
         };
-
-        // To prevent providing addresses from active connections, we will only focus on addresses added here that are considered to be fixed/static relays.
-        let addrs = addrs.iter().cloned().collect::<Vec<_>>();
 
         Ok(addrs)
     }
