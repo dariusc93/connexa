@@ -92,7 +92,6 @@ impl Default for Config {
 
 #[derive(Debug, Clone)]
 struct PeerInfo {
-    connection_id: ConnectionId,
     address: Multiaddr,
     relay_status: RelayStatus,
     latency: [Duration; 5],
@@ -127,7 +126,6 @@ impl PeerInfo {
 
 impl Hash for PeerInfo {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.connection_id.hash(state);
         self.address.hash(state);
     }
 }
@@ -332,8 +330,7 @@ impl Behaviour {
         info.relay_status = RelayStatus::Supported {
             status: ReservationStatus::Pending { id },
         };
-        self.listener_to_info
-            .insert(id, (peer_id, info.connection_id));
+        self.listener_to_info.insert(id, (peer_id, connection_id));
         self.events.push_back(ToSwarm::ListenOn { opts });
         self.pending_target.insert((peer_id, connection_id));
 
@@ -552,7 +549,6 @@ impl NetworkBehaviour for Behaviour {
                 let addr = endpoint.get_remote_address().clone();
 
                 let mut info = PeerInfo {
-                    connection_id,
                     address: addr,
                     relay_status: RelayStatus::Pending,
                     latency: [Duration::ZERO; 5],
