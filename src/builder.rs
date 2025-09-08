@@ -357,9 +357,8 @@ where
 
     /// Enable autorelay
     #[cfg(feature = "relay")]
-    pub fn with_autorelay(mut self) -> Self {
-        self.protocols.autorelay = true;
-        self
+    pub fn with_autorelay(self) -> Self {
+        self.with_autorelay_with_config(|config| config)
     }
 
     /// Enable autorelay
