@@ -41,6 +41,8 @@ pub enum Command<T = ()> {
     Rendezvous(RendezvousCommand),
     #[cfg(feature = "autonat")]
     Autonat(AutonatCommand),
+    #[cfg(feature = "relay")]
+    AutoRelay(AutoRelayCommand),
     Whitelist(WhitelistCommand),
     Blacklist(BlacklistCommand),
     ConnectionLimits(ConnectionLimitsCommand),
@@ -100,6 +102,13 @@ impl<T> From<StreamCommand> for Command<T> {
 impl<T> From<RendezvousCommand> for Command<T> {
     fn from(cmd: RendezvousCommand) -> Self {
         Command::Rendezvous(cmd)
+    }
+}
+
+#[cfg(feature = "relay")]
+impl<T> From<AutoRelayCommand> for Command<T> {
+    fn from(cmd: AutoRelayCommand) -> Self {
+        Command::AutoRelay(cmd)
     }
 }
 
@@ -384,6 +393,27 @@ pub enum DHTCommand {
     Listener {
         key: Option<RecordKey>,
         resp: oneshot::Sender<Result<mpsc::Receiver<DHTEvent>>>,
+    },
+}
+
+#[cfg(feature = "relay")]
+#[derive(Debug)]
+pub enum AutoRelayCommand {
+    AddStaticRelay {
+        peer_id: PeerId,
+        relay_addr: Multiaddr,
+        resp: oneshot::Sender<Result<bool>>,
+    },
+    RemoveStaticRelay {
+        peer_id: PeerId,
+        relay_addr: Multiaddr,
+        resp: oneshot::Sender<Result<bool>>,
+    },
+    EnableAutoRelay {
+        resp: oneshot::Sender<Result<()>>,
+    },
+    DisableAutoRelay {
+        resp: oneshot::Sender<Result<()>>,
     },
 }
 
