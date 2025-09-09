@@ -393,20 +393,33 @@ impl Behaviour {
             return;
         }
 
+        let pending_targets = self
+            .info
+            .iter()
+            .filter(|(_, info)| {
+                matches!(
+                    info.relay_status,
+                    RelayStatus::Supported {
+                        status: ReservationStatus::Pending { .. }
+                    }
+                )
+            })
+            .count();
+
+        if pending_targets == max {
+            return;
+        }
+
+        let max = max - relayed_targets;
+
         let targets = self
             .get_potential_targets()
             .map(|(peer_id, connection_id, info)| (*peer_id, *connection_id, info))
             .collect::<Vec<_>>();
 
-        let pending_target_len = self.pending_target.len();
-
-        if pending_target_len >= max {
-            return;
-        }
-
         let targets_count = std::cmp::min(targets.len(), max);
 
-        if targets_count == 0 {
+        if targets_count == 0 || max == 0 {
             return;
         }
 
@@ -418,18 +431,19 @@ impl Behaviour {
             return;
         }
 
-        let mut rng = rand::thread_rng();
-
         let new_targets = match selection {
             Selection::InOrder => targets
                 .into_iter()
                 .map(|(peer_id, connection_id, _)| (peer_id, connection_id))
                 .take(remaining_targets_needed)
                 .collect::<Vec<_>>(),
-            Selection::Random => targets
-                .into_iter()
-                .map(|(peer_id, connection_id, _)| (peer_id, connection_id))
-                .choose_multiple(&mut rng, remaining_targets_needed),
+            Selection::Random => {
+                let mut rng = rand::thread_rng();
+                targets
+                    .into_iter()
+                    .map(|(peer_id, connection_id, _)| (peer_id, connection_id))
+                    .choose_multiple(&mut rng, remaining_targets_needed)
+            }
             Selection::Peer(peer_id) => targets
                 .into_iter()
                 .filter(|(id, _, _)| *id == peer_id)
@@ -452,12 +466,12 @@ impl Behaviour {
         };
 
         for (peer_id, connection_id) in new_targets {
-            if !self.select_connection_for_reservation(peer_id, connection_id) {
-                continue;
-            }
-
             if self.pending_target.len() == max {
                 break;
+            }
+
+            if !self.select_connection_for_reservation(peer_id, connection_id) {
+                continue;
             }
         }
 
