@@ -37,7 +37,6 @@ pub struct Behaviour {
     listener_to_info: IndexMap<ListenerId, (PeerId, ConnectionId)>,
     events: VecDeque<ToSwarm<<Self as NetworkBehaviour>::ToSwarm, THandlerInEvent<Self>>>,
     external_addresses: ExternalAddresses,
-    pending_target: IndexSet<(PeerId, ConnectionId)>,
     capacity_cleanup: Delay,
     max_reservation: NonZeroU8,
     override_autorelay: bool,
@@ -53,7 +52,6 @@ impl Default for Behaviour {
             static_relays: IndexMap::new(),
             listener_to_info: IndexMap::new(),
             events: VecDeque::new(),
-            pending_target: IndexSet::new(),
             capacity_cleanup: Delay::new(CLEANUP_INTERVAL),
             external_addresses: ExternalAddresses::default(),
             override_autorelay: false,
@@ -204,6 +202,24 @@ impl Behaviour {
             .map(|((peer_id, connection_id), _)| (peer_id, connection_id))
     }
 
+    fn get_pending_reservations(&self) -> impl Iterator<Item = (&PeerId, &ConnectionId)> {
+        self.info
+            .iter()
+            .filter(|(_, info)| {
+                matches!(
+                    info.relay_status,
+                    RelayStatus::Supported {
+                        status: ReservationStatus::Pending { .. }
+                    }
+                )
+            })
+            .map(|((peer_id, connection_id), _)| (peer_id, connection_id))
+    }
+
+    fn get_pending_reservations_count(&self) -> usize {
+        self.get_pending_reservations().count()
+    }
+
     pub fn set_peer_ping(
         &mut self,
         peer_id: PeerId,
@@ -256,7 +272,6 @@ impl Behaviour {
                 info.relay_status = RelayStatus::Supported {
                     status: ReservationStatus::Idle,
                 };
-                self.pending_target.shift_remove(&(peer_id, connection_id));
             }
             RelayStatus::Pending
             | RelayStatus::Supported {
@@ -299,7 +314,19 @@ impl Behaviour {
         peer_id: PeerId,
         connection_id: ConnectionId,
     ) -> bool {
-        if self.pending_target.contains(&(peer_id, connection_id)) {
+        if self
+            .info
+            .get(&(peer_id, connection_id))
+            .is_some_and(|info| {
+                matches!(
+                    info.relay_status,
+                    RelayStatus::Supported {
+                        status: ReservationStatus::Pending { .. }
+                            | ReservationStatus::Active { .. }
+                    }
+                )
+            })
+        {
             return false;
         }
 
@@ -332,7 +359,6 @@ impl Behaviour {
         };
         self.listener_to_info.insert(id, (peer_id, connection_id));
         self.events.push_back(ToSwarm::ListenOn { opts });
-        self.pending_target.insert((peer_id, connection_id));
 
         true
     }
@@ -393,18 +419,7 @@ impl Behaviour {
             return;
         }
 
-        let pending_targets = self
-            .info
-            .iter()
-            .filter(|(_, info)| {
-                matches!(
-                    info.relay_status,
-                    RelayStatus::Supported {
-                        status: ReservationStatus::Pending { .. }
-                    }
-                )
-            })
-            .count();
+        let pending_targets = self.get_pending_reservations_count();
 
         if pending_targets == max {
             return;
@@ -424,7 +439,7 @@ impl Behaviour {
         }
 
         let remaining_targets_needed = targets_count
-            .checked_sub(self.pending_target.len())
+            .checked_sub(pending_targets)
             .unwrap_or_default();
 
         if remaining_targets_needed == 0 {
@@ -466,7 +481,7 @@ impl Behaviour {
         };
 
         for (peer_id, connection_id) in new_targets {
-            if self.pending_target.len() == max {
+            if self.get_pending_reservations_count() == max {
                 break;
             }
 
@@ -475,7 +490,7 @@ impl Behaviour {
             }
         }
 
-        assert!(self.pending_target.len() <= max);
+        assert!(self.get_pending_reservations_count() <= max);
     }
 }
 
@@ -655,11 +670,6 @@ impl NetworkBehaviour for Behaviour {
                 info.relay_status = RelayStatus::Supported {
                     status: ReservationStatus::Active { id },
                 };
-
-                debug_assert!(
-                    self.pending_target
-                        .shift_remove(&(*peer_id, *connection_id))
-                );
             }
             FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, .. })
             | FromSwarm::ListenerError(ListenerError { listener_id, .. })
