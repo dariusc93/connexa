@@ -35,16 +35,6 @@ async fn main() -> std::io::Result<()> {
         .with_ping()
         .with_identify()
         .with_kademlia()
-        .set_swarm_event_callback(|_swarm, event, ()| {
-            if matches!(
-                event,
-                SwarmEvent::NewListenAddr { .. }
-                    | SwarmEvent::ListenerError { .. }
-                    | SwarmEvent::ListenerClosed { .. }
-            ) {
-                println!("{event:?}");
-            }
-        })
         .build()?;
 
     for (addr, peer_id) in BOOTSTRAP_NODES {
@@ -53,9 +43,13 @@ async fn main() -> std::io::Result<()> {
         connexa.dht().add_address(peer_id, addr).await?;
     }
 
-    connexa.dht().bootstrap().await?;
-
     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+
+    let external_addrs = connexa.swarm().external_addresses().await?;
+
+    for addr in external_addrs {
+        println!("- {}", addr);
+    }
 
     Ok(())
 }
