@@ -5,6 +5,9 @@ use libp2p::relay::{Event as RelayServerEvent, client::Event as RelayClientEvent
 use libp2p::swarm::NetworkBehaviour;
 use std::fmt::Debug;
 
+#[allow(dead_code)]
+pub const RELAY_NAMESPACE: &[u8] = b"/libp2p/relay";
+
 impl<X, C: NetworkBehaviour, S, T> ConnexaTask<X, C, S, T>
 where
     X: Default + Send + 'static,
