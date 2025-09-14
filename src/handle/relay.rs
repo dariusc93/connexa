@@ -50,6 +50,26 @@ where
         rx.await.map_err(io::Error::other)?
     }
 
+    pub async fn list_static_relays(&self) -> io::Result<Vec<(PeerId, Vec<Multiaddr>)>> {
+        let (tx, rx) = oneshot::channel();
+        self.connexa
+            .to_task
+            .clone()
+            .send(AutoRelayCommand::ListStaticRelays { resp: tx }.into())
+            .await?;
+        rx.await.map_err(io::Error::other)?
+    }
+
+    pub async fn get_static_relay(&self, peer_id: PeerId) -> io::Result<Vec<Multiaddr>> {
+        let (tx, rx) = oneshot::channel();
+        self.connexa
+            .to_task
+            .clone()
+            .send(AutoRelayCommand::GetStaticRelay { peer_id, resp: tx }.into())
+            .await?;
+        rx.await.map_err(io::Error::other)?
+    }
+
     pub async fn enable_auto_relay(&self) -> io::Result<()> {
         let (tx, rx) = oneshot::channel();
         self.connexa

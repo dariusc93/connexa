@@ -180,6 +180,21 @@ impl Behaviour {
         removed
     }
 
+    pub fn list_static_relays(&self) -> Vec<(PeerId, Vec<Multiaddr>)> {
+        self.static_relays
+            .iter()
+            .map(|(peer_id, addrs)| (*peer_id, Vec::from_iter(addrs.clone())))
+            .collect()
+    }
+
+    pub fn get_static_relay_addrs(&self, peer_id: PeerId) -> Vec<Multiaddr> {
+        let Some(addrs) = self.static_relays.get(&peer_id) else {
+            return vec![];
+        };
+
+        Vec::from_iter(addrs.clone())
+    }
+
     pub fn enable_autorelay(&mut self) {
         self.enable_auto_relay = true;
         self.meet_reservation_target(Selection::Random);

@@ -42,6 +42,24 @@ where
 
                 let _ = resp.send(Ok(autorelay.remove_static_relay(peer_id, relay_addr)));
             }
+            AutoRelayCommand::ListStaticRelays { resp } => {
+                let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    return;
+                };
+
+                let list = autorelay.list_static_relays();
+                let _ = resp.send(Ok(list));
+            }
+            AutoRelayCommand::GetStaticRelay { peer_id, resp } => {
+                let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    return;
+                };
+
+                let addrs = autorelay.get_static_relay_addrs(peer_id);
+                let _ = resp.send(Ok(addrs));
+            }
             AutoRelayCommand::EnableAutoRelay { resp } => {
                 let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
                     let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
