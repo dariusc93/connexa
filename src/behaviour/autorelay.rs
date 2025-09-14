@@ -703,24 +703,13 @@ impl NetworkBehaviour for Behaviour {
                 let previous_status = peer_info.relay_status;
                 peer_info.relay_status = RelayStatus::NotSupported;
                 // if there is a change in protocol support during an active reservation,
-                // we should disconnect to remove the reservation
-                if matches!(
-                    previous_status,
-                    RelayStatus::Supported {
-                        status: ReservationStatus::Active { .. }
-                    }
-                ) {
-                    self.events.push_back(ToSwarm::CloseConnection {
-                        peer_id,
-                        connection: CloseConnection::One(connection_id),
-                    });
+                // we should remove the reservation if its not already removed
 
-                    // if infos.len() == 1 {
-                    //     // TODO: Determine if we should reconnect if this is the only connection
-                    //     let addr = peer_info.address.clone();
-                    //     let opts = DialOpts::peer_id(peer_id).addresses(vec![addr]).build();
-                    //     self.events.push_back(ToSwarm::Dial { opts });
-                    // }
+                if let RelayStatus::Supported {
+                    status: ReservationStatus::Active { id },
+                } = previous_status
+                {
+                    self.events.push_back(ToSwarm::RemoveListener { id });
                 }
             }
         }
