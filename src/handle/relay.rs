@@ -89,4 +89,14 @@ where
             .await?;
         rx.await.map_err(io::Error::other)?
     }
+
+    pub async fn disable_relaya(&self) -> io::Result<()> {
+        let (tx, rx) = oneshot::channel();
+        self.connexa
+            .to_task
+            .clone()
+            .send(AutoRelayCommand::DisableRelays { resp: tx }.into())
+            .await?;
+        rx.await.map_err(io::Error::other)?
+    }
 }

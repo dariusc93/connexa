@@ -210,6 +210,13 @@ impl Behaviour {
         }
     }
 
+    pub fn disable_all_relays(&mut self) {
+        self.disable_all_reservations();
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
+    }
+
     pub fn get_all_supported_targets(&self) -> impl Iterator<Item = (&PeerId, &ConnectionId)> {
         self.info
             .iter()

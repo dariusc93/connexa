@@ -80,6 +80,16 @@ where
 
                 let _ = resp.send(Ok(()));
             }
+            AutoRelayCommand::DisableRelays { resp } => {
+                let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    return;
+                };
+
+                autorelay.disable_autorelay();
+
+                let _ = resp.send(Ok(()));
+            }
         }
     }
 

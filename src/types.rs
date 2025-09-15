@@ -409,6 +409,9 @@ pub enum AutoRelayCommand {
         relay_addr: Multiaddr,
         resp: oneshot::Sender<Result<bool>>,
     },
+    DisableRelays {
+        resp: oneshot::Sender<Result<()>>,
+    },
     ListStaticRelays {
         resp: oneshot::Sender<Result<Vec<(PeerId, Vec<Multiaddr>)>>>,
     },
