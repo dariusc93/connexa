@@ -156,7 +156,7 @@ impl Store for MemoryStore {
                     .entry(*peer_id)
                     .or_default()
                     .insert(remote_addr.clone());
-                
+
                 self.timer.remove(&(*peer_id, remote_addr));
                 // TODO: determine if we should remove any failed addresses from the store to keep the entry up to date?
             }

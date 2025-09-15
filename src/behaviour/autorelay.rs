@@ -312,6 +312,7 @@ impl Behaviour {
 
         for (listener_id, peer_id, connection_id) in relay_listeners {
             let Some(connection) = self.info.get_mut(&(peer_id, connection_id)) else {
+                tracing::warn!(%peer_id, %connection_id, "connection not found when it should have been present. skipping");
                 continue;
             };
 
@@ -328,6 +329,7 @@ impl Behaviour {
 
             self.events
                 .push_back(ToSwarm::RemoveListener { id: listener_id });
+            tracing::info!(%peer_id, %connection_id, ?listener_id, "removing relay listener");
         }
     }
 
@@ -349,6 +351,7 @@ impl Behaviour {
                 )
             })
         {
+            tracing::warn!(%peer_id, %connection_id, "connection already has a reservation or pending reservation. skipping");
             return false;
         }
 
@@ -374,14 +377,16 @@ impl Behaviour {
 
         let opts = ListenOpts::new(relay_addr);
 
+        let addr = opts.address();
         let id = opts.listener_id();
+
+        tracing::info!(%peer_id, %connection_id, %addr, ?id, "new pending reservation");
 
         info.relay_status = RelayStatus::Supported {
             status: ReservationStatus::Pending { id },
         };
         self.listener_to_info.insert(id, (peer_id, connection_id));
         self.events.push_back(ToSwarm::ListenOn { opts });
-
         true
     }
 
@@ -398,6 +403,7 @@ impl Behaviour {
             .any(|addr| addr.is_public() && !addr.is_relayed())
             && !self.override_autorelay
         {
+            tracing::trace!("local node reachable. autorelay will not run");
             return;
         }
 
@@ -413,6 +419,7 @@ impl Behaviour {
             if self.static_relays.is_empty() {
                 // TODO: Emit an event informing swarm about being in need of relays?
                 // however this would require separate functions to add relays to the autorelay state and possibly confirm if theres any existing connections
+                tracing::warn!("no relays present.");
                 return;
             }
             for (peer_id, addrs) in self.static_relays.iter() {
@@ -438,12 +445,14 @@ impl Behaviour {
             .count();
 
         if relayed_targets == max {
+            tracing::warn!("max reservation reached. no more reservations will be made");
             return;
         }
 
         let pending_targets = self.get_pending_reservations_count();
 
         if pending_targets == max {
+            tracing::warn!("pending targets reached max target.");
             return;
         }
 
@@ -457,6 +466,7 @@ impl Behaviour {
         let targets_count = std::cmp::min(targets.len(), max);
 
         if targets_count == 0 || max == 0 {
+            tracing::warn!("no potential targets to meet reservation target.");
             return;
         }
 
@@ -465,6 +475,7 @@ impl Behaviour {
             .unwrap_or_default();
 
         if remaining_targets_needed == 0 {
+            tracing::warn!("no potential targets to meet reservation target.");
             return;
         }
 
@@ -575,6 +586,7 @@ impl NetworkBehaviour for Behaviour {
                 .iter()
                 .any(|addr| addr.is_public() && !addr.is_relayed())
             {
+                tracing::info!("local node is reachable. disabling autorelay");
                 self.override_autorelay = true;
                 self.disable_all_reservations();
                 self.backoff.take();
@@ -584,6 +596,7 @@ impl NetworkBehaviour for Behaviour {
                     .iter()
                     .any(|addr| !addr.is_public() || addr.is_relayed())
             {
+                tracing::info!("local node is not reachable. enabling autorelay");
                 self.backoff.replace(Delay::new(BACKOFF_INTERVAL));
                 self.override_autorelay = false;
             }
@@ -598,6 +611,8 @@ impl NetworkBehaviour for Behaviour {
                 ..
             }) => {
                 let addr = endpoint.get_remote_address().clone();
+
+                tracing::trace!(%peer_id, %connection_id, %addr, "connection established");
 
                 let mut info = PeerInfo {
                     address: addr,
@@ -626,6 +641,7 @@ impl NetworkBehaviour for Behaviour {
                 connection_id,
                 ..
             }) => {
+                tracing::trace!(%peer_id, %connection_id, "connection closed");
                 self.info.shift_remove(&(peer_id, connection_id));
 
                 if let Some(listener_id) = self
@@ -667,6 +683,7 @@ impl NetworkBehaviour for Behaviour {
                     .expect("connection is present");
 
                 info.address = new_addr.clone();
+                tracing::trace!(%peer_id, %connection_id, %old_addr, %new_addr, "address changed");
             }
             FromSwarm::NewListenAddr(NewListenAddr { listener_id, addr }) => {
                 // we only care about any new relayed address
@@ -679,6 +696,7 @@ impl NetworkBehaviour for Behaviour {
                 };
 
                 let Some(info) = self.info.get_mut(&(*peer_id, *connection_id)) else {
+                    tracing::warn!(%peer_id, %connection_id, "connection not found when it should have been present. skipping");
                     return;
                 };
 
@@ -686,12 +704,15 @@ impl NetworkBehaviour for Behaviour {
                     status: ReservationStatus::Pending { id },
                 } = info.relay_status
                 else {
+                    tracing::warn!(%peer_id, %connection_id, "connection doesnt have a pending reservation. skipping");
                     return;
                 };
 
                 info.relay_status = RelayStatus::Supported {
                     status: ReservationStatus::Active { id },
                 };
+
+                tracing::info!(%peer_id, %connection_id, %addr, %id, "active reservation with relay");
             }
             FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, .. })
             | FromSwarm::ListenerError(ListenerError { listener_id, .. })
@@ -746,6 +767,7 @@ impl NetworkBehaviour for Behaviour {
         }
 
         if self.backoff.poll_unpin(cx).is_ready() {
+            tracing::debug!("attempting to meet reservation target after node became unreachable");
             self.meet_reservation_target(Selection::InOrder);
         }
 
