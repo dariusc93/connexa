@@ -5,9 +5,8 @@ use crate::behaviour::dummy;
 use crate::multiaddr_ext::MultiaddrExt;
 use crate::prelude::swarm::derive_prelude::{ConnectionEstablished, PortUse};
 use crate::prelude::swarm::{
-    AddressChange, CloseConnection, ConnectionClosed, ConnectionDenied, DialFailure,
-    ExpiredListenAddr, FromSwarm, ListenerClosed, ListenerError, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    AddressChange, ConnectionClosed, ConnectionDenied, DialFailure, ExpiredListenAddr, FromSwarm,
+    ListenerClosed, ListenerError, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use crate::prelude::transport::Endpoint;
 use either::Either;
