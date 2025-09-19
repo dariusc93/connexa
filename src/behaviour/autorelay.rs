@@ -623,15 +623,16 @@ impl NetworkBehaviour for Behaviour {
                 // from being used as a potential relay since there is no support for multi-HOP
                 if info.check_for_disqualifying_address() {
                     self.info.insert((peer_id, connection_id), info);
-                } else {
-                    match self.static_relays.get(&peer_id) {
-                        Some(addrs) if addrs.contains(&info.address) => {
-                            // prioritize static relays so it would have a higher chance of being selected first
-                            self.info.insert_before(0, (peer_id, connection_id), info);
-                        }
-                        _ => {
-                            self.info.insert((peer_id, connection_id), info);
-                        }
+                    return;
+                }
+
+                match self.static_relays.get(&peer_id) {
+                    Some(addrs) if addrs.contains(&info.address) => {
+                        // prioritize static relays so it would have a higher chance of being selected first
+                        self.info.insert_before(0, (peer_id, connection_id), info);
+                    }
+                    _ => {
+                        self.info.insert((peer_id, connection_id), info);
                     }
                 }
             }
