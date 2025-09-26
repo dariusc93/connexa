@@ -1,4 +1,3 @@
-use connexa::prelude::swarm::SwarmEvent;
 use connexa::prelude::{DefaultConnexaBuilder, Multiaddr, PeerId};
 
 pub const BOOTSTRAP_NODES: &[(&str, &str)] = &[
