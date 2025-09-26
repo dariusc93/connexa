@@ -31,7 +31,7 @@ const CLEANUP_INTERVAL: Duration = Duration::from_secs(60);
 const BACKOFF_INTERVAL: Duration = Duration::from_secs(5);
 
 pub struct Behaviour {
-    info: IndexMap<(PeerId, ConnectionId), PeerInfo>,
+    connections: IndexMap<(PeerId, ConnectionId), PeerInfo>,
     static_relays: IndexMap<PeerId, IndexSet<Multiaddr>>,
     connection_reservation: IndexMap<ListenerId, (PeerId, ConnectionId)>,
     events: VecDeque<ToSwarm<<Self as NetworkBehaviour>::ToSwarm, THandlerInEvent<Self>>>,
@@ -47,7 +47,7 @@ pub struct Behaviour {
 impl Default for Behaviour {
     fn default() -> Self {
         Self {
-            info: IndexMap::new(),
+            connections: IndexMap::new(),
             static_relays: IndexMap::new(),
             connection_reservation: IndexMap::new(),
             events: VecDeque::new(),
@@ -217,14 +217,14 @@ impl Behaviour {
     }
 
     pub fn get_all_supported_targets(&self) -> impl Iterator<Item = (&PeerId, &ConnectionId)> {
-        self.info
+        self.connections
             .iter()
             .filter(|(_, info)| matches!(info.relay_status, RelayStatus::Supported { .. }))
             .map(|((peer_id, connection_id), _)| (peer_id, connection_id))
     }
 
     fn get_pending_reservations(&self) -> impl Iterator<Item = (&PeerId, &ConnectionId)> {
-        self.info
+        self.connections
             .iter()
             .filter(|(_, info)| {
                 matches!(
@@ -247,7 +247,7 @@ impl Behaviour {
         connection_id: ConnectionId,
         duration: Duration,
     ) {
-        let Some(info) = self.info.get_mut(&(peer_id, connection_id)) else {
+        let Some(info) = self.connections.get_mut(&(peer_id, connection_id)) else {
             return;
         };
 
@@ -256,7 +256,7 @@ impl Behaviour {
     }
 
     fn get_potential_targets(&self) -> impl Iterator<Item = (&PeerId, &ConnectionId, &PeerInfo)> {
-        self.info
+        self.connections
             .iter()
             .filter(|(_, info)| {
                 matches!(
@@ -274,7 +274,7 @@ impl Behaviour {
             return;
         };
 
-        let Some(info) = self.info.get_mut(&(peer_id, connection_id)) else {
+        let Some(info) = self.connections.get_mut(&(peer_id, connection_id)) else {
             return;
         };
 
@@ -310,7 +310,7 @@ impl Behaviour {
             .collect::<Vec<_>>();
 
         for (listener_id, peer_id, connection_id) in relay_listeners {
-            let Some(connection) = self.info.get_mut(&(peer_id, connection_id)) else {
+            let Some(connection) = self.connections.get_mut(&(peer_id, connection_id)) else {
                 tracing::warn!(%peer_id, %connection_id, "connection not found when it should have been present. skipping");
                 continue;
             };
@@ -338,7 +338,7 @@ impl Behaviour {
         connection_id: ConnectionId,
     ) -> bool {
         if self
-            .info
+            .connections
             .get(&(peer_id, connection_id))
             .is_some_and(|info| {
                 matches!(
@@ -354,13 +354,13 @@ impl Behaviour {
             return false;
         }
 
-        if self.info.is_empty() {
+        if self.connections.is_empty() {
             tracing::warn!(%peer_id, "no connections present. removing entry");
             return false;
         }
 
         let info = self
-            .info
+            .connections
             .get_mut(&(peer_id, connection_id))
             .expect("connection is present");
 
@@ -408,9 +408,9 @@ impl Behaviour {
 
         let max = self.max_reservation.get() as usize;
 
-        let peers_not_supported = self.info.is_empty()
+        let peers_not_supported = self.connections.is_empty()
             || self
-                .info
+                .connections
                 .iter()
                 .all(|(_, info)| info.relay_status == RelayStatus::NotSupported);
 
@@ -431,7 +431,7 @@ impl Behaviour {
         }
 
         let relayed_targets = self
-            .info
+            .connections
             .iter()
             .filter(|(_, info)| {
                 matches!(
@@ -622,17 +622,17 @@ impl NetworkBehaviour for Behaviour {
                 // in the event that the address is from a peer going through a relay, automatically disqualify the connection
                 // from being used as a potential relay since there is no support for multi-HOP
                 if info.check_for_disqualifying_address() {
-                    self.info.insert((peer_id, connection_id), info);
+                    self.connections.insert((peer_id, connection_id), info);
                     return;
                 }
 
                 match self.static_relays.get(&peer_id) {
                     Some(addrs) if addrs.contains(&info.address) => {
                         // prioritize static relays so it would have a higher chance of being selected first
-                        self.info.insert_before(0, (peer_id, connection_id), info);
+                        self.connections.insert_before(0, (peer_id, connection_id), info);
                     }
                     _ => {
-                        self.info.insert((peer_id, connection_id), info);
+                        self.connections.insert((peer_id, connection_id), info);
                     }
                 }
             }
@@ -642,7 +642,7 @@ impl NetworkBehaviour for Behaviour {
                 ..
             }) => {
                 tracing::trace!(%peer_id, %connection_id, "connection closed");
-                self.info.shift_remove(&(peer_id, connection_id));
+                self.connections.shift_remove(&(peer_id, connection_id));
 
                 if let Some(listener_id) = self
                     .connection_reservation
@@ -664,7 +664,7 @@ impl NetworkBehaviour for Behaviour {
                     return;
                 };
 
-                self.info.shift_remove(&(peer_id, connection_id));
+                self.connections.shift_remove(&(peer_id, connection_id));
             }
             FromSwarm::AddressChange(AddressChange {
                 peer_id,
@@ -678,7 +678,7 @@ impl NetworkBehaviour for Behaviour {
                 debug_assert!(old_addr != new_addr);
 
                 let info = self
-                    .info
+                    .connections
                     .get_mut(&(peer_id, connection_id))
                     .expect("connection is present");
 
@@ -695,7 +695,7 @@ impl NetworkBehaviour for Behaviour {
                     return;
                 };
 
-                let Some(info) = self.info.get_mut(&(*peer_id, *connection_id)) else {
+                let Some(info) = self.connections.get_mut(&(*peer_id, *connection_id)) else {
                     tracing::warn!(%peer_id, %connection_id, "connection not found when it should have been present. skipping");
                     return;
                 };
@@ -731,7 +731,7 @@ impl NetworkBehaviour for Behaviour {
     ) {
         let Either::Left(event) = event;
 
-        let Some(peer_info) = self.info.get_mut(&(peer_id, connection_id)) else {
+        let Some(peer_info) = self.connections.get_mut(&(peer_id, connection_id)) else {
             return;
         };
 
@@ -778,9 +778,9 @@ impl NetworkBehaviour for Behaviour {
                 self.events.shrink_to_fit();
             }
 
-            if (self.info.is_empty() || self.info.len() < MAX_CAP) && self.info.capacity() > MAX_CAP
+            if (self.connections.is_empty() || self.connections.len() < MAX_CAP) && self.connections.capacity() > MAX_CAP
             {
-                self.info.shrink_to_fit();
+                self.connections.shrink_to_fit();
             }
 
             self.capacity_cleanup.reset(CLEANUP_INTERVAL);
