@@ -33,7 +33,7 @@ const BACKOFF_INTERVAL: Duration = Duration::from_secs(5);
 pub struct Behaviour {
     info: IndexMap<(PeerId, ConnectionId), PeerInfo>,
     static_relays: IndexMap<PeerId, IndexSet<Multiaddr>>,
-    listener_to_info: IndexMap<ListenerId, (PeerId, ConnectionId)>,
+    connection_reservation: IndexMap<ListenerId, (PeerId, ConnectionId)>,
     events: VecDeque<ToSwarm<<Self as NetworkBehaviour>::ToSwarm, THandlerInEvent<Self>>>,
     external_addresses: ExternalAddresses,
     capacity_cleanup: Delay,
@@ -49,7 +49,7 @@ impl Default for Behaviour {
         Self {
             info: IndexMap::new(),
             static_relays: IndexMap::new(),
-            listener_to_info: IndexMap::new(),
+            connection_reservation: IndexMap::new(),
             events: VecDeque::new(),
             capacity_cleanup: Delay::new(CLEANUP_INTERVAL),
             external_addresses: ExternalAddresses::default(),
@@ -270,7 +270,7 @@ impl Behaviour {
     }
 
     fn disable_reservation(&mut self, id: ListenerId) {
-        let Some((peer_id, connection_id)) = self.listener_to_info.shift_remove(&id) else {
+        let Some((peer_id, connection_id)) = self.connection_reservation.shift_remove(&id) else {
             return;
         };
 
@@ -304,7 +304,7 @@ impl Behaviour {
 
     fn disable_all_reservations(&mut self) {
         let relay_listeners = self
-            .listener_to_info
+            .connection_reservation
             .iter()
             .map(|(id, (peer_id, conn_id))| (*id, *peer_id, *conn_id))
             .collect::<Vec<_>>();
@@ -384,7 +384,7 @@ impl Behaviour {
         info.relay_status = RelayStatus::Supported {
             status: ReservationStatus::Pending { id },
         };
-        self.listener_to_info.insert(id, (peer_id, connection_id));
+        self.connection_reservation.insert(id, (peer_id, connection_id));
         self.events.push_back(ToSwarm::ListenOn { opts });
         true
     }
@@ -645,12 +645,12 @@ impl NetworkBehaviour for Behaviour {
                 self.info.shift_remove(&(peer_id, connection_id));
 
                 if let Some(listener_id) = self
-                    .listener_to_info
+                    .connection_reservation
                     .iter()
                     .find(|(_, (peer, conn_id))| peer_id.eq(peer) && connection_id.eq(conn_id))
                     .map(|(id, _)| *id)
                 {
-                    self.listener_to_info.shift_remove(&listener_id);
+                    self.connection_reservation.shift_remove(&listener_id);
                 }
             }
             FromSwarm::DialFailure(DialFailure {
@@ -691,7 +691,7 @@ impl NetworkBehaviour for Behaviour {
                     return;
                 }
 
-                let Some((peer_id, connection_id)) = self.listener_to_info.get(&listener_id) else {
+                let Some((peer_id, connection_id)) = self.connection_reservation.get(&listener_id) else {
                     return;
                 };
 
