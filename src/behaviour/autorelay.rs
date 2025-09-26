@@ -384,7 +384,8 @@ impl Behaviour {
         info.relay_status = RelayStatus::Supported {
             status: ReservationStatus::Pending { id },
         };
-        self.connection_reservation.insert(id, (peer_id, connection_id));
+        self.connection_reservation
+            .insert(id, (peer_id, connection_id));
         self.events.push_back(ToSwarm::ListenOn { opts });
         true
     }
@@ -629,7 +630,8 @@ impl NetworkBehaviour for Behaviour {
                 match self.static_relays.get(&peer_id) {
                     Some(addrs) if addrs.contains(&info.address) => {
                         // prioritize static relays so it would have a higher chance of being selected first
-                        self.connections.insert_before(0, (peer_id, connection_id), info);
+                        self.connections
+                            .insert_before(0, (peer_id, connection_id), info);
                     }
                     _ => {
                         self.connections.insert((peer_id, connection_id), info);
@@ -691,7 +693,8 @@ impl NetworkBehaviour for Behaviour {
                     return;
                 }
 
-                let Some((peer_id, connection_id)) = self.connection_reservation.get(&listener_id) else {
+                let Some((peer_id, connection_id)) = self.connection_reservation.get(&listener_id)
+                else {
                     return;
                 };
 
@@ -778,7 +781,8 @@ impl NetworkBehaviour for Behaviour {
                 self.events.shrink_to_fit();
             }
 
-            if (self.connections.is_empty() || self.connections.len() < MAX_CAP) && self.connections.capacity() > MAX_CAP
+            if (self.connections.is_empty() || self.connections.len() < MAX_CAP)
+                && self.connections.capacity() > MAX_CAP
             {
                 self.connections.shrink_to_fit();
             }
