@@ -7,6 +7,7 @@ use libp2p::core::transport::ListenerId;
 use libp2p::swarm::ConnectionId;
 use libp2p::swarm::dial_opts::DialOpts;
 use libp2p::{Multiaddr, PeerId};
+use std::str::FromStr;
 
 #[derive(Copy, Clone)]
 pub struct ConnexaSwarm<'a, T> {
@@ -87,7 +88,8 @@ where
     }
 
     /// Start listening for incoming connections on the given multiaddress
-    pub async fn listen_on(&self, address: Multiaddr) -> crate::handle::Result<ListenerId> {
+    pub async fn listen_on(&self, addr: impl ToMultiaddr) -> crate::handle::Result<ListenerId> {
+        let address = addr.to_multiaddr()?;
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
@@ -132,7 +134,11 @@ where
     }
 
     /// Adds an external address that other peers can use to reach us
-    pub async fn add_external_address(&self, address: Multiaddr) -> crate::handle::Result<()> {
+    pub async fn add_external_address(
+        &self,
+        address: impl ToMultiaddr,
+    ) -> crate::handle::Result<()> {
+        let address = address.to_multiaddr()?;
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
@@ -212,6 +218,40 @@ where
             .await?;
 
         rx.await.map_err(std::io::Error::other).map(|rx| rx.boxed())
+    }
+}
+
+pub trait ToMultiaddr {
+    fn to_multiaddr(self) -> std::io::Result<Multiaddr>;
+}
+
+impl ToMultiaddr for Multiaddr {
+    fn to_multiaddr(self) -> std::io::Result<Multiaddr> {
+        Ok(self)
+    }
+}
+
+impl ToMultiaddr for &Multiaddr {
+    fn to_multiaddr(self) -> std::io::Result<Multiaddr> {
+        Ok(self.clone())
+    }
+}
+
+impl ToMultiaddr for &String {
+    fn to_multiaddr(self) -> std::io::Result<Multiaddr> {
+        Multiaddr::from_str(self).map_err(std::io::Error::other)
+    }
+}
+
+impl ToMultiaddr for &'static str {
+    fn to_multiaddr(self) -> std::io::Result<Multiaddr> {
+        Multiaddr::from_str(self).map_err(std::io::Error::other)
+    }
+}
+
+impl ToMultiaddr for String {
+    fn to_multiaddr(self) -> std::io::Result<Multiaddr> {
+        Multiaddr::from_str(&self).map_err(std::io::Error::other)
     }
 }
 

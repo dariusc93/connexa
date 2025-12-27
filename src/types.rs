@@ -1,5 +1,6 @@
 #![allow(unused_imports)]
 use crate::handle::swarm::ConnectionTarget;
+use crate::prelude::swarm::ListenOpts;
 use bytes::Bytes;
 use either::Either;
 use futures::channel::{mpsc, oneshot};

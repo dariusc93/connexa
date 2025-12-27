@@ -22,7 +22,7 @@ async fn main() {
 
     let id = connexa
         .swarm()
-        .listen_on("/ip4/0.0.0.0/udp/0/webrtc-direct".parse().unwrap())
+        .listen_on("/ip4/0.0.0.0/udp/0/webrtc-direct")
         .await
         .unwrap();
 
