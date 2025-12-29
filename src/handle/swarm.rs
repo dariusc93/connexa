@@ -272,3 +272,65 @@ impl From<ConnectionId> for ConnectionTarget {
         Self::ConnectionId(connection_id)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const VALID_ADDR: &str = "/ip4/127.0.0.1/tcp/8080";
+    const INVALID_ADDR: &str = "not-a-valid-multiaddr";
+
+    #[test]
+    fn to_multiaddr_from_multiaddr() {
+        let addr = Multiaddr::from_str(VALID_ADDR).unwrap();
+        let result = addr.clone().to_multiaddr().unwrap();
+        assert_eq!(result, addr);
+    }
+
+    #[test]
+    fn to_multiaddr_from_multiaddr_ref() {
+        let addr = Multiaddr::from_str(VALID_ADDR).unwrap();
+        let result = (&addr).to_multiaddr().unwrap();
+        assert_eq!(result, addr);
+    }
+
+    #[test]
+    fn to_multiaddr_from_static_str() {
+        let result = VALID_ADDR.to_multiaddr().unwrap();
+        assert_eq!(result, Multiaddr::from_str(VALID_ADDR).unwrap());
+    }
+
+    #[test]
+    fn to_multiaddr_from_static_str_invalid() {
+        let result = INVALID_ADDR.to_multiaddr();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn to_multiaddr_from_string() {
+        let addr = String::from(VALID_ADDR);
+        let result = addr.to_multiaddr().unwrap();
+        assert_eq!(result, Multiaddr::from_str(VALID_ADDR).unwrap());
+    }
+
+    #[test]
+    fn to_multiaddr_from_string_invalid() {
+        let addr = String::from(INVALID_ADDR);
+        let result = addr.to_multiaddr();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn to_multiaddr_from_string_ref() {
+        let addr = String::from(VALID_ADDR);
+        let result = (&addr).to_multiaddr().unwrap();
+        assert_eq!(result, Multiaddr::from_str(VALID_ADDR).unwrap());
+    }
+
+    #[test]
+    fn to_multiaddr_from_string_ref_invalid() {
+        let addr = String::from(INVALID_ADDR);
+        let result = (&addr).to_multiaddr();
+        assert!(result.is_err());
+    }
+}
