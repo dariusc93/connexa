@@ -24,10 +24,7 @@ async fn main() -> std::io::Result<()> {
         })
         .build()?;
 
-    let id = connexa
-        .swarm()
-        .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
-        .await?;
+    let id = connexa.swarm().listen_on("/ip4/0.0.0.0/tcp/0").await?;
 
     let addrs = connexa.swarm().get_listening_addresses(id).await?;
 

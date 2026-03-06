@@ -1,6 +1,7 @@
 use crate::behaviour::BehaviourEvent;
 use crate::behaviour::peer_store::store::Store;
-use crate::prelude::ConnectionEvent;
+use crate::error::ArcError;
+use crate::prelude::ConnexaSwarmEvent;
 use crate::task::ConnexaTask;
 use libp2p::swarm::NetworkBehaviour;
 use libp2p::swarm::SwarmEvent;
@@ -36,7 +37,7 @@ where
                 self.connection_listeners.retain(|ch| !ch.is_closed());
 
                 for ch in self.connection_listeners.iter_mut() {
-                    if let Err(e) = ch.try_send(ConnectionEvent::ConnectionEstablished {
+                    if let Err(e) = ch.try_send(ConnexaSwarmEvent::ConnectionEstablished {
                         peer_id,
                         connection_id,
                         endpoint: endpoint.clone(),
@@ -59,7 +60,10 @@ where
                     .shift_remove(&connection_id);
                 let pending_ch_by_peer_id =
                     self.pending_disconnection_by_peer_id.shift_remove(&peer_id);
-                let ret = match cause {
+
+                let cause = cause.map(ArcError::new);
+
+                let ret = match cause.clone() {
                     Some(e) => Err(std::io::Error::other(e)),
                     None => Ok(()),
                 };
@@ -82,11 +86,12 @@ where
                 self.connection_listeners.retain(|ch| !ch.is_closed());
 
                 for ch in self.connection_listeners.iter_mut() {
-                    if let Err(e) = ch.try_send(ConnectionEvent::ConnectionClosed {
+                    if let Err(e) = ch.try_send(ConnexaSwarmEvent::ConnectionClosed {
                         peer_id,
                         connection_id,
                         endpoint: endpoint.clone(),
                         num_established,
+                        cause: cause.clone(),
                     }) {
                         tracing::warn!(%peer_id, %connection_id, ?endpoint, %num_established, error=%e, "failed to send connection closed event");
                     }
@@ -98,6 +103,15 @@ where
                 send_back_addr,
             } => {
                 tracing::info!(%connection_id, ?local_addr, ?send_back_addr, "incoming connection");
+                for ch in self.connection_listeners.iter_mut() {
+                    if let Err(e) = ch.try_send(ConnexaSwarmEvent::IncomingConnection {
+                        connection_id,
+                        local_addr: local_addr.clone(),
+                        send_back_addr: send_back_addr.clone(),
+                    }) {
+                        tracing::warn!(%connection_id, ?local_addr, ?send_back_addr, error=%e, "failed to send incoming connection error event");
+                    }
+                }
             }
             SwarmEvent::IncomingConnectionError {
                 peer_id,
@@ -107,6 +121,19 @@ where
                 error,
             } => {
                 tracing::error!(?peer_id, %connection_id, ?local_addr, ?send_back_addr, error=%error, "incoming connection error");
+                let error = ArcError::new(error);
+
+                for ch in self.connection_listeners.iter_mut() {
+                    if let Err(e) = ch.try_send(ConnexaSwarmEvent::IncomingConnectionError {
+                        peer_id,
+                        connection_id,
+                        local_addr: local_addr.clone(),
+                        send_back_addr: send_back_addr.clone(),
+                        error: error.clone(),
+                    }) {
+                        tracing::warn!(?peer_id, %connection_id, ?local_addr, ?send_back_addr, error=%e, "failed to send incoming connection error event");
+                    }
+                }
             }
             SwarmEvent::OutgoingConnectionError {
                 connection_id,
@@ -114,8 +141,19 @@ where
                 error,
             } => {
                 tracing::error!(%connection_id, ?peer_id, error=%error, "outgoing connection error");
+                let error = ArcError::new(error);
                 if let Some(sender) = self.pending_connection.shift_remove(&connection_id) {
-                    let _ = sender.send(Err(std::io::Error::other(error)));
+                    let _ = sender.send(Err(std::io::Error::other(error.clone())));
+                }
+
+                for ch in self.connection_listeners.iter_mut() {
+                    if let Err(e) = ch.try_send(ConnexaSwarmEvent::OutgoingConnectionError {
+                        connection_id,
+                        peer_id,
+                        error: error.clone(),
+                    }) {
+                        tracing::warn!(%connection_id, ?peer_id, error=%e, "failed to send outgoing connection error event");
+                    }
                 }
             }
             SwarmEvent::NewListenAddr {
@@ -130,7 +168,16 @@ where
                 self.listener_addresses
                     .entry(listener_id)
                     .or_default()
-                    .push(address);
+                    .push(address.clone());
+
+                for ch in self.connection_listeners.iter_mut() {
+                    if let Err(e) = ch.try_send(ConnexaSwarmEvent::NewListenAddr {
+                        id: listener_id,
+                        address: address.clone(),
+                    }) {
+                        tracing::warn!(%listener_id, %address, error=%e, "failed to send connection established event");
+                    }
+                }
             }
             SwarmEvent::ExpiredListenAddr {
                 listener_id,
@@ -144,6 +191,15 @@ where
                         entry.remove();
                     }
                 }
+
+                for ch in self.connection_listeners.iter_mut() {
+                    if let Err(e) = ch.try_send(ConnexaSwarmEvent::ListenAddrExpired {
+                        id: listener_id,
+                        address: address.clone(),
+                    }) {
+                        tracing::warn!(%listener_id, %address, error=%e, "failed to send connection established event");
+                    }
+                }
             }
             SwarmEvent::ListenerClosed {
                 listener_id,
@@ -152,8 +208,18 @@ where
             } => {
                 tracing::info!(%listener_id, ?addresses, ?reason, "listener closed");
                 self.listener_addresses.remove(&listener_id);
+
                 if let Some(ch) = self.pending_remove_listener.shift_remove(&listener_id) {
-                    let _ = ch.send(reason.map_err(std::io::Error::other));
+                    let _ = ch.send(reason);
+                }
+
+                for ch in self.connection_listeners.iter_mut() {
+                    if let Err(e) = ch.try_send(ConnexaSwarmEvent::ListenAddrClosed {
+                        id: listener_id,
+                        addresses: addresses.clone(),
+                    }) {
+                        tracing::warn!(%listener_id, ?addresses, error=%e, "failed to send connection established event");
+                    }
                 }
             }
             SwarmEvent::ListenerError { listener_id, error } => {
@@ -171,10 +237,34 @@ where
             SwarmEvent::NewExternalAddrCandidate { .. } => {}
             SwarmEvent::ExternalAddrConfirmed { address } => {
                 tracing::debug!(%address, "external address confirmed");
+                for ch in self.connection_listeners.iter_mut() {
+                    if let Err(e) = ch.try_send(ConnexaSwarmEvent::NewExternalAddr {
+                        address: address.clone(),
+                    }) {
+                        tracing::warn!(%address, error=%e, "failed to send external address confirmed event");
+                    }
+                }
             }
-            SwarmEvent::ExternalAddrExpired { .. } => {}
+            SwarmEvent::ExternalAddrExpired { address } => {
+                tracing::debug!(%address, "external address expired");
+                for ch in self.connection_listeners.iter_mut() {
+                    if let Err(e) = ch.try_send(ConnexaSwarmEvent::ExternalAddrExpired {
+                        address: address.clone(),
+                    }) {
+                        tracing::warn!(%address, error=%e, "failed to send external address expired event");
+                    }
+                }
+            }
             SwarmEvent::NewExternalAddrOfPeer { peer_id, address } => {
                 tracing::debug!(%peer_id, %address, "new external address of peer");
+                for ch in self.connection_listeners.iter_mut() {
+                    if let Err(e) = ch.try_send(ConnexaSwarmEvent::ExternalAddrOfPeer {
+                        peer_id,
+                        address: address.clone(),
+                    }) {
+                        tracing::warn!(%peer_id, %address, error=%e, "failed to send external address of peer event");
+                    }
+                }
             }
             _ => {}
         }

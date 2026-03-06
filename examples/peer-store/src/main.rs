@@ -8,10 +8,7 @@ async fn main() -> std::io::Result<()> {
         .enable_memory_transport()
         .build()?;
 
-    let id_a = connexa_a
-        .swarm()
-        .listen_on("/memory/0".parse().unwrap())
-        .await?;
+    let id_a = connexa_a.swarm().listen_on("/memory/0").await?;
 
     let peer_a_id = connexa_a.keypair().public().to_peer_id();
 
@@ -22,10 +19,7 @@ async fn main() -> std::io::Result<()> {
         .enable_memory_transport()
         .build()?;
 
-    let id_b = connexa_b
-        .swarm()
-        .listen_on("/memory/0".parse().unwrap())
-        .await?;
+    let id_b = connexa_b.swarm().listen_on("/memory/0").await?;
 
     let peer_b_id = connexa_b.keypair().public().to_peer_id();
 

@@ -28,10 +28,7 @@ pub async fn spawn_connexa(keypair: impl IntoKeypair) -> std::io::Result<Connexa
         .with_ping()
         .build()?;
 
-    let listen_id = connexa
-        .swarm()
-        .listen_on("/memory/0".parse().unwrap())
-        .await?;
+    let listen_id = connexa.swarm().listen_on("/memory/0").await?;
 
     let peer_id = connexa.keypair().public().to_peer_id();
     let addrs = connexa.swarm().get_listening_addresses(listen_id).await?;

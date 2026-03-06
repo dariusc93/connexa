@@ -1,6 +1,6 @@
 mod common;
 
-use connexa::prelude::{ConnectionEvent, Multiaddr, PeerId};
+use connexa::prelude::{ConnexaSwarmEvent, Multiaddr, PeerId};
 use futures::StreamExt;
 use libp2p::swarm::dial_opts::DialOpts;
 use std::time::Duration;
@@ -261,7 +261,7 @@ async fn test_connection_listener() {
 
     assert!(matches!(
         event,
-        ConnectionEvent::ConnectionEstablished { .. }
+        ConnexaSwarmEvent::ConnectionEstablished { .. }
     ));
 }
 

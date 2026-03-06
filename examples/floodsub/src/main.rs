@@ -1,7 +1,7 @@
 use clap::Parser;
 use connexa::prelude::identity::Keypair;
 use connexa::prelude::{
-    ConnectionEvent, DefaultConnexaBuilder, FloodsubEvent, FloodsubMessage, Multiaddr, Protocol,
+    ConnexaSwarmEvent, DefaultConnexaBuilder, FloodsubEvent, FloodsubMessage, Multiaddr, Protocol,
 };
 use futures::FutureExt;
 use futures::StreamExt;
@@ -85,7 +85,7 @@ async fn main() -> std::io::Result<()> {
     loop {
         tokio::select! {
             Some(event) = connection_ev.next() => {
-                if let ConnectionEvent::ConnectionEstablished { peer_id, .. } = event {
+                if let ConnexaSwarmEvent::ConnectionEstablished { peer_id, .. } = event {
                     connexa.floodsub().add_node_to_partial_view(peer_id).await?;
                 }
             }
