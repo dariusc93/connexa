@@ -1,7 +1,38 @@
+use std::ops::Deref;
+
 /// Error that is sharable between threads
-#[derive(Clone)]
 pub struct ArcError<E> {
     inner_error: std::sync::Arc<E>,
+}
+
+impl<E> Clone for ArcError<E> {
+    fn clone(&self) -> Self {
+        Self {
+            inner_error: self.inner_error.clone(),
+        }
+    }
+}
+
+impl<E> Deref for ArcError<E> {
+    type Target = E;
+    fn deref(&self) -> &E {
+        &self.inner_error
+    }
+}
+
+// impl<E> PartialEq for ArcError<E> {
+//     fn eq(&self, other: &Self) -> bool {
+//         // Note that this only points to the same allocation and not a different one.
+//         std::sync::Arc::ptr_eq(&self.inner_error, &other.inner_error)
+//     }
+// }
+//
+// impl<E> Eq for ArcError<E> {}
+
+impl<E> AsRef<E> for ArcError<E> {
+    fn as_ref(&self) -> &E {
+        &self.inner_error
+    }
 }
 
 impl<E> From<E> for ArcError<E> {

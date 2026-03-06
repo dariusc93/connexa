@@ -1,5 +1,5 @@
 use crate::handle::Connexa;
-use crate::types::{ConnectionEvent, SwarmCommand};
+use crate::types::{ConnexaSwarmEvent, SwarmCommand};
 use futures::StreamExt;
 use futures::channel::oneshot;
 use futures::stream::BoxStream;
@@ -209,7 +209,7 @@ where
     }
 
     /// Subscribes to swarm connection events.
-    pub async fn listener(&self) -> std::io::Result<BoxStream<'static, ConnectionEvent>> {
+    pub async fn listener(&self) -> std::io::Result<BoxStream<'static, ConnexaSwarmEvent>> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task

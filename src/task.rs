@@ -32,7 +32,7 @@ mod swarm;
 mod upnp;
 
 use crate::behaviour::BehaviourEvent;
-use crate::types::{Command, ConnectionEvent, SwarmCommand};
+use crate::types::{Command, ConnexaSwarmEvent, SwarmCommand};
 use crate::{TEventCallback, TPollableCallback, TSwarmEventCallback, TTaskCallback, behaviour};
 
 #[cfg(feature = "kad")]
@@ -85,7 +85,7 @@ where
     pub swarm_event_callback: TSwarmEventCallback<C, X, S>,
     pub custom_pollable_callback: TPollableCallback<C, X, S>,
 
-    pub connection_listeners: Vec<mpsc::Sender<ConnectionEvent>>,
+    pub connection_listeners: Vec<mpsc::Sender<ConnexaSwarmEvent>>,
 
     pub listener_addresses: HashMap<ListenerId, Vec<Multiaddr>>,
 
@@ -283,6 +283,7 @@ where
         match command {
             Command::Swarm(swarm_command) => match swarm_command {
                 SwarmCommand::Listener { resp } => {
+                    // TODO: Make buffer adjustable via config
                     let (tx, rx) = mpsc::channel(50);
                     self.connection_listeners.push(tx);
                     let _ = resp.send(rx);
