@@ -281,7 +281,7 @@ impl Behaviour {
             return;
         };
 
-        match info.relay_status {
+        let should_retry = match info.relay_status {
             RelayStatus::Supported {
                 status: ReservationStatus::Active { .. },
             } => {
@@ -289,6 +289,7 @@ impl Behaviour {
                 info.relay_status = RelayStatus::Supported {
                     status: ReservationStatus::Idle,
                 };
+                true
             }
             RelayStatus::Supported {
                 status: ReservationStatus::Pending { .. },
@@ -296,12 +297,17 @@ impl Behaviour {
                 info.relay_status = RelayStatus::Supported {
                     status: ReservationStatus::Idle,
                 };
+                true
             }
             RelayStatus::Pending
             | RelayStatus::Supported {
                 status: ReservationStatus::Idle,
             }
-            | RelayStatus::NotSupported => {}
+            | RelayStatus::NotSupported => false,
+        };
+
+        if should_retry {
+            self.meet_reservation_target(Selection::InOrder);
         }
     }
 
