@@ -20,6 +20,7 @@ impl<E> Deref for ArcError<E> {
     }
 }
 
+// TODO: Determine if this is needed in the future
 // impl<E> PartialEq for ArcError<E> {
 //     fn eq(&self, other: &Self) -> bool {
 //         // Note that this only points to the same allocation and not a different one.
