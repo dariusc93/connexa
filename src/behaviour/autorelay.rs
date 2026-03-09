@@ -362,10 +362,10 @@ impl Behaviour {
             return false;
         }
 
-        let info = self
-            .connections
-            .get_mut(&(peer_id, connection_id))
-            .expect("connection is present");
+        let Some(info) = self.connections.get_mut(&(peer_id, connection_id)) else {
+            tracing::warn!(%peer_id, %connection_id, "connection not found. skipping");
+            return false;
+        };
 
         let addr_with_peer_id = match info.address.clone().with_p2p(peer_id) {
             Ok(addr) => addr,
