@@ -1,8 +1,7 @@
 use libp2p::Multiaddr;
 use libp2p::multiaddr::Protocol;
 
-#[allow(dead_code)]
-pub(crate) trait MultiaddrExt {
+pub trait MultiaddrExt {
     fn is_relayed(&self) -> bool;
 
     fn is_public(&self) -> bool;
