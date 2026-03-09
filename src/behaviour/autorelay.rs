@@ -111,13 +111,16 @@ impl PeerInfo {
     }
 
     pub fn average_latency(&self) -> u128 {
-        let avg: u128 = self
+        let total_latency: u128 = self
             .latency
             .iter()
             .map(|duration| duration.as_millis())
             .sum();
-        let div = self.latency.iter().filter(|i| !i.is_zero()).count() as u128;
-        avg / div
+        let count = self.latency.iter().filter(|i| !i.is_zero()).count() as u128;
+        if count == 0 {
+            return 0;
+        }
+        total_latency / count
     }
 }
 
