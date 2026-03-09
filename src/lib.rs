@@ -2,6 +2,7 @@ pub mod behaviour;
 pub mod builder;
 pub mod error;
 pub mod handle;
+mod multiaddr_ext;
 pub mod task;
 pub(crate) mod types;
 
@@ -43,6 +44,7 @@ pub mod dummy {
 
 pub mod prelude {
     use crate::builder::ConnexaBuilder;
+    pub use crate::multiaddr_ext::MultiaddrExt;
     pub use crate::types::*;
     pub use libp2p::{Multiaddr, PeerId, Stream, StreamProtocol, multiaddr::Protocol};
 
