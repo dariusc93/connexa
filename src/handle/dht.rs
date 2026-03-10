@@ -51,7 +51,7 @@ where
         self.connexa
             .to_task
             .clone()
-            .send(DHTCommand::Provide { key, resp: tx }.into())
+            .send(DHTCommand::StopProviding { key, resp: tx }.into())
             .await?;
         rx.await.map_err(std::io::Error::other)?
     }
