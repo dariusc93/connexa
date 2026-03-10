@@ -623,24 +623,22 @@ pub enum PeerstoreCommand {
     Add {
         peer_id: PeerId,
         addr: Multiaddr,
-        resp: oneshot::Sender<Result<BoxFuture<'static, std::io::Result<()>>>>,
+        resp: oneshot::Sender<Result<()>>,
     },
     RemoveAddress {
         peer_id: PeerId,
         addr: Multiaddr,
-        resp: oneshot::Sender<Result<BoxFuture<'static, std::io::Result<()>>>>,
+        resp: oneshot::Sender<Result<()>>,
     },
     Remove {
         peer_id: PeerId,
-        resp: oneshot::Sender<Result<BoxFuture<'static, std::io::Result<Vec<Multiaddr>>>>>,
+        resp: oneshot::Sender<Result<Vec<Multiaddr>>>,
     },
     List {
         peer_id: PeerId,
-        resp: oneshot::Sender<Result<BoxFuture<'static, std::io::Result<Vec<Multiaddr>>>>>,
+        resp: oneshot::Sender<Result<Vec<Multiaddr>>>,
     },
     ListAll {
-        resp: oneshot::Sender<
-            Result<BoxFuture<'static, std::io::Result<Vec<(PeerId, Vec<Multiaddr>)>>>>,
-        >,
+        resp: oneshot::Sender<Result<Vec<(PeerId, Vec<Multiaddr>)>>>,
     },
 }

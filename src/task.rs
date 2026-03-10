@@ -47,6 +47,7 @@ use crate::prelude::PeerstoreCommand;
 use crate::types::GossipsubEvent;
 use crate::types::{BlacklistCommand, ConnectionLimitsCommand, WhitelistCommand};
 use futures::channel::{mpsc, oneshot};
+use futures::future::BoxFuture;
 use futures::{FutureExt, StreamExt};
 use futures_timer::Delay;
 use indexmap::IndexMap;
@@ -67,6 +68,7 @@ use pollable_map::optional::Optional;
 use pollable_map::stream::StreamMap;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
+use std::future::Future as StdFuture;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
@@ -167,6 +169,8 @@ where
     pub gossipsub_can_propagate:
         FutureMap<(PeerId, MessageId), oneshot::Receiver<std::io::Result<MessageAcceptance>>>,
 
+    pub peerstore_ops: FutureSet<BoxFuture<'static, ()>>,
+
     pub cleanup_timer: Delay,
     pub cleanup_interval: Duration,
 }
@@ -214,6 +218,7 @@ where
             pending_dht_find_closest_peer: Default::default(),
             #[cfg(feature = "kad")]
             pending_dht_bootstrap: Default::default(),
+            peerstore_ops: Default::default(),
             cleanup_timer: Delay::new(duration),
             cleanup_interval: duration,
             pending_connection: IndexMap::new(),
@@ -489,7 +494,9 @@ where
                     };
 
                     let fut = store.insert(peer_id, addr);
-                    let _ = resp.send(Ok(fut));
+                    self.peerstore_ops.insert(Box::pin(async move {
+                        let _ = resp.send(fut.await);
+                    }));
                 }
                 PeerstoreCommand::RemoveAddress {
                     peer_id,
@@ -501,7 +508,9 @@ where
                         return;
                     };
                     let fut = store.remove_address(&peer_id, &addr);
-                    let _ = resp.send(Ok(fut));
+                    self.peerstore_ops.insert(Box::pin(async move {
+                        let _ = resp.send(fut.await);
+                    }));
                 }
                 PeerstoreCommand::Remove { peer_id, resp } => {
                     let Some(store) = swarm.behaviour_mut().peer_store.as_mut() else {
@@ -509,7 +518,9 @@ where
                         return;
                     };
                     let fut = store.remove(&peer_id);
-                    let _ = resp.send(Ok(fut));
+                    self.peerstore_ops.insert(Box::pin(async move {
+                        let _ = resp.send(fut.await);
+                    }));
                 }
                 PeerstoreCommand::List { peer_id, resp } => {
                     let Some(store) = swarm.behaviour_mut().peer_store.as_mut() else {
@@ -517,7 +528,9 @@ where
                         return;
                     };
                     let fut = store.address(&peer_id);
-                    let _ = resp.send(Ok(fut));
+                    self.peerstore_ops.insert(Box::pin(async move {
+                        let _ = resp.send(fut.await);
+                    }));
                 }
                 PeerstoreCommand::ListAll { resp } => {
                     let Some(store) = swarm.behaviour_mut().peer_store.as_mut() else {
@@ -525,7 +538,9 @@ where
                         return;
                     };
                     let fut = store.list_all();
-                    let _ = resp.send(Ok(fut));
+                    self.peerstore_ops.insert(Box::pin(async move {
+                        let _ = resp.send(fut.await);
+                    }));
                 }
             },
             #[cfg(feature = "gossipsub")]
@@ -614,6 +629,8 @@ where
                 let _ = (this.custom_pollable_callback)(cx, swarm, &mut this.context);
             }
         }
+
+        while let Poll::Ready(Some(())) = self.peerstore_ops.poll_next_unpin(cx) {}
 
         #[cfg(feature = "gossipsub")]
         while let Poll::Ready(Some(((propagation_source, message_id), result))) =
