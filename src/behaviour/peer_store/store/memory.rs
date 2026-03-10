@@ -169,7 +169,12 @@ impl Store for MemoryStore {
 
                 self.connections.shift_remove(&(*peer_id, *connection_id));
 
-                if !self.persistent.contains(peer_id) {
+                let still_connected = self
+                    .connections
+                    .iter()
+                    .any(|((id, _), addr)| id == peer_id && addr == remote_addr);
+
+                if !still_connected && !self.persistent.contains(peer_id) {
                     self.timer.insert(
                         (*peer_id, remote_addr.clone()),
                         Delay::new(std::time::Duration::from_secs(60)),
