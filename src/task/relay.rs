@@ -1,8 +1,12 @@
 use crate::behaviour::peer_store::store::Store;
 use crate::task::ConnexaTask;
+use crate::types::AutoRelayCommand;
 use libp2p::relay::{Event as RelayServerEvent, client::Event as RelayClientEvent};
 use libp2p::swarm::NetworkBehaviour;
 use std::fmt::Debug;
+
+#[allow(dead_code)]
+pub const RELAY_NAMESPACE: &[u8] = b"/libp2p/relay";
 
 impl<X, C: NetworkBehaviour, S, T> ConnexaTask<X, C, S, T>
 where
@@ -11,6 +15,84 @@ where
     C::ToSwarm: Debug,
     S: Store,
 {
+    pub fn process_autorelay_commands(&mut self, command: AutoRelayCommand) {
+        let swarm = self.swarm.as_mut().expect("swarm is still valid");
+        match command {
+            AutoRelayCommand::AddStaticRelay {
+                peer_id,
+                relay_addr,
+                resp,
+            } => {
+                let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    return;
+                };
+
+                let _ = resp.send(Ok(autorelay.add_static_relay(peer_id, relay_addr)));
+            }
+            AutoRelayCommand::RemoveStaticRelay {
+                peer_id,
+                relay_addr,
+                resp,
+            } => {
+                let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    return;
+                };
+
+                let _ = resp.send(Ok(autorelay.remove_static_relay(peer_id, relay_addr)));
+            }
+            AutoRelayCommand::ListStaticRelays { resp } => {
+                let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    return;
+                };
+
+                let list = autorelay.list_static_relays();
+                let _ = resp.send(Ok(list));
+            }
+            AutoRelayCommand::GetStaticRelay { peer_id, resp } => {
+                let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    return;
+                };
+
+                let addrs = autorelay.get_static_relay_addrs(peer_id);
+                let _ = resp.send(Ok(addrs));
+            }
+            AutoRelayCommand::EnableAutoRelay { resp } => {
+                let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    return;
+                };
+
+                autorelay.enable_autorelay();
+
+                let _ = resp.send(Ok(()));
+            }
+            AutoRelayCommand::DisableAutoRelay { resp } => {
+                let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    return;
+                };
+
+                autorelay.disable_autorelay();
+
+                let _ = resp.send(Ok(()));
+            }
+            AutoRelayCommand::DisableRelays { resp } => {
+                let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    return;
+                };
+
+                autorelay.disable_autorelay();
+
+                let _ = resp.send(Ok(()));
+            }
+        }
+    }
+
     pub fn process_relay_client_event(&mut self, event: RelayClientEvent) {
         match event {
             RelayClientEvent::ReservationReqAccepted {
