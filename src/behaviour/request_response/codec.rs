@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p::StreamProtocol;
@@ -18,7 +17,6 @@ impl Codec {
     }
 }
 
-#[async_trait]
 impl libp2p::request_response::Codec for Codec {
     type Protocol = StreamProtocol;
     type Request = Bytes;
