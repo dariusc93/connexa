@@ -115,7 +115,7 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
-    /// Stops listening on the address associated with the given ListernerId
+    /// Stops listening to the address associated with the given [`ListenerId`]
     pub async fn remove_listener(&self, listener_id: ListenerId) -> crate::handle::Result<()> {
         let (tx, rx) = oneshot::channel();
         self.connexa

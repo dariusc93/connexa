@@ -112,7 +112,7 @@ impl IntoStreamProtocol for Vec<u8> {
 
 impl IntoStreamProtocol for &[u8] {
     fn into_protocol(self) -> std::io::Result<StreamProtocol> {
-        let protocol = String::from_utf8_lossy(&self).to_string();
+        let protocol = String::from_utf8_lossy(self).to_string();
         protocol.into_protocol()
     }
 }

@@ -10,6 +10,8 @@ use libp2p::{Multiaddr, PeerId};
 use pollable_map::futures::FutureMap;
 use std::task::{Context, Poll};
 
+const CAPACITY_CAP: usize = 256;
+
 #[derive(Default)]
 pub struct MemoryStore {
     peers: IndexMap<PeerId, IndexSet<Multiaddr>>,
@@ -167,14 +169,21 @@ impl Store for MemoryStore {
 
                 self.connections.shift_remove(&(*peer_id, *connection_id));
 
-                if !self.persistent.contains(peer_id) {
+                let still_connected = self
+                    .connections
+                    .iter()
+                    .any(|((id, _), addr)| id == peer_id && addr == remote_addr);
+
+                if !still_connected && !self.persistent.contains(peer_id) {
                     self.timer.insert(
                         (*peer_id, remote_addr.clone()),
                         Delay::new(std::time::Duration::from_secs(60)),
                     );
                 }
 
-                self.connections.shrink_to_fit();
+                if self.connections.is_empty() || self.connections.capacity() < CAPACITY_CAP {
+                    self.connections.shrink_to_fit();
+                }
             }
             _ => {}
         }

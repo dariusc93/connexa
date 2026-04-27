@@ -24,7 +24,6 @@ where
                     return;
                 };
 
-                let topic = libp2p::floodsub::Topic::new(topic);
                 match pubsub.subscribe(topic) {
                     true => {
                         let _ = resp.send(Ok(()));
@@ -40,7 +39,6 @@ where
                     return;
                 };
 
-                let topic = libp2p::floodsub::Topic::new(topic);
                 match pubsub.unsubscribe(topic) {
                     true => {
                         let _ = resp.send(Ok(()));
@@ -58,19 +56,15 @@ where
 
                 match pubsub_type {
                     PubsubFloodsubPublish::Publish { topic, data } => {
-                        let topic = libp2p::floodsub::Topic::new(topic);
                         pubsub.publish(topic, data);
                     }
                     PubsubFloodsubPublish::PublishAny { topic, data } => {
-                        let topic = libp2p::floodsub::Topic::new(topic);
                         pubsub.publish_any(topic, data);
                     }
                     PubsubFloodsubPublish::PublishMany { topics, data } => {
-                        let topics = topics.into_iter().map(libp2p::floodsub::Topic::new);
                         pubsub.publish_many(topics, data);
                     }
                     PubsubFloodsubPublish::PublishManyAny { topics, data } => {
-                        let topics = topics.into_iter().map(libp2p::floodsub::Topic::new);
                         pubsub.publish_many_any(topics, data);
                     }
                 }

@@ -260,9 +260,12 @@ impl Behaviour {
         match self.broadcast_request.len() > CHANNEL_LIMIT {
             true => {
                 // Because the channels exceed a specific threshold, we will begin do cleanup with a timer instead
-                self.gc_timer.replace(Delay::new(TIMEOUT));
+                if self.gc_timer.is_none() {
+                    self.gc_timer.replace(Delay::new(TIMEOUT));
+                }
             }
             false => {
+                self.gc_timer.take();
                 self.broadcast_request.retain(|ch| !ch.is_closed());
             }
         }
@@ -289,6 +292,10 @@ impl Behaviour {
             tracing::warn!(%peer_id, request_id=%id, "no pending request available that is awaiting for a response. dropping response");
             return;
         };
+
+        if list.is_empty() {
+            self.pending_response.remove(&peer_id);
+        }
 
         if ch.send(Ok(response)).is_err() {
             tracing::warn!(%peer_id, request_id=%id, "unable to send response");

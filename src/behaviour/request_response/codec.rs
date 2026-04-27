@@ -32,7 +32,7 @@ impl libp2p::request_response::Codec for Codec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let mut buffer = Vec::new();
+        let mut buffer = Vec::with_capacity(self.max_request_size);
         io.take(self.max_request_size as u64)
             .read_to_end(&mut buffer)
             .await?;
@@ -54,7 +54,7 @@ impl libp2p::request_response::Codec for Codec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let mut buffer = Vec::new();
+        let mut buffer = Vec::with_capacity(self.max_response_size);
         io.take(self.max_response_size as u64)
             .read_to_end(&mut buffer)
             .await?;
@@ -79,14 +79,14 @@ impl libp2p::request_response::Codec for Codec {
     {
         if req.is_empty() {
             return Err(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
+                std::io::ErrorKind::InvalidInput,
                 "request is empty",
             ));
         }
 
         if req.len() > self.max_request_size {
             return Err(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
+                std::io::ErrorKind::InvalidInput,
                 "request exceeds max size",
             ));
         }
@@ -106,13 +106,13 @@ impl libp2p::request_response::Codec for Codec {
     {
         if res.is_empty() {
             return Err(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
+                std::io::ErrorKind::InvalidInput,
                 "response is empty",
             ));
         }
         if res.len() > self.max_response_size {
             return Err(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
+                std::io::ErrorKind::InvalidInput,
                 "response exceeds max size",
             ));
         }

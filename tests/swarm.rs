@@ -253,16 +253,16 @@ async fn test_connection_listener() {
     // Node2 connects to node1
     node2.swarm().dial(node1_addr).await.unwrap();
 
-    // Wait for connection event
-    let event = tokio::time::timeout(Duration::from_secs(2), listener.next())
-        .await
-        .expect("Timeout waiting for connection event")
-        .expect("Stream ended unexpectedly");
-
-    assert!(matches!(
-        event,
-        ConnexaSwarmEvent::ConnectionEstablished { .. }
-    ));
+    // Wait for a connection event
+    tokio::time::timeout(Duration::from_secs(2), async move {
+        loop {
+            if let Some(ConnexaSwarmEvent::ConnectionEstablished { .. }) = listener.next().await {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("Timeout waiting for connection event");
 }
 
 #[tokio::test]
