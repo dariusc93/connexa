@@ -129,9 +129,9 @@ tokio = { default-features = false, features = ["sync", "macros"], workspace = t
 wasm-bindgen-futures.workspace = true
 
 [patch.crates-io]
-libp2p = { git = "https://github.com/libp2p/rust-libp2p.git", rev = "22fb4c7" }
-libp2p-allow-block-list = { git = "https://github.com/libp2p/rust-libp2p.git", rev = "22fb4c7" }
-libp2p-connection-limits = { git = "https://github.com/libp2p/rust-libp2p.git", rev = "22fb4c7" }
-libp2p-stream = { git = "https://github.com/libp2p/rust-libp2p.git", rev = "22fb4c7" }
-libp2p-webrtc = { git = "https://github.com/libp2p/rust-libp2p.git", rev = "22fb4c7" }
-libp2p-webrtc-websys = { git = "https://github.com/libp2p/rust-libp2p.git", rev = "22fb4c7" }
+libp2p = { git = "https://github.com/dariusc93/rust-libp2p.git", branch = "fix/remove-ext-addr-relay" }
+libp2p-allow-block-list = { git = "https://github.com/dariusc93/rust-libp2p.git", branch = "fix/remove-ext-addr-relay" }
+libp2p-connection-limits = { git = "https://github.com/dariusc93/rust-libp2p.git", branch = "fix/remove-ext-addr-relay" }
+libp2p-stream = { git = "https://github.com/dariusc93/rust-libp2p.git", branch = "fix/remove-ext-addr-relay" }
+libp2p-webrtc = { git = "https://github.com/dariusc93/rust-libp2p.git", branch = "fix/remove-ext-addr-relay" }
+libp2p-webrtc-websys = { git = "https://github.com/dariusc93/rust-libp2p.git", branch = "fix/remove-ext-addr-relay" }
