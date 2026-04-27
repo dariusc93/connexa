@@ -1,5 +1,5 @@
 use crate::handle::Connexa;
-use crate::types::{ConnectionEvent, SwarmCommand};
+use crate::types::{ConnexaSwarmEvent, SwarmCommand};
 use futures::StreamExt;
 use futures::channel::oneshot;
 use futures::stream::BoxStream;
@@ -7,6 +7,7 @@ use libp2p::core::transport::ListenerId;
 use libp2p::swarm::ConnectionId;
 use libp2p::swarm::dial_opts::DialOpts;
 use libp2p::{Multiaddr, PeerId};
+use std::str::FromStr;
 
 #[derive(Copy, Clone)]
 pub struct ConnexaSwarm<'a, T> {
@@ -87,7 +88,8 @@ where
     }
 
     /// Start listening for incoming connections on the given multiaddress
-    pub async fn listen_on(&self, address: Multiaddr) -> crate::handle::Result<ListenerId> {
+    pub async fn listen_on(&self, addr: impl ToMultiaddr) -> crate::handle::Result<ListenerId> {
+        let address = addr.to_multiaddr()?;
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
@@ -113,7 +115,7 @@ where
         rx.await.map_err(std::io::Error::other)?
     }
 
-    /// Stops listening on the address associated with the given ListernerId
+    /// Stops listening to the address associated with the given [`ListenerId`]
     pub async fn remove_listener(&self, listener_id: ListenerId) -> crate::handle::Result<()> {
         let (tx, rx) = oneshot::channel();
         self.connexa
@@ -132,7 +134,11 @@ where
     }
 
     /// Adds an external address that other peers can use to reach us
-    pub async fn add_external_address(&self, address: Multiaddr) -> crate::handle::Result<()> {
+    pub async fn add_external_address(
+        &self,
+        address: impl ToMultiaddr,
+    ) -> crate::handle::Result<()> {
+        let address = address.to_multiaddr()?;
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
@@ -203,7 +209,7 @@ where
     }
 
     /// Subscribes to swarm connection events.
-    pub async fn listener(&self) -> std::io::Result<BoxStream<'static, ConnectionEvent>> {
+    pub async fn listener(&self) -> std::io::Result<BoxStream<'static, ConnexaSwarmEvent>> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
@@ -212,6 +218,40 @@ where
             .await?;
 
         rx.await.map_err(std::io::Error::other).map(|rx| rx.boxed())
+    }
+}
+
+pub trait ToMultiaddr {
+    fn to_multiaddr(self) -> std::io::Result<Multiaddr>;
+}
+
+impl ToMultiaddr for Multiaddr {
+    fn to_multiaddr(self) -> std::io::Result<Multiaddr> {
+        Ok(self)
+    }
+}
+
+impl ToMultiaddr for &Multiaddr {
+    fn to_multiaddr(self) -> std::io::Result<Multiaddr> {
+        Ok(self.clone())
+    }
+}
+
+impl ToMultiaddr for &String {
+    fn to_multiaddr(self) -> std::io::Result<Multiaddr> {
+        Multiaddr::from_str(self).map_err(std::io::Error::other)
+    }
+}
+
+impl ToMultiaddr for &'static str {
+    fn to_multiaddr(self) -> std::io::Result<Multiaddr> {
+        Multiaddr::from_str(self).map_err(std::io::Error::other)
+    }
+}
+
+impl ToMultiaddr for String {
+    fn to_multiaddr(self) -> std::io::Result<Multiaddr> {
+        Multiaddr::from_str(&self).map_err(std::io::Error::other)
     }
 }
 
@@ -230,5 +270,67 @@ impl From<PeerId> for ConnectionTarget {
 impl From<ConnectionId> for ConnectionTarget {
     fn from(connection_id: ConnectionId) -> Self {
         Self::ConnectionId(connection_id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const VALID_ADDR: &str = "/ip4/127.0.0.1/tcp/8080";
+    const INVALID_ADDR: &str = "not-a-valid-multiaddr";
+
+    #[test]
+    fn to_multiaddr_from_multiaddr() {
+        let addr = Multiaddr::from_str(VALID_ADDR).unwrap();
+        let result = addr.clone().to_multiaddr().unwrap();
+        assert_eq!(result, addr);
+    }
+
+    #[test]
+    fn to_multiaddr_from_multiaddr_ref() {
+        let addr = Multiaddr::from_str(VALID_ADDR).unwrap();
+        let result = (&addr).to_multiaddr().unwrap();
+        assert_eq!(result, addr);
+    }
+
+    #[test]
+    fn to_multiaddr_from_static_str() {
+        let result = VALID_ADDR.to_multiaddr().unwrap();
+        assert_eq!(result, Multiaddr::from_str(VALID_ADDR).unwrap());
+    }
+
+    #[test]
+    fn to_multiaddr_from_static_str_invalid() {
+        let result = INVALID_ADDR.to_multiaddr();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn to_multiaddr_from_string() {
+        let addr = String::from(VALID_ADDR);
+        let result = addr.to_multiaddr().unwrap();
+        assert_eq!(result, Multiaddr::from_str(VALID_ADDR).unwrap());
+    }
+
+    #[test]
+    fn to_multiaddr_from_string_invalid() {
+        let addr = String::from(INVALID_ADDR);
+        let result = addr.to_multiaddr();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn to_multiaddr_from_string_ref() {
+        let addr = String::from(VALID_ADDR);
+        let result = (&addr).to_multiaddr().unwrap();
+        assert_eq!(result, Multiaddr::from_str(VALID_ADDR).unwrap());
+    }
+
+    #[test]
+    fn to_multiaddr_from_string_ref_invalid() {
+        let addr = String::from(INVALID_ADDR);
+        let result = (&addr).to_multiaddr();
+        assert!(result.is_err());
     }
 }

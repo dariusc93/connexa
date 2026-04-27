@@ -44,6 +44,7 @@ pub mod dummy {
 
 pub mod prelude {
     use crate::builder::ConnexaBuilder;
+    pub use crate::multiaddr_ext::MultiaddrExt;
     pub use crate::types::*;
     pub use libp2p::{Multiaddr, PeerId, Stream, StreamProtocol, multiaddr::Protocol};
 

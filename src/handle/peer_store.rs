@@ -32,7 +32,7 @@ where
                 .into(),
             )
             .await?;
-        rx.await.map_err(std::io::Error::other)??.await
+        rx.await.map_err(std::io::Error::other)?
     }
 
     /// Removes a specific address for a peer from the peer store.
@@ -50,7 +50,7 @@ where
                 .into(),
             )
             .await?;
-        rx.await.map_err(std::io::Error::other)??.await
+        rx.await.map_err(std::io::Error::other)?
     }
 
     /// Removes a peer and all its associated addresses from the peer store.
@@ -61,7 +61,7 @@ where
             .clone()
             .send(PeerstoreCommand::Remove { peer_id, resp: tx }.into())
             .await?;
-        rx.await.map_err(std::io::Error::other)??.await
+        rx.await.map_err(std::io::Error::other)?
     }
 
     /// Lists all addresses associated with a specific peer.
@@ -72,7 +72,7 @@ where
             .clone()
             .send(PeerstoreCommand::List { peer_id, resp: tx }.into())
             .await?;
-        rx.await.map_err(std::io::Error::other)??.await
+        rx.await.map_err(std::io::Error::other)?
     }
 
     /// Lists all peers and their associated addresses in the peer store.
@@ -83,6 +83,6 @@ where
             .clone()
             .send(PeerstoreCommand::ListAll { resp: tx }.into())
             .await?;
-        rx.await.map_err(std::io::Error::other)??.await
+        rx.await.map_err(std::io::Error::other)?
     }
 }

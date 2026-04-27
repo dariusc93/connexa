@@ -1,5 +1,7 @@
 #![allow(unused_imports)]
+use crate::error::ArcError;
 use crate::handle::swarm::ConnectionTarget;
+use crate::prelude::swarm::{DialError, ListenError, ListenOpts, SwarmEvent};
 use bytes::Bytes;
 use either::Either;
 use futures::channel::{mpsc, oneshot};
@@ -15,12 +17,13 @@ use libp2p::kad::{Mode, PeerInfo, PeerRecord, ProviderRecord, Quorum, Record, Re
 use libp2p::rendezvous::Cookie;
 #[cfg(feature = "request-response")]
 use libp2p::request_response::InboundRequestId;
-use libp2p::swarm::ConnectionId;
 use libp2p::swarm::derive_prelude::ListenerId;
 use libp2p::swarm::dial_opts::DialOpts;
+use libp2p::swarm::{ConnectionError, ConnectionId};
 use libp2p::{Multiaddr, PeerId, StreamProtocol};
 use libp2p_connection_limits::ConnectionLimits;
 use std::collections::HashSet;
+use std::sync::Arc;
 
 type Result<T> = std::io::Result<T>;
 
@@ -185,12 +188,12 @@ pub enum SwarmCommand {
         resp: oneshot::Sender<Result<()>>,
     },
     Listener {
-        resp: oneshot::Sender<mpsc::Receiver<ConnectionEvent>>,
+        resp: oneshot::Sender<mpsc::Receiver<ConnexaSwarmEvent>>,
     },
 }
 
-#[derive(Debug)]
-pub enum ConnectionEvent {
+#[derive(Debug, Clone)]
+pub enum ConnexaSwarmEvent {
     ConnectionEstablished {
         peer_id: PeerId,
         connection_id: ConnectionId,
@@ -202,6 +205,46 @@ pub enum ConnectionEvent {
         connection_id: ConnectionId,
         endpoint: ConnectedPoint,
         num_established: u32,
+        cause: Option<ArcError<ConnectionError>>,
+    },
+    IncomingConnection {
+        connection_id: ConnectionId,
+        local_addr: Multiaddr,
+        send_back_addr: Multiaddr,
+    },
+    IncomingConnectionError {
+        connection_id: ConnectionId,
+        local_addr: Multiaddr,
+        send_back_addr: Multiaddr,
+        error: ArcError<ListenError>,
+        peer_id: Option<PeerId>,
+    },
+    OutgoingConnectionError {
+        connection_id: ConnectionId,
+        peer_id: Option<PeerId>,
+        error: ArcError<DialError>,
+    },
+    NewListenAddr {
+        id: ListenerId,
+        address: Multiaddr,
+    },
+    ListenAddrExpired {
+        id: ListenerId,
+        address: Multiaddr,
+    },
+    ListenAddrClosed {
+        id: ListenerId,
+        addresses: Vec<Multiaddr>,
+    },
+    NewExternalAddr {
+        address: Multiaddr,
+    },
+    ExternalAddrExpired {
+        address: Multiaddr,
+    },
+    ExternalAddrOfPeer {
+        peer_id: PeerId,
+        address: Multiaddr,
     },
 }
 
@@ -620,24 +663,22 @@ pub enum PeerstoreCommand {
     Add {
         peer_id: PeerId,
         addr: Multiaddr,
-        resp: oneshot::Sender<Result<BoxFuture<'static, std::io::Result<()>>>>,
+        resp: oneshot::Sender<Result<()>>,
     },
     RemoveAddress {
         peer_id: PeerId,
         addr: Multiaddr,
-        resp: oneshot::Sender<Result<BoxFuture<'static, std::io::Result<()>>>>,
+        resp: oneshot::Sender<Result<()>>,
     },
     Remove {
         peer_id: PeerId,
-        resp: oneshot::Sender<Result<BoxFuture<'static, std::io::Result<Vec<Multiaddr>>>>>,
+        resp: oneshot::Sender<Result<Vec<Multiaddr>>>,
     },
     List {
         peer_id: PeerId,
-        resp: oneshot::Sender<Result<BoxFuture<'static, std::io::Result<Vec<Multiaddr>>>>>,
+        resp: oneshot::Sender<Result<Vec<Multiaddr>>>,
     },
     ListAll {
-        resp: oneshot::Sender<
-            Result<BoxFuture<'static, std::io::Result<Vec<(PeerId, Vec<Multiaddr>)>>>>,
-        >,
+        resp: oneshot::Sender<Result<Vec<(PeerId, Vec<Multiaddr>)>>>,
     },
 }
