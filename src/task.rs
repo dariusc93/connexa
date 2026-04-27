@@ -50,7 +50,7 @@ use futures::channel::{mpsc, oneshot};
 use futures::future::BoxFuture;
 use futures::{FutureExt, StreamExt};
 use futures_timer::Delay;
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 #[cfg(feature = "gossipsub")]
 use libp2p::gossipsub::{MessageAcceptance, MessageId};
 #[cfg(feature = "kad")]
@@ -560,6 +560,10 @@ where
             #[cfg(feature = "rendezvous")]
             Command::Rendezvous(rendezvous_command) => {
                 self.process_rendezvous_command(rendezvous_command)
+            }
+            #[cfg(feature = "relay")]
+            Command::RelayServer(relay_server_command) => {
+                self.process_relay_server_command(relay_server_command)
             }
             Command::Custom(custom_command) => {
                 (self.custom_task_callback)(swarm, &mut self.context, custom_command);

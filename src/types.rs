@@ -44,6 +44,8 @@ pub enum Command<T = ()> {
     Rendezvous(RendezvousCommand),
     #[cfg(feature = "autonat")]
     Autonat(AutonatCommand),
+    #[cfg(feature = "relay")]
+    RelayServer(RelayServerCommand),
     Whitelist(WhitelistCommand),
     Blacklist(BlacklistCommand),
     ConnectionLimits(ConnectionLimitsCommand),
@@ -103,6 +105,13 @@ impl<T> From<StreamCommand> for Command<T> {
 impl<T> From<RendezvousCommand> for Command<T> {
     fn from(cmd: RendezvousCommand) -> Self {
         Command::Rendezvous(cmd)
+    }
+}
+
+#[cfg(feature = "relay")]
+impl<T> From<RelayServerCommand> for Command<T> {
+    fn from(cmd: RelayServerCommand) -> Self {
+        Command::RelayServer(cmd)
     }
 }
 
@@ -490,6 +499,15 @@ pub enum RendezvousCommand {
         cookie: Option<Cookie>,
         ttl: Option<u64>,
         resp: oneshot::Sender<Result<(Cookie, Vec<(PeerId, Vec<Multiaddr>)>)>>,
+    },
+}
+
+#[cfg(feature = "relay")]
+#[derive(Debug)]
+pub enum RelayServerCommand {
+    StatusChanged {
+        status: Option<libp2p::relay::Status>,
+        resp: oneshot::Sender<Result<()>>,
     },
 }
 
