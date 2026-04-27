@@ -68,12 +68,12 @@ getrandom = { version = "0.2.15" }
 getrandom_03 = { version = "0.3.3", package = "getrandom" }
 hickory-resolver = "0.25.0-alpha.5"
 indexmap = "2.10.0"
-libp2p = { version = "0.56.0" }
-libp2p-allow-block-list = "0.6.0"
-libp2p-connection-limits = "0.6.0"
-libp2p-stream = { version = "0.4.0-alpha" }
-libp2p-webrtc = { version = "=0.9.0-alpha.1", features = ["pem"] }
-libp2p-webrtc-websys = "0.4.0"
+libp2p = { version = "0.57.0" }
+libp2p-allow-block-list = "0.7.0"
+libp2p-connection-limits = "0.7.0"
+libp2p-stream = { version = "0.5.0-alpha" }
+libp2p-webrtc = { version = "=0.10.0-alpha", features = ["pem"] }
+libp2p-webrtc-websys = "0.5.0"
 pollable-map = "0.1.7"
 pem = { version = "3.0.5" }
 rand = "0.8.5"
@@ -121,9 +121,17 @@ tokio = { features = ["full"], workspace = true }
 futures-timer = { workspace = true, features = ["wasm-bindgen"] }
 getrandom = { workspace = true, features = ["js"] }
 getrandom_03 = { workspace = true, features = ["wasm_js"] }
-libp2p = { features = ["macros", "serde", "wasm-bindgen"], workspace = true }
+libp2p = { features = ["macros", "serde"], workspace = true }
 libp2p-webrtc-websys = { workspace = true, optional = true }
 send_wrapper.workspace = true
 serde-wasm-bindgen.workspace = true
 tokio = { default-features = false, features = ["sync", "macros"], workspace = true }
 wasm-bindgen-futures.workspace = true
+
+[patch.crates-io]
+libp2p = { git = "https://github.com/libp2p/rust-libp2p.git", rev = "22fb4c7" }
+libp2p-allow-block-list = { git = "https://github.com/libp2p/rust-libp2p.git", rev = "22fb4c7" }
+libp2p-connection-limits = { git = "https://github.com/libp2p/rust-libp2p.git", rev = "22fb4c7" }
+libp2p-stream = { git = "https://github.com/libp2p/rust-libp2p.git", rev = "22fb4c7" }
+libp2p-webrtc = { git = "https://github.com/libp2p/rust-libp2p.git", rev = "22fb4c7" }
+libp2p-webrtc-websys = { git = "https://github.com/libp2p/rust-libp2p.git", rev = "22fb4c7" }
