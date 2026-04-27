@@ -136,7 +136,7 @@ where
         ConnexaRendezvous::new(self)
     }
 
-    /// Returns a handle for relay server functions 
+    /// Returns a handle for relay server functions
     #[cfg(feature = "relay")]
     pub fn relay_server(&self) -> ConnexaRelayServer<'_, T> {
         ConnexaRelayServer::new(self)

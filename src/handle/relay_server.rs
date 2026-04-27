@@ -1,6 +1,5 @@
 use crate::handle::Connexa;
 use crate::types::RelayServerCommand;
-use futures::TryFutureExt;
 use libp2p::relay::Status as RelayServerStatus;
 
 #[derive(Copy, Clone)]
