@@ -90,7 +90,7 @@ where
         rx.await.map_err(io::Error::other)?
     }
 
-    pub async fn disable_relaya(&self) -> io::Result<()> {
+    pub async fn disable_relays(&self) -> io::Result<()> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task

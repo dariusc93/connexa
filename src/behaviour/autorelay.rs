@@ -632,6 +632,7 @@ impl NetworkBehaviour for Behaviour {
                 // in the event that the address is from a peer going through a relay, automatically disqualify the connection
                 // from being used as a potential relay since there is no support for multi-HOP
                 if info.check_for_disqualifying_address() {
+                    info.relay_status = RelayStatus::NotSupported;
                     self.connections.insert((peer_id, connection_id), info);
                     return;
                 }
