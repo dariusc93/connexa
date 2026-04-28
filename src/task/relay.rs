@@ -87,7 +87,7 @@ where
                     return;
                 };
 
-                autorelay.disable_autorelay();
+                autorelay.disable_all_relays();
 
                 let _ = resp.send(Ok(()));
             }
