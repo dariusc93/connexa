@@ -38,7 +38,6 @@ pub struct Behaviour {
     external_addresses: ExternalAddresses,
     capacity_cleanup: Delay,
     max_reservation: NonZeroU8,
-    override_autorelay: bool,
     enable_auto_relay: bool,
     backoff: Optional<Delay>,
     waker: Option<Waker>,
@@ -53,7 +52,6 @@ impl Default for Behaviour {
             events: VecDeque::new(),
             capacity_cleanup: Delay::new(CLEANUP_INTERVAL),
             external_addresses: ExternalAddresses::default(),
-            override_autorelay: false,
             waker: None,
             enable_auto_relay: true,
             backoff: Optional::default(),
@@ -410,7 +408,6 @@ impl Behaviour {
             .external_addresses
             .iter()
             .any(|addr| addr.is_public() && !addr.is_relayed())
-            && !self.override_autorelay
         {
             tracing::trace!("local node reachable. autorelay will not run");
             return;
@@ -479,9 +476,7 @@ impl Behaviour {
             return;
         }
 
-        let remaining_targets_needed = targets_count
-            .checked_sub(pending_targets)
-            .unwrap_or_default();
+        let remaining_targets_needed = targets_count.saturating_sub(pending_targets);
 
         if remaining_targets_needed == 0 {
             tracing::warn!("no potential targets to meet reservation target.");
@@ -596,7 +591,6 @@ impl NetworkBehaviour for Behaviour {
                 .any(|addr| addr.is_public() && !addr.is_relayed())
             {
                 tracing::info!("local node is reachable. disabling autorelay");
-                self.override_autorelay = true;
                 self.disable_all_reservations();
                 self.backoff.take();
             } else if self.external_addresses.iter().count() == 0
@@ -607,7 +601,6 @@ impl NetworkBehaviour for Behaviour {
             {
                 tracing::info!("local node is not reachable. enabling autorelay");
                 self.backoff.replace(Delay::new(BACKOFF_INTERVAL));
-                self.override_autorelay = false;
             }
             return;
         }
