@@ -425,9 +425,9 @@ impl Behaviour {
 
         if peers_not_supported {
             if self.static_relays.is_empty() {
-                // TODO: Emit an event informing swarm about being in need of relays?
-                // however this would require separate functions to add relays to the autorelay state and possibly confirm if theres any existing connections
                 tracing::warn!("no relays present.");
+                self.events
+                    .push_back(ToSwarm::GenerateEvent(Event::NoRelayAvailable));
                 return;
             }
             for (peer_id, addrs) in self.static_relays.iter() {
@@ -533,9 +533,14 @@ impl Behaviour {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Event {
+    NoRelayAvailable,
+}
+
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Either<handler::Handler, dummy::DummyHandler>;
-    type ToSwarm = ();
+    type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
         &mut self,
