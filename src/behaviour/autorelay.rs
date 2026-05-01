@@ -317,14 +317,9 @@ impl Behaviour {
     }
 
     fn disable_all_reservations(&mut self) {
-        let relay_listeners = self
-            .connection_reservation
-            .iter()
-            .map(|(id, (peer_id, conn_id))| (*id, *peer_id, *conn_id))
-            .collect::<Vec<_>>();
-
-        for (listener_id, peer_id, connection_id) in relay_listeners {
-            let Some(connection) = self.connections.get_mut(&(peer_id, connection_id)) else {
+        for (listener_id, peer_connection) in self.connection_reservation.iter() {
+            let (peer_id, connection_id) = peer_connection;
+            let Some(connection) = self.connections.get_mut(peer_connection) else {
                 tracing::warn!(%peer_id, %connection_id, "connection not found when it should have been present. skipping");
                 continue;
             };
@@ -333,7 +328,7 @@ impl Behaviour {
                 connection.relay_status,
                 RelayStatus::Supported {
                     status: ReservationStatus::Active { id } | ReservationStatus::Pending { id }
-                } if id == listener_id
+                } if id == *listener_id
             ));
 
             connection.relay_status = RelayStatus::Supported {
@@ -341,7 +336,7 @@ impl Behaviour {
             };
 
             self.events
-                .push_back(ToSwarm::RemoveListener { id: listener_id });
+                .push_back(ToSwarm::RemoveListener { id: *listener_id });
             tracing::info!(%peer_id, %connection_id, ?listener_id, "removing relay listener");
         }
     }
