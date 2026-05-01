@@ -87,7 +87,7 @@ where
                     return;
                 };
 
-                autorelay.disable_all_relays();
+                autorelay.remove_existing_reservations();
 
                 let _ = resp.send(Ok(()));
             }

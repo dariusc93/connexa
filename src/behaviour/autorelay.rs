@@ -41,6 +41,7 @@ pub struct Behaviour {
     enable_auto_relay: bool,
     backoff: Optional<Delay>,
     waker: Option<Waker>,
+    remove_active_reservation_on_unsupport: bool,
 }
 
 impl Default for Behaviour {
@@ -54,6 +55,7 @@ impl Default for Behaviour {
             external_addresses: ExternalAddresses::default(),
             waker: None,
             enable_auto_relay: true,
+            remove_active_reservation_on_unsupport: true,
             backoff: Optional::default(),
             max_reservation: NonZeroU8::new(2).expect("not zero"),
         }
@@ -65,6 +67,7 @@ impl Default for Behaviour {
 pub struct Config {
     pub max_reservation: NonZeroU8,
     pub enable_auto_relay: bool,
+    pub remove_active_reservation_on_unsupport: bool,
 }
 
 #[derive(Default, Debug, Clone, Copy)]
@@ -81,6 +84,7 @@ impl Default for Config {
         Self {
             max_reservation: NonZeroU8::new(2).expect("not zero"),
             enable_auto_relay: true,
+            remove_active_reservation_on_unsupport: true,
         }
     }
 }
@@ -147,6 +151,7 @@ impl Behaviour {
         Self {
             enable_auto_relay: config.enable_auto_relay,
             max_reservation: config.max_reservation,
+            remove_active_reservation_on_unsupport: config.remove_active_reservation_on_unsupport,
             ..Default::default()
         }
     }
@@ -210,7 +215,7 @@ impl Behaviour {
         }
     }
 
-    pub fn disable_all_relays(&mut self) {
+    pub fn remove_existing_reservations(&mut self) {
         self.disable_all_reservations();
         if let Some(waker) = self.waker.take() {
             waker.wake();
@@ -753,9 +758,10 @@ impl NetworkBehaviour for Behaviour {
                 // if there is a change in protocol support during an active reservation,
                 // we should remove the reservation if its not already removed
 
-                if let RelayStatus::Supported {
-                    status: ReservationStatus::Active { id },
-                } = previous_status
+                if self.remove_active_reservation_on_unsupport
+                    && let RelayStatus::Supported {
+                        status: ReservationStatus::Active { id } | ReservationStatus::Pending { id },
+                    } = previous_status
                 {
                     self.events.push_back(ToSwarm::RemoveListener { id });
                 }
