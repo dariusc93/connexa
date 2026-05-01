@@ -277,10 +277,12 @@ impl Behaviour {
 
     fn disable_reservation(&mut self, id: ListenerId) {
         let Some((peer_id, connection_id)) = self.connection_reservation.shift_remove(&id) else {
+            tracing::error!(listener_id=%id, "could not find reservation with listener id.");
             return;
         };
 
         let Some(info) = self.connections.get_mut(&(peer_id, connection_id)) else {
+            tracing::error!(%peer_id, %connection_id, listener_id=%id, "connection not found.");
             return;
         };
 
