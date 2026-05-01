@@ -126,12 +126,6 @@ impl PeerInfo {
     }
 }
 
-impl Hash for PeerInfo {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.address.hash(state);
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RelayStatus {
     Supported { status: ReservationStatus },
@@ -203,6 +197,8 @@ impl Behaviour {
     pub fn enable_autorelay(&mut self) {
         self.enable_auto_relay = true;
         self.meet_reservation_target(Selection::Random);
+        self.events
+            .push_back(ToSwarm::GenerateEvent(Event::AutoRelayEnabled));
         if let Some(waker) = self.waker.take() {
             waker.wake();
         }
@@ -210,6 +206,8 @@ impl Behaviour {
 
     pub fn disable_autorelay(&mut self) {
         self.enable_auto_relay = false;
+        self.events
+            .push_back(ToSwarm::GenerateEvent(Event::AutoRelayDisabled));
         if let Some(waker) = self.waker.take() {
             waker.wake();
         }
@@ -324,7 +322,7 @@ impl Behaviour {
                 continue;
             };
 
-            assert!(matches!(
+            debug_assert!(matches!(
                 connection.relay_status,
                 RelayStatus::Supported {
                     status: ReservationStatus::Active { id } | ReservationStatus::Pending { id }
@@ -452,6 +450,8 @@ impl Behaviour {
             })
             .count();
 
+        tracing::info!(?relayed_targets, ?max, "relayed targets");
+
         if relayed_targets == max {
             tracing::warn!("max reservation reached. no more reservations will be made");
             return;
@@ -536,6 +536,8 @@ impl Behaviour {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
     NoRelayAvailable,
+    AutoRelayEnabled,
+    AutoRelayDisabled,
 }
 
 impl NetworkBehaviour for Behaviour {
