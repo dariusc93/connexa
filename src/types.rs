@@ -458,7 +458,6 @@ pub enum AutoRelayCommand {
     },
     RemoveStaticRelay {
         peer_id: PeerId,
-        relay_addr: Multiaddr,
         resp: oneshot::Sender<Result<bool>>,
     },
     DisableRelays {

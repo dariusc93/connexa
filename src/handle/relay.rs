@@ -33,19 +33,12 @@ where
         rx.await.map_err(io::Error::other)?
     }
 
-    pub async fn remove_static_relay(&self, peer_id: PeerId, addr: Multiaddr) -> io::Result<bool> {
+    pub async fn remove_static_relay(&self, peer_id: PeerId) -> io::Result<bool> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
             .clone()
-            .send(
-                AutoRelayCommand::RemoveStaticRelay {
-                    peer_id,
-                    relay_addr: addr,
-                    resp: tx,
-                }
-                .into(),
-            )
+            .send(AutoRelayCommand::RemoveStaticRelay { peer_id, resp: tx }.into())
             .await?;
         rx.await.map_err(io::Error::other)?
     }

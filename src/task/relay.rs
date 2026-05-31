@@ -1,3 +1,4 @@
+use crate::behaviour::autorelay;
 use crate::behaviour::peer_store::store::Store;
 use crate::task::ConnexaTask;
 use crate::types::AutoRelayCommand;
@@ -31,17 +32,13 @@ where
 
                 let _ = resp.send(Ok(autorelay.add_static_relay(peer_id, relay_addr)));
             }
-            AutoRelayCommand::RemoveStaticRelay {
-                peer_id,
-                relay_addr,
-                resp,
-            } => {
+            AutoRelayCommand::RemoveStaticRelay { peer_id, resp } => {
                 let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
                     let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
                     return;
                 };
 
-                let _ = resp.send(Ok(autorelay.remove_static_relay(peer_id, relay_addr)));
+                let _ = resp.send(Ok(autorelay.remove_static_relay(&peer_id)));
             }
             AutoRelayCommand::ListStaticRelays { resp } => {
                 let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
@@ -49,7 +46,10 @@ where
                     return;
                 };
 
-                let list = autorelay.list_static_relays();
+                let list = autorelay
+                    .static_relays()
+                    .map(|(peer_id, addr)| (*peer_id, addr.to_vec()))
+                    .collect::<Vec<_>>();
                 let _ = resp.send(Ok(list));
             }
             AutoRelayCommand::GetStaticRelay { peer_id, resp } => {
@@ -58,8 +58,14 @@ where
                     return;
                 };
 
-                let addrs = autorelay.get_static_relay_addrs(peer_id);
-                let _ = resp.send(Ok(addrs));
+                let addr = autorelay
+                    .static_relays()
+                    .find(|(p, _)| **p == peer_id)
+                    .map(|(_, addr)| addr.to_vec())
+                    .ok_or_else(|| {
+                        std::io::Error::new(std::io::ErrorKind::NotFound, "static relay not found")
+                    });
+                let _ = resp.send(addr);
             }
             AutoRelayCommand::EnableAutoRelay { resp } => {
                 let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
@@ -67,7 +73,7 @@ where
                     return;
                 };
 
-                autorelay.enable_autorelay();
+                autorelay.set_status(Some(autorelay::Status::Enable));
 
                 let _ = resp.send(Ok(()));
             }
@@ -77,7 +83,7 @@ where
                     return;
                 };
 
-                autorelay.disable_autorelay();
+                autorelay.set_status(Some(autorelay::Status::Disable));
 
                 let _ = resp.send(Ok(()));
             }
@@ -87,7 +93,7 @@ where
                     return;
                 };
 
-                autorelay.remove_existing_reservations();
+                autorelay.remove_all_reservations();
 
                 let _ = resp.send(Ok(()));
             }

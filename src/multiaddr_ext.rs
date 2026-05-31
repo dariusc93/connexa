@@ -1,3 +1,4 @@
+use crate::prelude::PeerId;
 use libp2p::Multiaddr;
 use libp2p::multiaddr::Protocol;
 
@@ -11,6 +12,7 @@ pub trait MultiaddrExt {
     fn is_private(&self) -> bool;
 
     fn is_unspecified(&self) -> bool;
+    fn relay_peer_id(&self) -> Option<PeerId>;
 }
 
 impl MultiaddrExt for Multiaddr {
@@ -46,6 +48,18 @@ impl MultiaddrExt for Multiaddr {
             Protocol::Ip6(ip) => ip.is_unspecified(),
             _ => false,
         })
+    }
+
+    fn relay_peer_id(&self) -> Option<PeerId> {
+        let mut last_p2p = None;
+        for proto in self.iter() {
+            match proto {
+                Protocol::P2p(peer) => last_p2p = Some(peer),
+                Protocol::P2pCircuit => return last_p2p,
+                _ => {}
+            }
+        }
+        None
     }
 }
 
