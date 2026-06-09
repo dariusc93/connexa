@@ -34,6 +34,22 @@ use {
 /// Transport type.
 pub(crate) type TTransport = Boxed<(PeerId, StreamMuxerBox)>;
 
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    feature = "yamux",
+    not(any(feature = "noise", feature = "tls"))
+))]
+compile_error!(
+    "the `yamux` feature requires at least one of `noise` or `tls` to be enabled on native targets"
+);
+
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    feature = "websocket",
+    not(feature = "tcp")
+))]
+compile_error!("the `websocket` feature requires the `tcp` feature on native targets");
+
 pub struct TransportConfig {
     #[cfg(feature = "tcp")]
     #[cfg(not(target_arch = "wasm32"))]
@@ -57,6 +73,7 @@ pub struct TransportConfig {
     pub enable_dns: bool,
     pub enable_memory_transport: bool,
     #[cfg(feature = "webtransport")]
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub enable_webtransport: bool,
     #[cfg(feature = "websocket")]
     #[cfg(not(target_arch = "wasm32"))]
@@ -251,6 +268,31 @@ pub(crate) fn build_transport(
     use libp2p::tcp::{Config as GenTcpConfig, tokio::Transport as TokioTcpTransport};
     #[cfg(feature = "tls")]
     use libp2p::tls;
+
+    #[allow(unused_mut)]
+    let mut has_transport = enable_memory_transport;
+    #[cfg(feature = "tcp")]
+    {
+        has_transport |= enable_tcp;
+    }
+    #[cfg(feature = "quic")]
+    {
+        has_transport |= enable_quic;
+    }
+    #[cfg(all(feature = "websocket", feature = "tcp"))]
+    {
+        has_transport |= enable_websocket;
+    }
+    #[cfg(feature = "webrtc")]
+    {
+        has_transport |= enable_webrtc;
+    }
+    if !has_transport {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "no transport was enabled; enable at least one of tcp, quic, websocket, webrtc, or the memory transport",
+        ));
+    }
 
     let transport = match enable_memory_transport {
         true => Either::Left(MemoryTransport::new()),
