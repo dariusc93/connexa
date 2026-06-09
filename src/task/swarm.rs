@@ -1,12 +1,12 @@
 use crate::behaviour::BehaviourEvent;
 use crate::behaviour::peer_store::store::Store;
-use crate::error::ArcError;
 use crate::prelude::ConnexaSwarmEvent;
 use crate::task::ConnexaTask;
 #[cfg(feature = "rendezvous")]
 use libp2p::PeerId;
 use libp2p::swarm::NetworkBehaviour;
 use libp2p::swarm::SwarmEvent;
+use other_error::ArcError;
 use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 

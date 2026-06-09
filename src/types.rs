@@ -1,5 +1,4 @@
 #![allow(unused_imports)]
-use crate::error::ArcError;
 use crate::handle::swarm::ConnectionTarget;
 use crate::prelude::swarm::{DialError, ListenError, ListenOpts, SwarmEvent};
 use bytes::Bytes;
@@ -22,6 +21,7 @@ use libp2p::swarm::dial_opts::DialOpts;
 use libp2p::swarm::{ConnectionError, ConnectionId};
 use libp2p::{Multiaddr, PeerId, StreamProtocol};
 use libp2p_connection_limits::ConnectionLimits;
+use other_error::ArcError;
 use std::collections::HashSet;
 use std::sync::Arc;
 
