@@ -607,6 +607,7 @@ where
 
             #[cfg(feature = "kad")]
             self.dht_event_global_sender.retain(|ch| !ch.is_closed());
+            self.connection_listeners.retain(|ch| !ch.is_closed());
         }
 
         while let Poll::Ready(Some(command)) = self.command_receiver.poll_next_unpin(cx) {
