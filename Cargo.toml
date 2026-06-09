@@ -15,7 +15,7 @@ keywords = ["libp2p", "p2p", "networking", "peer-to-peer"]
 [features]
 default = ["full"]
 
-full = ["stream", "floodsub", "identify", "dcutr", "gossipsub", "autonat", "relay", "kad", "keypair_base64_encoding", "ping", "request-response", "request-response-misc", "rendezvous", "upnp", "mdns", "rsa", "dns", "ed25519", "secp256k1", "ecdsa", "tls", "noise", "tcp", "quic", "pnet", "websocket", "yamux"]
+full = ["stream", "floodsub", "identify", "dcutr", "gossipsub", "autonat", "relay", "kad", "keypair_base64_encoding", "ping", "request-response", "request-response-misc", "rendezvous", "upnp", "mdns", "rsa", "dns", "ed25519", "secp256k1", "ecdsa", "tls", "noise", "tcp", "quic", "pnet", "websocket", "yamux", "cid"]
 
 rsa = ["libp2p/rsa"]
 ed25519 = ["libp2p/ed25519"]
@@ -31,7 +31,7 @@ dcutr = ["libp2p/dcutr"]
 kad = ["libp2p/kad"]
 ping = ["libp2p/ping"]
 request-response = ["libp2p/request-response"]
-request-response-misc = ["libp2p/json", "libp2p/cbor"]
+request-response-misc = ["request-response", "libp2p/json", "libp2p/cbor"]
 rendezvous = ["libp2p/rendezvous"]
 upnp = ["libp2p/upnp"]
 stream = ["dep:libp2p-stream"]
@@ -51,7 +51,7 @@ yamux = ["libp2p/yamux"]
 testing = []
 
 webrtc = ["dep:libp2p-webrtc", "dep:libp2p-webrtc-websys"]
-websocket = ["libp2p/websocket", "rcgen", "libp2p/websocket-websys"]
+websocket = ["libp2p/websocket", "rcgen", "dep:pem", "libp2p/websocket-websys"]
 webtransport = ["libp2p/webtransport-websys"]
 
 [workspace]
@@ -74,7 +74,7 @@ indexmap = "2.10.0"
 libp2p = { version = "0.56.0" }
 libp2p-allow-block-list = "0.6.0"
 libp2p-connection-limits = "0.6.0"
-libp2p-stream = { version = "0.4.0-alpha" }
+libp2p-stream = { version = "=0.4.0-alpha" }
 libp2p-webrtc = { version = "=0.9.0-alpha.1", features = ["pem"] }
 libp2p-webrtc-websys = "0.4.0"
 pollable-map = "0.1.7"
@@ -105,7 +105,7 @@ indexmap.workspace = true
 libp2p-allow-block-list.workspace = true
 libp2p-connection-limits.workspace = true
 libp2p-stream = { workspace = true, optional = true }
-pem.workspace = true
+pem = { workspace = true, optional = true }
 pollable-map.workspace = true
 rand.workspace = true
 serde = { features = ["derive"], workspace = true }
