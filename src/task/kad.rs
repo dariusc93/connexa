@@ -418,8 +418,10 @@ where
                         },
                     ) => {
                         tracing::info!(?peer, ?num_remaining, "kademlia bootstrap timeout");
-                        if let Some(ch) = self.pending_dht_bootstrap.shift_remove(&id) {
-                            let _ = ch.send(Err(io::Error::new(io::ErrorKind::TimedOut, e)));
+                        if step.last {
+                            if let Some(ch) = self.pending_dht_bootstrap.shift_remove(&id) {
+                                let _ = ch.send(Err(io::Error::new(io::ErrorKind::TimedOut, e)));
+                            }
                         }
                     }
                 },
