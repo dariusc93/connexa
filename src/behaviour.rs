@@ -153,20 +153,20 @@ where
             .into();
 
         #[cfg(feature = "kad")]
-        let kademlia: Toggle<Kademlia<MemoryStore>> = protocols
-            .kad
-            .then(|| {
+        let kademlia: Toggle<Kademlia<MemoryStore>> = match protocols.kad {
+            true => {
                 let (protocol, config_fn) = config.kademlia_config;
-                let protocol =
-                    libp2p::StreamProtocol::try_from_owned(protocol).expect("valid protocol");
+                let protocol = libp2p::StreamProtocol::try_from_owned(protocol)
+                    .map_err(std::io::Error::other)?;
                 let config = config_fn(libp2p::kad::Config::new(protocol));
-                Kademlia::with_config(
+                Toggle::from(Some(Kademlia::with_config(
                     peer_id,
                     MemoryStore::with_config(peer_id, Default::default()),
                     config,
-                )
-            })
-            .into();
+                )))
+            }
+            false => Toggle::from(None),
+        };
 
         #[cfg(feature = "autonat")]
         let autonat_v1 = protocols
@@ -217,16 +217,18 @@ where
             .into();
 
         #[cfg(feature = "gossipsub")]
-        let gossipsub = protocols
-            .gossipsub
-            .then(|| {
+        let gossipsub = match protocols.gossipsub {
+            true => {
                 let config_fn = config.gossipsub_config;
                 let (config_builder, auth) =
                     config_fn(&keypair, libp2p::gossipsub::ConfigBuilder::default());
-                let config = config_builder.build().expect("valid configuration");
-                libp2p::gossipsub::Behaviour::new(auth, config).expect("valid configuration")
-            })
-            .into();
+                let config = config_builder.build().map_err(std::io::Error::other)?;
+                let behaviour = libp2p::gossipsub::Behaviour::new(auth, config)
+                    .map_err(std::io::Error::other)?;
+                Toggle::from(Some(behaviour))
+            }
+            false => Toggle::from(None),
+        };
 
         #[cfg(feature = "floodsub")]
         let floodsub = protocols
@@ -400,7 +402,7 @@ where
 
             for (index, config) in config.request_response_config.iter().enumerate() {
                 let protocol = libp2p::StreamProtocol::try_from_owned(config.protocol.clone())
-                    .expect("valid protocol");
+                    .map_err(std::io::Error::other)?;
                 if existing_protocol.contains_key(&protocol) {
                     tracing::warn!(%protocol, "request-response protocol is already registered");
                     continue;
