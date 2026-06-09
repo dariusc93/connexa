@@ -3,6 +3,8 @@ use crate::behaviour::peer_store::store::Store;
 use crate::error::ArcError;
 use crate::prelude::ConnexaSwarmEvent;
 use crate::task::ConnexaTask;
+#[cfg(feature = "rendezvous")]
+use libp2p::PeerId;
 use libp2p::swarm::NetworkBehaviour;
 use libp2p::swarm::SwarmEvent;
 use std::collections::hash_map::Entry;
@@ -95,6 +97,11 @@ where
                     }) {
                         tracing::warn!(%peer_id, %connection_id, ?endpoint, %num_established, error=%e, "failed to send connection closed event");
                     }
+                }
+
+                #[cfg(feature = "rendezvous")]
+                if num_established == 0 {
+                    self.fail_pending_rendezvous(&peer_id);
                 }
             }
             SwarmEvent::IncomingConnection {
@@ -319,6 +326,39 @@ where
             _ => {}
         }
     }
+
+    #[cfg(feature = "rendezvous")]
+    fn fail_pending_rendezvous(&mut self, peer_id: &PeerId) {
+        fn disconnected() -> std::io::Error {
+            std::io::Error::other("rendezvous node disconnected before responding")
+        }
+
+        if let Some(namespaces) = self.pending_rendezvous_discover.shift_remove(peer_id) {
+            for (_namespace, list) in namespaces {
+                for ch in list {
+                    let _ = ch.send(Err(disconnected()));
+                }
+            }
+        }
+
+        if let Some(list) = self.pending_rendezvous_discover_any.shift_remove(peer_id) {
+            for ch in list {
+                let _ = ch.send(Err(disconnected()));
+            }
+        }
+
+        let stale_keys = self
+            .pending_rendezvous_register
+            .keys()
+            .filter(|(node, _)| node == peer_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        for key in stale_keys {
+            if let Some(list) = self.pending_rendezvous_register.shift_remove(&key) {
+                for ch in list {
+                    let _ = ch.send(Err(disconnected()));
+                }
+            }
         }
     }
 }
