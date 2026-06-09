@@ -3,7 +3,6 @@ mod codec;
 
 use crate::behaviour::request_response::codec::Codec;
 use bytes::Bytes;
-use futures::TryFutureExt;
 use futures::channel::mpsc::Sender as MpscSender;
 use futures::channel::oneshot::Sender as OneshotSender;
 use futures::future::BoxFuture;
@@ -231,16 +230,18 @@ impl Behaviour {
                 .or_default()
                 .insert(id, tx);
             oneshots.insert(
-                peer_id,
-                rx.map_err(|e| std::io::Error::new(std::io::ErrorKind::BrokenPipe, e))
-                    .map(|r| match r {
+                id,
+                rx.map(move |r| {
+                    let result = match r {
                         Ok(Ok(bytes)) => Ok(bytes),
                         Ok(Err(e)) => Err(e),
-                        Err(e) => Err(e),
-                    }),
+                        Err(e) => Err(std::io::Error::new(std::io::ErrorKind::BrokenPipe, e)),
+                    };
+                    (peer_id, result)
+                }),
             );
         }
-        oneshots.boxed()
+        oneshots.map(|(_id, item)| item).boxed()
     }
 
     fn process_request(
