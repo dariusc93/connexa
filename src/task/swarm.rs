@@ -309,10 +309,16 @@ where
             BehaviourEvent::AutonatV2Client(event) => self.process_autonat_v2_client_event(event),
             #[cfg(feature = "autonat")]
             BehaviourEvent::AutonatV2Server(event) => self.process_autonat_v2_server_event(event),
+            BehaviourEvent::PeerStore(event) => {
+                tracing::debug!(?event, "peer store event");
+            }
             BehaviourEvent::Custom(custom_event) => {
                 (self.custom_event_callback)(swarm, &mut self.context, custom_event)
             }
-            _ => unreachable!(),
+            #[allow(unreachable_patterns)]
+            _ => {}
+        }
+    }
         }
     }
 }
