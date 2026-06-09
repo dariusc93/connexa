@@ -748,6 +748,14 @@ where
             .expect("pem is provided; should not fail")
     }
 
+    /// Enables WebTransport.
+    #[cfg(feature = "webtransport")]
+    #[cfg(target_arch = "wasm32")]
+    pub fn enable_webtransport(mut self) -> Self {
+        self.transport_config.enable_webtransport = true;
+        self
+    }
+
     /// Enables memory transport
     pub fn enable_memory_transport(mut self) -> Self {
         self.transport_config.enable_memory_transport = true;
