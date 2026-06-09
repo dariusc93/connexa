@@ -216,6 +216,16 @@ where
                 tracing::info!(%listener_id, ?addresses, ?reason, "listener closed");
                 self.listener_addresses.remove(&listener_id);
 
+                if let Some(ch) = self.pending_listen_on.shift_remove(&listener_id) {
+                    let err = match &reason {
+                        Ok(()) => {
+                            std::io::Error::other("listener closed before producing an address")
+                        }
+                        Err(e) => std::io::Error::other(e.to_string()),
+                    };
+                    let _ = ch.send(Err(err));
+                }
+
                 if let Some(ch) = self.pending_remove_listener.shift_remove(&listener_id) {
                     let _ = ch.send(reason);
                 }
@@ -231,9 +241,6 @@ where
             }
             SwarmEvent::ListenerError { listener_id, error } => {
                 tracing::error!(%listener_id, error=%error, "listener error");
-                if let Some(ch) = self.pending_listen_on.shift_remove(&listener_id) {
-                    let _ = ch.send(Err(std::io::Error::other(error)));
-                }
             }
             SwarmEvent::Dialing {
                 peer_id,
@@ -291,7 +298,7 @@ where
             #[cfg(feature = "upnp")]
             BehaviourEvent::Upnp(event) => self.process_upnp_event(event),
             #[cfg(not(target_arch = "wasm32"))]
-            #[cfg(all(feature = "dcutr", feature = "relay"))]
+            #[cfg(feature = "dcutr")]
             BehaviourEvent::Dcutr(event) => self.process_dcutr_event(event),
             #[cfg(feature = "rendezvous")]
             BehaviourEvent::RendezvousClient(event) => self.process_rendezvous_client_event(event),
