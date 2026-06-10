@@ -519,7 +519,7 @@ pub enum DHTEvent {
 
 #[cfg(feature = "kad")]
 impl DHTEvent {
-    pub(crate) fn set_record_confirmation(&self, ch: oneshot::Sender<Result<Record>>) -> Self {
+    pub(crate) fn set_record_confirmation(&self, ch: oneshot::Sender<Record>) -> Self {
         let mut event = self.clone();
         match &mut event {
             DHTEvent::PutRecord { record, .. } => {
@@ -529,10 +529,7 @@ impl DHTEvent {
             _ => unreachable!("DHTEvent::PutRecord called on non-PutRecord"),
         }
     }
-    pub(crate) fn set_provider_confirmation(
-        &self,
-        ch: oneshot::Sender<Result<ProviderRecord>>,
-    ) -> Self {
+    pub(crate) fn set_provider_confirmation(&self, ch: oneshot::Sender<ProviderRecord>) -> Self {
         let mut event = self.clone();
         match &mut event {
             DHTEvent::ProvideRecord { record, .. } => {
@@ -549,9 +546,33 @@ impl DHTEvent {
 pub struct RecordHandle<R> {
     /// The underlining record, if available
     /// Note: a record is only provided if configured by kademlia behaviour
-    pub record: Option<R>,
-    /// Channel used to confirm provided record
-    pub confirm: Option<oneshot::Sender<Result<R>>>,
+    pub(crate) record: Option<R>,
+    pub(crate) confirm: Option<oneshot::Sender<R>>,
+}
+
+#[cfg(feature = "kad")]
+impl<R> RecordHandle<R> {
+    /// The record awaiting confirmation, if any.
+    pub fn record(&self) -> Option<&R> {
+        self.record.as_ref()
+    }
+
+    /// Accept the record as received, storing it locally.
+    pub fn accept(mut self) {
+        if let (Some(ch), Some(record)) = (self.confirm.take(), self.record.take()) {
+            let _ = ch.send(record);
+        }
+    }
+
+    /// Accept the record, storing the provided (possibly modified) value.
+    pub fn accept_with(mut self, record: R) {
+        if let Some(ch) = self.confirm.take() {
+            let _ = ch.send(record);
+        }
+    }
+
+    /// Reject the record so it is not stored. Dropping the handle has the same effect.
+    pub fn reject(self) {}
 }
 
 #[cfg(feature = "kad")]

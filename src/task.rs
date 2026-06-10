@@ -103,16 +103,13 @@ where
     pub dht_event_global_sender: Vec<mpsc::Sender<DHTEvent>>,
 
     #[cfg(feature = "kad")]
-    pub dht_put_record_receiver:
-        StreamMap<Key, FutureSet<oneshot::Receiver<std::io::Result<Record>>>>,
+    pub dht_put_record_receiver: StreamMap<Key, FutureSet<oneshot::Receiver<Record>>>,
     #[cfg(feature = "kad")]
-    pub dht_put_record_global_receiver: FutureSet<oneshot::Receiver<std::io::Result<Record>>>,
+    pub dht_put_record_global_receiver: FutureSet<oneshot::Receiver<Record>>,
     #[cfg(feature = "kad")]
-    pub dht_provider_record_receiver:
-        StreamMap<Key, FutureSet<oneshot::Receiver<std::io::Result<ProviderRecord>>>>,
+    pub dht_provider_record_receiver: StreamMap<Key, FutureSet<oneshot::Receiver<ProviderRecord>>>,
     #[cfg(feature = "kad")]
-    pub dht_provider_record_global_receiver:
-        FutureSet<oneshot::Receiver<std::io::Result<ProviderRecord>>>,
+    pub dht_provider_record_global_receiver: FutureSet<oneshot::Receiver<ProviderRecord>>,
     #[cfg(feature = "kad")]
     pub pending_dht_put_record: IndexMap<QueryId, oneshot::Sender<ConnexaResult<()>>>,
     #[cfg(feature = "kad")]
@@ -702,13 +699,9 @@ where
             self.dht_put_record_receiver.poll_next_unpin(cx)
         {
             let record = match result {
-                Ok(Ok(record)) => record,
-                Ok(Err(e)) => {
-                    tracing::error!(?key, ?e, "dht put record failed");
-                    continue;
-                }
-                Err(e) => {
-                    tracing::error!(?key, ?e, "dht put record failed");
+                Ok(record) => record,
+                Err(_) => {
+                    tracing::debug!(?key, "dht put record was not accepted; skipping");
                     continue;
                 }
             };
@@ -733,13 +726,9 @@ where
             self.dht_put_record_global_receiver.poll_next_unpin(cx)
         {
             let record = match result {
-                Ok(Ok(record)) => record,
-                Ok(Err(e)) => {
-                    tracing::error!(?e, "dht put record failed");
-                    continue;
-                }
-                Err(e) => {
-                    tracing::error!(?e, "dht put record failed");
+                Ok(record) => record,
+                Err(_) => {
+                    tracing::debug!("dht put record was not accepted; skipping");
                     continue;
                 }
             };
@@ -765,13 +754,9 @@ where
             self.dht_provider_record_receiver.poll_next_unpin(cx)
         {
             let record = match result {
-                Ok(Ok(record)) => record,
-                Ok(Err(e)) => {
-                    tracing::error!(?key, ?e, "dht provider record failed");
-                    continue;
-                }
-                Err(e) => {
-                    tracing::error!(?key, ?e, "dht provider record failed");
+                Ok(record) => record,
+                Err(_) => {
+                    tracing::debug!(?key, "dht provider record was not accepted; skipping");
                     continue;
                 }
             };
@@ -797,13 +782,9 @@ where
             self.dht_provider_record_global_receiver.poll_next_unpin(cx)
         {
             let record = match result {
-                Ok(Ok(record)) => record,
-                Ok(Err(e)) => {
-                    tracing::error!(?e, "dht provider record failed");
-                    continue;
-                }
-                Err(e) => {
-                    tracing::error!(?e, "dht provider record failed");
+                Ok(record) => record,
+                Err(_) => {
+                    tracing::debug!("dht provider record was not accepted; skipping");
                     continue;
                 }
             };

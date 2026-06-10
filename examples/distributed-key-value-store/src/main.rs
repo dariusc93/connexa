@@ -288,47 +288,35 @@ fn provider_record_to_writer<W: Write>(
     writer: &mut W,
     record: RecordHandle<ProviderRecord>,
 ) -> io::Result<()> {
-    if let RecordHandle {
-        record: Some(record),
-        confirm: Some(ch),
-    } = record
-    {
+    if let Some(rec) = record.record() {
         writeln!(
             writer,
             ">>> record key: {}",
-            String::from_utf8_lossy(record.key.as_ref())
+            String::from_utf8_lossy(rec.key.as_ref())
         )?;
-        writeln!(writer, ">>> record provider: {}", record.provider)?;
-        writeln!(
-            writer,
-            ">>> record provider address: {:?}",
-            record.addresses
-        )?;
-        let _ = ch.send(Ok(record));
+        writeln!(writer, ">>> record provider: {}", rec.provider)?;
+        writeln!(writer, ">>> record provider address: {:?}", rec.addresses)?;
     }
+    record.accept();
     Ok(())
 }
 
 fn record_to_writer<W: Write>(writer: &mut W, record: RecordHandle<Record>) -> io::Result<()> {
-    if let RecordHandle {
-        record: Some(record),
-        confirm: Some(ch),
-    } = record
-    {
+    if let Some(rec) = record.record() {
         writeln!(
             writer,
             ">>> record key: {}",
-            String::from_utf8_lossy(record.key.as_ref())
+            String::from_utf8_lossy(rec.key.as_ref())
         )?;
         writeln!(
             writer,
             ">>> record value: {:?}",
-            String::from_utf8_lossy(record.value.as_ref())
+            String::from_utf8_lossy(rec.value.as_ref())
         )?;
-        if let Some(publisher) = record.publisher {
+        if let Some(publisher) = &rec.publisher {
             writeln!(writer, ">>> record publisher: {}", publisher)?;
         }
-        let _ = ch.send(Ok(record));
     }
+    record.accept();
     Ok(())
 }
