@@ -433,19 +433,29 @@ pub enum DHTCommand {
 }
 
 #[cfg(feature = "request-response")]
+type ResponseStream = BoxStream<'static, (PeerId, ConnexaResult<Bytes>)>;
+#[cfg(feature = "request-response")]
+type ResponseFuture = BoxFuture<'static, ConnexaResult<Bytes>>;
+
+type PeerAddressList = Vec<(PeerId, Vec<Multiaddr>)>;
+
+#[cfg(feature = "rendezvous")]
+type RendezvousDiscoverResponse = ConnexaResult<(Cookie, Vec<(PeerId, Vec<Multiaddr>)>)>;
+
+#[cfg(feature = "request-response")]
 #[derive(Debug)]
 pub enum RequestResponseCommand {
     SendRequests {
         protocol: Option<StreamProtocol>,
         peers: IndexSet<PeerId>,
         request: Bytes,
-        resp: oneshot::Sender<ConnexaResult<BoxStream<'static, (PeerId, ConnexaResult<Bytes>)>>>,
+        resp: oneshot::Sender<ConnexaResult<ResponseStream>>,
     },
     SendRequest {
         protocol: Option<StreamProtocol>,
         peer_id: PeerId,
         request: Bytes,
-        resp: oneshot::Sender<ConnexaResult<BoxFuture<'static, ConnexaResult<Bytes>>>>,
+        resp: oneshot::Sender<ConnexaResult<ResponseFuture>>,
     },
     SendResponse {
         protocol: Option<StreamProtocol>,
@@ -491,7 +501,7 @@ pub enum RendezvousCommand {
         peer_id: PeerId,
         cookie: Option<Cookie>,
         ttl: Option<u64>,
-        resp: oneshot::Sender<ConnexaResult<(Cookie, Vec<(PeerId, Vec<Multiaddr>)>)>>,
+        resp: oneshot::Sender<RendezvousDiscoverResponse>,
     },
 }
 
@@ -641,6 +651,6 @@ pub enum PeerstoreCommand {
         resp: oneshot::Sender<ConnexaResult<Vec<Multiaddr>>>,
     },
     ListAll {
-        resp: oneshot::Sender<ConnexaResult<Vec<(PeerId, Vec<Multiaddr>)>>>,
+        resp: oneshot::Sender<ConnexaResult<PeerAddressList>>,
     },
 }

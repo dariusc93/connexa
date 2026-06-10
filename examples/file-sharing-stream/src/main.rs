@@ -54,8 +54,7 @@ async fn main() -> std::io::Result<()> {
 
     let ids = FuturesUnordered::from_iter(
         addrs
-            .iter()
-            .cloned()
+            .into_iter()
             .map(|addr| async { (addr.clone(), connexa.swarm().listen_on(addr).await) }),
     )
     .filter_map(|(addr, result)| async move {

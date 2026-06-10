@@ -246,7 +246,7 @@ impl IntoRequest for &String {
     }
 }
 
-impl<'a> IntoRequest for &'a str {
+impl IntoRequest for &str {
     fn into_request(self) -> IoResult<(OptionalStreamProtocol, Bytes)> {
         IntoRequest::into_request(self.to_string())
     }

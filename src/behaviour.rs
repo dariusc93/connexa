@@ -221,7 +221,7 @@ where
             true => {
                 let config_fn = config.gossipsub_config;
                 let (config_builder, auth) =
-                    config_fn(&keypair, libp2p::gossipsub::ConfigBuilder::default());
+                    config_fn(keypair, libp2p::gossipsub::ConfigBuilder::default());
                 let config = config_builder.build().map_err(std::io::Error::other)?;
                 let behaviour = libp2p::gossipsub::Behaviour::new(auth, config)
                     .map_err(std::io::Error::other)?;

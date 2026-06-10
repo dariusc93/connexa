@@ -74,19 +74,22 @@ where
     protocols: Protocols,
 }
 
+#[cfg(feature = "gossipsub")]
+type GossipsubConfigFn = Box<
+    dyn FnOnce(
+        &Keypair,
+        libp2p::gossipsub::ConfigBuilder,
+    ) -> (
+        libp2p::gossipsub::ConfigBuilder,
+        libp2p::gossipsub::MessageAuthenticity,
+    ),
+>;
+
 pub(crate) struct Config<S: Store> {
     #[cfg(feature = "kad")]
     pub kademlia_config: (String, Box<dyn FnOnce(KadConfig) -> KadConfig>),
     #[cfg(feature = "gossipsub")]
-    pub gossipsub_config: Box<
-        dyn FnOnce(
-            &Keypair,
-            libp2p::gossipsub::ConfigBuilder,
-        ) -> (
-            libp2p::gossipsub::ConfigBuilder,
-            libp2p::gossipsub::MessageAuthenticity,
-        ),
-    >,
+    pub gossipsub_config: GossipsubConfigFn,
     #[cfg(feature = "floodsub")]
     pub floodsub_config: Box<dyn FnOnce(FloodsubConfig) -> FloodsubConfig>,
     #[cfg(feature = "ping")]

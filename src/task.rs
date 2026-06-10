@@ -74,6 +74,10 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
+#[cfg(feature = "rendezvous")]
+type RendezvousDiscoverResponse =
+    ConnexaResult<(libp2p::rendezvous::Cookie, Vec<(PeerId, Vec<Multiaddr>)>)>;
+
 pub struct ConnexaTask<X, C: NetworkBehaviour, S, T = ()>
 where
     C: Send,
@@ -144,27 +148,12 @@ where
         IndexMap<(PeerId, Namespace), Vec<oneshot::Sender<ConnexaResult<()>>>>,
 
     #[cfg(feature = "rendezvous")]
-    pub pending_rendezvous_discover: IndexMap<
-        PeerId,
-        IndexMap<
-            Namespace,
-            Vec<
-                oneshot::Sender<
-                    ConnexaResult<(libp2p::rendezvous::Cookie, Vec<(PeerId, Vec<Multiaddr>)>)>,
-                >,
-            >,
-        >,
-    >,
+    pub pending_rendezvous_discover:
+        IndexMap<PeerId, IndexMap<Namespace, Vec<oneshot::Sender<RendezvousDiscoverResponse>>>>,
 
     #[cfg(feature = "rendezvous")]
-    pub pending_rendezvous_discover_any: IndexMap<
-        PeerId,
-        Vec<
-            oneshot::Sender<
-                ConnexaResult<(libp2p::rendezvous::Cookie, Vec<(PeerId, Vec<Multiaddr>)>)>,
-            >,
-        >,
-    >,
+    pub pending_rendezvous_discover_any:
+        IndexMap<PeerId, Vec<oneshot::Sender<RendezvousDiscoverResponse>>>,
 
     #[cfg(feature = "gossipsub")]
     pub gossipsub_can_propagate:

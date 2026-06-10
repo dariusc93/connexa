@@ -446,7 +446,7 @@ pub(crate) fn build_transport(
     #[cfg(feature = "webrtc")]
     let transport = match enable_webrtc {
         true => {
-            let wrtc_tp = generate_webrtc_transport(&keypair, &webrtc_pem)?;
+            let wrtc_tp = generate_webrtc_transport(keypair, &webrtc_pem)?;
 
             wrtc_tp
                 .or_transport(transport)
@@ -462,7 +462,7 @@ pub(crate) fn build_transport(
     #[cfg(feature = "quic")]
     let transport = match enable_quic {
         true => {
-            let quic_config = quic_config_callback(QuicConfig::new(&keypair));
+            let quic_config = quic_config_callback(QuicConfig::new(keypair));
             let quic_transport = TokioQuicTransport::new(quic_config);
 
             OrTransport::new(quic_transport, transport)
