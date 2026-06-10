@@ -17,6 +17,7 @@ pub(crate) mod stream;
 pub(crate) mod swarm;
 mod whitelist;
 
+use crate::error::{ConnexaResult, Error};
 #[cfg(feature = "autonat")]
 use crate::handle::autonat::ConnexaAutonat;
 use crate::handle::blacklist::ConnexaBlacklist;
@@ -40,8 +41,6 @@ use async_rt::CommunicationTask;
 use libp2p::identity::Keypair;
 use std::fmt::Debug;
 use tracing::Span;
-
-type Result<T> = std::io::Result<T>;
 
 pub struct Connexa<T = ()> {
     #[allow(dead_code)]
@@ -162,10 +161,14 @@ where
 
 impl<T> Connexa<T> {
     /// Send a custom event to the running task that can be handled by the set `ConnexaTask::custom_task_callback`
-    pub async fn send_custom_event(&self, event: T) -> Result<()>
+    pub async fn send_custom_event(&self, event: T) -> ConnexaResult<()>
     where
         T: Send + Sync + 'static,
     {
-        self.to_task.clone().send(Command::Custom(event)).await
+        self.to_task
+            .clone()
+            .send(Command::Custom(event))
+            .await
+            .map_err(|_| Error::ChannelClosed)
     }
 }

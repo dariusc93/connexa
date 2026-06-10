@@ -1,3 +1,4 @@
+use crate::error::{ConnexaResult, Error};
 use crate::handle::Connexa;
 use crate::types::RendezvousCommand;
 use bytes::Bytes;
@@ -25,11 +26,10 @@ where
         peer_id: PeerId,
         namespace: impl IntoNamespace,
         ttl: Option<u64>,
-    ) -> io::Result<()> {
-        let namespace = namespace.into_namespace()?.ok_or(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "namespace is not provided",
-        ))?;
+    ) -> ConnexaResult<()> {
+        let namespace = namespace
+            .into_namespace()?
+            .ok_or(Error::InvalidConfig("namespace is not provided".into()))?;
 
         let (tx, rx) = oneshot::channel();
         self.connexa
@@ -44,9 +44,10 @@ where
                 }
                 .into(),
             )
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Unregisters a peer from a namespace.
@@ -54,11 +55,10 @@ where
         &self,
         peer_id: PeerId,
         namespace: impl IntoNamespace,
-    ) -> io::Result<()> {
-        let namespace = namespace.into_namespace()?.ok_or(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "namespace is not provided",
-        ))?;
+    ) -> ConnexaResult<()> {
+        let namespace = namespace
+            .into_namespace()?
+            .ok_or(Error::InvalidConfig("namespace is not provided".into()))?;
 
         let (tx, rx) = oneshot::channel();
         self.connexa
@@ -72,9 +72,10 @@ where
                 }
                 .into(),
             )
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Discovers peers in a namespace.
@@ -84,7 +85,7 @@ where
         namespace: impl IntoNamespace,
         ttl: Option<u64>,
         cookie: Option<Cookie>,
-    ) -> io::Result<(Cookie, Vec<(PeerId, Vec<Multiaddr>)>)> {
+    ) -> ConnexaResult<(Cookie, Vec<(PeerId, Vec<Multiaddr>)>)> {
         let namespace = namespace.into_namespace()?;
         let (tx, rx) = oneshot::channel();
         self.connexa
@@ -100,9 +101,10 @@ where
                 }
                 .into(),
             )
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 }
 

@@ -254,12 +254,12 @@ async fn main() -> std::io::Result<()> {
 
 /// small wrapper that caches the providers and pass the difference on
 struct ProviderStream {
-    st: BoxStream<'static, std::io::Result<HashSet<PeerId>>>,
+    st: BoxStream<'static, connexa::error::ConnexaResult<HashSet<PeerId>>>,
     cache: HashSet<PeerId>,
 }
 
 impl ProviderStream {
-    fn new(st: BoxStream<'static, std::io::Result<HashSet<PeerId>>>) -> Self {
+    fn new(st: BoxStream<'static, connexa::error::ConnexaResult<HashSet<PeerId>>>) -> Self {
         Self {
             st,
             cache: HashSet::new(),
@@ -268,7 +268,7 @@ impl ProviderStream {
 }
 
 impl Stream for ProviderStream {
-    type Item = std::io::Result<HashSet<PeerId>>;
+    type Item = connexa::error::ConnexaResult<HashSet<PeerId>>;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match futures::ready!(self.st.poll_next_unpin(cx)) {
             Some(Ok(peers)) => {

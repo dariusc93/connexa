@@ -1,4 +1,5 @@
 use crate::behaviour::peer_store::store::Store;
+use crate::error::{Error, Protocol};
 use crate::task::ConnexaTask;
 use crate::types::RendezvousCommand;
 use libp2p::rendezvous::Registration;
@@ -24,14 +25,14 @@ where
                 resp,
             } => {
                 let Some(rz) = swarm.behaviour_mut().rendezvous_client.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other(
-                        "rendezvous client is not enabled",
-                    )));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Rendezvous,
+                    }));
                     return;
                 };
 
                 if let Err(e) = rz.register(namespace.clone(), peer_id, ttl) {
-                    let _ = resp.send(Err(std::io::Error::other(e)));
+                    let _ = resp.send(Err(std::io::Error::other(e).into()));
                     return;
                 }
 
@@ -46,9 +47,9 @@ where
                 resp,
             } => {
                 let Some(rz) = swarm.behaviour_mut().rendezvous_client.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other(
-                        "rendezvous client is not enabled",
-                    )));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Rendezvous,
+                    }));
                     return;
                 };
 
@@ -64,9 +65,9 @@ where
                 resp,
             } => {
                 let Some(rz) = swarm.behaviour_mut().rendezvous_client.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other(
-                        "rendezvous client is not enabled",
-                    )));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Rendezvous,
+                    }));
                     return;
                 };
 
@@ -185,7 +186,7 @@ where
                         {
                             if let Some(list) = namespaces.shift_remove(&ns) {
                                 for ch in list {
-                                    let _ = ch.send(Err(std::io::Error::other(
+                                    let _ = ch.send(Err(Error::Rendezvous(
                                         crate::error::rendezvous::Error::from(error),
                                     )));
                                 }
@@ -203,7 +204,7 @@ where
                             .shift_remove(&rendezvous_node)
                         {
                             for ch in list {
-                                let _ = ch.send(Err(std::io::Error::other(
+                                let _ = ch.send(Err(Error::Rendezvous(
                                     crate::error::rendezvous::Error::from(error),
                                 )));
                             }
@@ -237,7 +238,7 @@ where
                     .shift_remove(&(rendezvous_node, namespace))
                 {
                     for ch in list {
-                        let _ = ch.send(Err(std::io::Error::other(
+                        let _ = ch.send(Err(Error::Rendezvous(
                             crate::error::rendezvous::Error::from(error),
                         )));
                     }

@@ -1,3 +1,4 @@
+use crate::error::{ConnexaResult, Error};
 use crate::handle::Connexa;
 use crate::prelude::PeerId;
 use crate::types::PeerstoreCommand;
@@ -18,7 +19,7 @@ where
     }
 
     /// Adds a new address for a peer to the peer store.
-    pub async fn add_address(&self, peer_id: PeerId, addr: Multiaddr) -> std::io::Result<()> {
+    pub async fn add_address(&self, peer_id: PeerId, addr: Multiaddr) -> ConnexaResult<()> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
@@ -31,12 +32,13 @@ where
                 }
                 .into(),
             )
-            .await?;
-        rx.await.map_err(std::io::Error::other)?
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Removes a specific address for a peer from the peer store.
-    pub async fn remove_address(&self, peer_id: PeerId, addr: Multiaddr) -> std::io::Result<()> {
+    pub async fn remove_address(&self, peer_id: PeerId, addr: Multiaddr) -> ConnexaResult<()> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
@@ -49,40 +51,44 @@ where
                 }
                 .into(),
             )
-            .await?;
-        rx.await.map_err(std::io::Error::other)?
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Removes a peer and all its associated addresses from the peer store.
-    pub async fn remove_peer(&self, peer_id: PeerId) -> std::io::Result<Vec<Multiaddr>> {
+    pub async fn remove_peer(&self, peer_id: PeerId) -> ConnexaResult<Vec<Multiaddr>> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
             .clone()
             .send(PeerstoreCommand::Remove { peer_id, resp: tx }.into())
-            .await?;
-        rx.await.map_err(std::io::Error::other)?
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Lists all addresses associated with a specific peer.
-    pub async fn list(&self, peer_id: PeerId) -> std::io::Result<Vec<Multiaddr>> {
+    pub async fn list(&self, peer_id: PeerId) -> ConnexaResult<Vec<Multiaddr>> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
             .clone()
             .send(PeerstoreCommand::List { peer_id, resp: tx }.into())
-            .await?;
-        rx.await.map_err(std::io::Error::other)?
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Lists all peers and their associated addresses in the peer store.
-    pub async fn list_all(&self) -> std::io::Result<Vec<(PeerId, Vec<Multiaddr>)>> {
+    pub async fn list_all(&self) -> ConnexaResult<Vec<(PeerId, Vec<Multiaddr>)>> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
             .clone()
             .send(PeerstoreCommand::ListAll { resp: tx }.into())
-            .await?;
-        rx.await.map_err(std::io::Error::other)?
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 }

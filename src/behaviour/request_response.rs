@@ -2,6 +2,7 @@ use futures::{FutureExt, StreamExt};
 mod codec;
 
 use crate::behaviour::request_response::codec::Codec;
+use crate::error::{ConnexaResult, Error};
 use bytes::Bytes;
 use futures::channel::mpsc::Sender as MpscSender;
 use futures::channel::oneshot::Sender as OneshotSender;
@@ -125,7 +126,7 @@ pub struct Behaviour {
     pending_request: HashMap<PeerId, HashMap<InboundRequestId, ResponseChannel<Bytes>>>,
 
     pending_response:
-        HashMap<PeerId, HashMap<OutboundRequestId, OneshotSender<std::io::Result<Bytes>>>>,
+        HashMap<PeerId, HashMap<OutboundRequestId, OneshotSender<ConnexaResult<Bytes>>>>,
     broadcast_request: Vec<MpscSender<(PeerId, InboundRequestId, Bytes)>>,
     rr_behaviour: request_response::Behaviour<Codec>,
 
@@ -174,7 +175,7 @@ impl Behaviour {
         &mut self,
         peer_id: PeerId,
         request: impl Into<Bytes>,
-    ) -> BoxFuture<'static, std::io::Result<Bytes>> {
+    ) -> BoxFuture<'static, ConnexaResult<Bytes>> {
         // Since we are only requesting from a single peer, we will only accept one response, if any, from the stream
         let mut st = self.send_requests([peer_id], request);
         Box::pin(async move {
@@ -182,7 +183,7 @@ impl Behaviour {
                 // Since we are accepting from a single peer, thus would be tracking the peer,
                 // we can exclude the peer id from the result.
                 Some((_, result)) => result,
-                None => Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe)),
+                None => Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe).into()),
             }
         })
     }
@@ -192,16 +193,15 @@ impl Behaviour {
         peer_id: PeerId,
         id: InboundRequestId,
         response: impl Into<Bytes>,
-    ) -> std::io::Result<()> {
-        let pending_list = self.pending_request.get_mut(&peer_id).ok_or(IoError::new(
-            IoErrorKind::NotFound,
-            "no pending request available from peer",
-        ))?;
+    ) -> ConnexaResult<()> {
+        let pending_list = self
+            .pending_request
+            .get_mut(&peer_id)
+            .ok_or_else(|| Error::NotFound("pending request".into()))?;
 
-        let ch = pending_list.remove(&id).ok_or(IoError::new(
-            IoErrorKind::NotFound,
-            "no pending request available",
-        ))?;
+        let ch = pending_list
+            .remove(&id)
+            .ok_or_else(|| Error::NotFound("pending request".into()))?;
 
         let response = response.into();
 
@@ -209,7 +209,8 @@ impl Behaviour {
             return Err(IoError::new(
                 IoErrorKind::BrokenPipe,
                 "unable to send response. request either timed out, connection dropped, or unexpected behaviour occurred",
-            ));
+            )
+            .into());
         }
 
         Ok(())
@@ -219,7 +220,7 @@ impl Behaviour {
         &mut self,
         peers: impl IntoIterator<Item = PeerId>,
         request: impl Into<Bytes>,
-    ) -> BoxStream<'static, (PeerId, std::io::Result<Bytes>)> {
+    ) -> BoxStream<'static, (PeerId, ConnexaResult<Bytes>)> {
         let request = request.into();
         let mut oneshots = FutureMap::new();
         for peer_id in peers {
@@ -235,7 +236,9 @@ impl Behaviour {
                     let result = match r {
                         Ok(Ok(bytes)) => Ok(bytes),
                         Ok(Err(e)) => Err(e),
-                        Err(e) => Err(std::io::Error::new(std::io::ErrorKind::BrokenPipe, e)),
+                        Err(e) => {
+                            Err(std::io::Error::new(std::io::ErrorKind::BrokenPipe, e).into())
+                        }
                     };
                     (peer_id, result)
                 }),
@@ -315,10 +318,7 @@ impl Behaviour {
             let list = entry.get_mut();
 
             if let Some(tx) = list.remove(&id) {
-                _ = tx.send(Err(std::io::Error::new(
-                    std::io::ErrorKind::BrokenPipe,
-                    error,
-                )));
+                _ = tx.send(Err(Error::RequestResponse(error)));
             }
 
             if list.is_empty() {

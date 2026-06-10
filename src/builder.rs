@@ -8,6 +8,7 @@ use crate::builder::transport::DnsResolver;
 use crate::builder::transport::{
     TTransport, TransportConfig, TryIntoTransport, build_other_transport,
 };
+use crate::error::ConnexaResult;
 use crate::handle::Connexa;
 use crate::prelude::PeerId;
 use crate::task::ConnexaTask;
@@ -201,7 +202,7 @@ where
     }
 
     /// Create an instance with an existing keypair.
-    pub fn with_existing_identity(keypair: impl IntoKeypair) -> std::io::Result<Self> {
+    pub fn with_existing_identity(keypair: impl IntoKeypair) -> ConnexaResult<Self> {
         let keypair = keypair.into_keypair()?;
         Ok(Self {
             keypair,
@@ -584,7 +585,7 @@ where
     /// Set a custom behaviour
     /// Note that if you want to communicate or interact with the behaviour, you would need to set a callback via
     /// `custom_event_callback` and `custom_task_callback`.
-    pub fn with_custom_behaviour<F>(mut self, f: F) -> std::io::Result<Self>
+    pub fn with_custom_behaviour<F>(mut self, f: F) -> ConnexaResult<Self>
     where
         F: FnOnce(&Keypair) -> std::io::Result<B>,
         F: 'static,
@@ -601,7 +602,7 @@ where
         mut self,
         context: IC,
         f: F,
-    ) -> std::io::Result<Self>
+    ) -> ConnexaResult<Self>
     where
         F: FnOnce(&Keypair, IC) -> std::io::Result<B>,
         F: 'static,
@@ -698,7 +699,7 @@ where
     /// Enables secure websocket transport
     #[cfg(feature = "websocket")]
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn enable_secure_websocket_with_config<F>(self, f: F) -> std::io::Result<Self>
+    pub fn enable_secure_websocket_with_config<F>(self, f: F) -> ConnexaResult<Self>
     where
         F: FnOnce(&Keypair) -> std::io::Result<(Vec<String>, String)>,
     {
@@ -730,7 +731,7 @@ where
     /// Enables WebRTC transport, allowing one to generate a certificate using the provided keypair in the closure.
     #[cfg(feature = "webrtc")]
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn enable_webrtc_with_config<F>(mut self, f: F) -> std::io::Result<Self>
+    pub fn enable_webrtc_with_config<F>(mut self, f: F) -> ConnexaResult<Self>
     where
         F: FnOnce(&Keypair) -> std::io::Result<String>,
     {
@@ -763,7 +764,7 @@ where
     }
 
     /// Implements custom transport that will override the existing transport construction.
-    pub fn with_custom_transport<F, M, TP, R>(mut self, f: F) -> std::io::Result<Self>
+    pub fn with_custom_transport<F, M, TP, R>(mut self, f: F) -> ConnexaResult<Self>
     where
         M: libp2p::core::muxing::StreamMuxer + Send + 'static,
         M::Substream: Send,
@@ -780,7 +781,7 @@ where
         Ok(self)
     }
 
-    pub fn build(self) -> std::io::Result<Connexa<Cmd>> {
+    pub fn build(self) -> ConnexaResult<Connexa<Cmd>> {
         let ConnexaBuilder {
             keypair,
             mut context,

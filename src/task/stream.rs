@@ -1,4 +1,5 @@
 use crate::behaviour::peer_store::store::Store;
+use crate::error::{Error, Protocol};
 use crate::task::ConnexaTask;
 use crate::types::StreamCommand;
 use libp2p::swarm::NetworkBehaviour;
@@ -16,7 +17,9 @@ where
         match command {
             StreamCommand::NewStream { protocol, resp } => {
                 let Some(stream) = swarm.behaviour_mut().stream.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("stream protocol is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Stream,
+                    }));
                     return;
                 };
 
@@ -24,12 +27,14 @@ where
                     stream
                         .new_control()
                         .accept(protocol)
-                        .map_err(std::io::Error::other),
+                        .map_err(|e| std::io::Error::other(e).into()),
                 );
             }
             StreamCommand::ControlHandle { resp } => {
                 let Some(stream) = swarm.behaviour_mut().stream.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("stream protocol is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Stream,
+                    }));
                     return;
                 };
 

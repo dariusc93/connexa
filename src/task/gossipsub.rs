@@ -1,4 +1,5 @@
 use crate::behaviour::peer_store::store::Store;
+use crate::error::{Error, Protocol, gossipsub};
 use crate::prelude::GossipsubMessage;
 use crate::task::ConnexaTask;
 use crate::types::{GossipsubCommand, GossipsubEvent};
@@ -20,7 +21,9 @@ where
         match command {
             GossipsubCommand::Subscribe { topic, resp, .. } => {
                 let Some(pubsub) = swarm.behaviour_mut().gossipsub.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("gossipsub is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Gossipsub,
+                    }));
                     return;
                 };
 
@@ -30,16 +33,20 @@ where
                         let _ = resp.send(Ok(()));
                     }
                     Ok(false) => {
-                        let _ = resp.send(Err(std::io::Error::other("topic already subscribed")));
+                        let _ = resp.send(Err(Error::Gossipsub(
+                            gossipsub::Error::AlreadySubscribed(topic.hash()),
+                        )));
                     }
                     Err(e) => {
-                        let _ = resp.send(Err(std::io::Error::other(e)));
+                        let _ = resp.send(Err(Error::Gossipsub(e.into())));
                     }
                 }
             }
             GossipsubCommand::Unsubscribe { topic, resp, .. } => {
                 let Some(pubsub) = swarm.behaviour_mut().gossipsub.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("gossipsub is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Gossipsub,
+                    }));
                     return;
                 };
 
@@ -49,13 +56,17 @@ where
                         let _ = resp.send(Ok(()));
                     }
                     false => {
-                        let _ = resp.send(Err(std::io::Error::other("not subscribed to topic")));
+                        let _ = resp.send(Err(Error::Gossipsub(gossipsub::Error::NotSubscribed(
+                            topic.hash(),
+                        ))));
                     }
                 }
             }
             GossipsubCommand::Peers { topic, resp, .. } => {
                 let Some(pubsub) = swarm.behaviour_mut().gossipsub.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("gossipsub is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Gossipsub,
+                    }));
                     return;
                 };
 
@@ -68,7 +79,9 @@ where
             }
             GossipsubCommand::Subscribed { resp, .. } => {
                 let Some(pubsub) = swarm.behaviour_mut().gossipsub.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("gossipsub is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Gossipsub,
+                    }));
                     return;
                 };
 
@@ -78,20 +91,24 @@ where
             }
             GossipsubCommand::Publish { topic, data, resp } => {
                 let Some(pubsub) = swarm.behaviour_mut().gossipsub.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("gossipsub is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Gossipsub,
+                    }));
                     return;
                 };
 
                 let ret = match pubsub.publish(topic, data) {
                     Ok(_) => Ok(()),
-                    Err(e) => Err(std::io::Error::other(e)),
+                    Err(e) => Err(Error::Gossipsub(e.into())),
                 };
 
                 let _ = resp.send(ret);
             }
             GossipsubCommand::GossipsubListener { topic, resp } => {
                 if !swarm.behaviour_mut().gossipsub.is_enabled() {
-                    let _ = resp.send(Err(std::io::Error::other("gossipsub is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Gossipsub,
+                    }));
                     return;
                 }
 
@@ -108,7 +125,9 @@ where
                 resp,
             } => {
                 let Some(pubsub) = swarm.behaviour_mut().gossipsub.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("gossipsub is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Gossipsub,
+                    }));
                     return;
                 };
 

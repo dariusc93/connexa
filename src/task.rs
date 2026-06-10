@@ -32,6 +32,7 @@ mod swarm;
 mod upnp;
 
 use crate::behaviour::BehaviourEvent;
+use crate::error::{ConnexaResult, Error, Protocol};
 use crate::types::{Command, ConnexaSwarmEvent, SwarmCommand};
 use crate::{TEventCallback, TPollableCallback, TSwarmEventCallback, TTaskCallback, behaviour};
 
@@ -109,28 +110,28 @@ where
     pub dht_provider_record_global_receiver:
         FutureSet<oneshot::Receiver<std::io::Result<ProviderRecord>>>,
     #[cfg(feature = "kad")]
-    pub pending_dht_put_record: IndexMap<QueryId, oneshot::Sender<std::io::Result<()>>>,
+    pub pending_dht_put_record: IndexMap<QueryId, oneshot::Sender<ConnexaResult<()>>>,
     #[cfg(feature = "kad")]
-    pub pending_dht_put_provider_record: IndexMap<QueryId, oneshot::Sender<std::io::Result<()>>>,
+    pub pending_dht_put_provider_record: IndexMap<QueryId, oneshot::Sender<ConnexaResult<()>>>,
     #[cfg(feature = "kad")]
-    pub pending_dht_get_record: IndexMap<QueryId, mpsc::Sender<std::io::Result<PeerRecord>>>,
+    pub pending_dht_get_record: IndexMap<QueryId, mpsc::Sender<ConnexaResult<PeerRecord>>>,
     #[cfg(feature = "kad")]
     pub pending_dht_get_provider_record:
-        IndexMap<QueryId, mpsc::Sender<std::io::Result<HashSet<PeerId>>>>,
+        IndexMap<QueryId, mpsc::Sender<ConnexaResult<HashSet<PeerId>>>>,
     #[cfg(feature = "kad")]
     pub pending_dht_find_closest_peer:
-        IndexMap<QueryId, oneshot::Sender<std::io::Result<Vec<PeerInfo>>>>,
+        IndexMap<QueryId, oneshot::Sender<ConnexaResult<Vec<PeerInfo>>>>,
 
     #[cfg(feature = "kad")]
-    pub pending_dht_bootstrap: IndexMap<QueryId, oneshot::Sender<std::io::Result<()>>>,
+    pub pending_dht_bootstrap: IndexMap<QueryId, oneshot::Sender<ConnexaResult<()>>>,
 
-    pub pending_connection: IndexMap<ConnectionId, oneshot::Sender<std::io::Result<ConnectionId>>>,
+    pub pending_connection: IndexMap<ConnectionId, oneshot::Sender<ConnexaResult<ConnectionId>>>,
     pub pending_disconnection_by_connection_id:
-        IndexMap<ConnectionId, oneshot::Sender<std::io::Result<()>>>,
-    pub pending_disconnection_by_peer_id: IndexMap<PeerId, oneshot::Sender<std::io::Result<()>>>,
+        IndexMap<ConnectionId, oneshot::Sender<ConnexaResult<()>>>,
+    pub pending_disconnection_by_peer_id: IndexMap<PeerId, oneshot::Sender<ConnexaResult<()>>>,
 
-    pub pending_listen_on: IndexMap<ListenerId, oneshot::Sender<std::io::Result<ListenerId>>>,
-    pub pending_remove_listener: IndexMap<ListenerId, oneshot::Sender<std::io::Result<()>>>,
+    pub pending_listen_on: IndexMap<ListenerId, oneshot::Sender<ConnexaResult<ListenerId>>>,
+    pub pending_remove_listener: IndexMap<ListenerId, oneshot::Sender<ConnexaResult<()>>>,
 
     #[cfg(feature = "gossipsub")]
     pub gossipsub_listener:
@@ -140,7 +141,7 @@ where
 
     #[cfg(feature = "rendezvous")]
     pub pending_rendezvous_register:
-        IndexMap<(PeerId, Namespace), Vec<oneshot::Sender<std::io::Result<()>>>>,
+        IndexMap<(PeerId, Namespace), Vec<oneshot::Sender<ConnexaResult<()>>>>,
 
     #[cfg(feature = "rendezvous")]
     pub pending_rendezvous_discover: IndexMap<
@@ -149,7 +150,7 @@ where
             Namespace,
             Vec<
                 oneshot::Sender<
-                    std::io::Result<(libp2p::rendezvous::Cookie, Vec<(PeerId, Vec<Multiaddr>)>)>,
+                    ConnexaResult<(libp2p::rendezvous::Cookie, Vec<(PeerId, Vec<Multiaddr>)>)>,
                 >,
             >,
         >,
@@ -160,7 +161,7 @@ where
         PeerId,
         Vec<
             oneshot::Sender<
-                std::io::Result<(libp2p::rendezvous::Cookie, Vec<(PeerId, Vec<Multiaddr>)>)>,
+                ConnexaResult<(libp2p::rendezvous::Cookie, Vec<(PeerId, Vec<Multiaddr>)>)>,
             >,
         >,
     >,
@@ -296,7 +297,7 @@ where
                 SwarmCommand::Dial { opt, resp } => {
                     let connection_id = opt.connection_id();
                     if let Err(e) = swarm.dial(opt) {
-                        let _ = resp.send(Err(std::io::Error::other(e)));
+                        let _ = resp.send(Err(Error::Dial(other_error::ArcError::new(e))));
                         return;
                     }
                     self.pending_connection.insert(connection_id, resp);
@@ -308,14 +309,14 @@ where
                 SwarmCommand::Disconnect { target_type, resp } => match target_type {
                     ConnectionTarget::PeerId(peer_id) => {
                         if swarm.disconnect_peer_id(peer_id).is_err() {
-                            let _ = resp.send(Err(std::io::Error::other("peer is not connected")));
+                            let _ = resp.send(Err(Error::NotConnected(peer_id)));
                             return;
                         }
                         self.pending_disconnection_by_peer_id.insert(peer_id, resp);
                     }
                     ConnectionTarget::ConnectionId(connection_id) => {
                         if !swarm.close_connection(connection_id) {
-                            let _ = resp.send(Err(std::io::Error::other("not a valid connection")));
+                            let _ = resp.send(Err(Error::NotFound("connection".into())));
                             return;
                         }
                         self.pending_disconnection_by_connection_id
@@ -330,7 +331,7 @@ where
                     let id = match swarm.listen_on(address) {
                         Ok(id) => id,
                         Err(e) => {
-                            let _ = resp.send(Err(std::io::Error::other(e)));
+                            let _ = resp.send(Err(std::io::Error::other(e).into()));
                             return;
                         }
                     };
@@ -338,7 +339,7 @@ where
                 }
                 SwarmCommand::GetListeningAddress { id, resp } => {
                     let Some(addrs) = self.listener_addresses.get(&id) else {
-                        let _ = resp.send(Err(std::io::Error::other("listener not found")));
+                        let _ = resp.send(Err(Error::NotFound("listener".into())));
                         return;
                     };
 
@@ -346,7 +347,7 @@ where
                 }
                 SwarmCommand::RemoveListener { listener_id, resp } => {
                     if !swarm.remove_listener(listener_id) {
-                        let _ = resp.send(Err(std::io::Error::other("listener not found")));
+                        let _ = resp.send(Err(Error::NotFound("listener".into())));
                         return;
                     }
                     self.listener_addresses.remove(&listener_id);
@@ -380,13 +381,14 @@ where
             Command::Whitelist(command) => match command {
                 WhitelistCommand::Add { peer_id, resp } => {
                     let Some(whitelist) = swarm.behaviour_mut().allow_list.as_mut() else {
-                        let _ = resp.send(Err(std::io::Error::other("whitelist not enabled")));
+                        let _ = resp.send(Err(Error::Disabled {
+                            protocol: Protocol::Other("whitelist"),
+                        }));
                         return;
                     };
 
                     if !whitelist.allow_peer(peer_id) {
-                        let _ =
-                            resp.send(Err(std::io::Error::other("peer is already whitelisted")));
+                        let _ = resp.send(Err(Error::AlreadyExists("peer in allow list".into())));
                         return;
                     }
 
@@ -394,12 +396,14 @@ where
                 }
                 WhitelistCommand::Remove { peer_id, resp } => {
                     let Some(whitelist) = swarm.behaviour_mut().allow_list.as_mut() else {
-                        let _ = resp.send(Err(std::io::Error::other("whitelist not enabled")));
+                        let _ = resp.send(Err(Error::Disabled {
+                            protocol: Protocol::Other("whitelist"),
+                        }));
                         return;
                     };
 
                     if !whitelist.disallow_peer(peer_id) {
-                        let _ = resp.send(Err(std::io::Error::other("peer is not whitelisted")));
+                        let _ = resp.send(Err(Error::NotFound("peer in allow list".into())));
                         return;
                     }
 
@@ -407,7 +411,9 @@ where
                 }
                 WhitelistCommand::List { resp } => {
                     let Some(whitelist) = swarm.behaviour_mut().allow_list.as_mut() else {
-                        let _ = resp.send(Err(std::io::Error::other("whitelist not enabled")));
+                        let _ = resp.send(Err(Error::Disabled {
+                            protocol: Protocol::Other("whitelist"),
+                        }));
                         return;
                     };
 
@@ -420,13 +426,14 @@ where
             Command::Blacklist(command) => match command {
                 BlacklistCommand::Add { peer_id, resp } => {
                     let Some(blacklist) = swarm.behaviour_mut().deny_list.as_mut() else {
-                        let _ = resp.send(Err(std::io::Error::other("blacklist not enabled")));
+                        let _ = resp.send(Err(Error::Disabled {
+                            protocol: Protocol::Other("blacklist"),
+                        }));
                         return;
                     };
 
                     if !blacklist.block_peer(peer_id) {
-                        let _ =
-                            resp.send(Err(std::io::Error::other("peer is already blacklisted")));
+                        let _ = resp.send(Err(Error::AlreadyExists("peer in deny list".into())));
                         return;
                     }
 
@@ -434,12 +441,14 @@ where
                 }
                 BlacklistCommand::Remove { peer_id, resp } => {
                     let Some(blacklist) = swarm.behaviour_mut().deny_list.as_mut() else {
-                        let _ = resp.send(Err(std::io::Error::other("blacklist not enabled")));
+                        let _ = resp.send(Err(Error::Disabled {
+                            protocol: Protocol::Other("blacklist"),
+                        }));
                         return;
                     };
 
                     if !blacklist.unblock_peer(peer_id) {
-                        let _ = resp.send(Err(std::io::Error::other("peer is not blacklisted")));
+                        let _ = resp.send(Err(Error::NotFound("peer in deny list".into())));
                         return;
                     }
 
@@ -447,7 +456,9 @@ where
                 }
                 BlacklistCommand::List { resp } => {
                     let Some(blacklist) = swarm.behaviour_mut().deny_list.as_mut() else {
-                        let _ = resp.send(Err(std::io::Error::other("blacklist not enabled")));
+                        let _ = resp.send(Err(Error::Disabled {
+                            protocol: Protocol::Other("blacklist"),
+                        }));
                         return;
                     };
 
@@ -489,13 +500,15 @@ where
                     resp,
                 } => {
                     let Some(store) = swarm.behaviour_mut().peer_store.as_mut() else {
-                        let _ = resp.send(Err(std::io::Error::other("peerstore not enabled")));
+                        let _ = resp.send(Err(Error::Disabled {
+                            protocol: Protocol::Other("peerstore"),
+                        }));
                         return;
                     };
 
                     let fut = store.insert(peer_id, addr);
                     self.peerstore_ops.insert(Box::pin(async move {
-                        let _ = resp.send(fut.await);
+                        let _ = resp.send(fut.await.map_err(Error::from));
                     }));
                 }
                 PeerstoreCommand::RemoveAddress {
@@ -504,42 +517,50 @@ where
                     resp,
                 } => {
                     let Some(store) = swarm.behaviour_mut().peer_store.as_mut() else {
-                        let _ = resp.send(Err(std::io::Error::other("peerstore not enabled")));
+                        let _ = resp.send(Err(Error::Disabled {
+                            protocol: Protocol::Other("peerstore"),
+                        }));
                         return;
                     };
                     let fut = store.remove_address(&peer_id, &addr);
                     self.peerstore_ops.insert(Box::pin(async move {
-                        let _ = resp.send(fut.await);
+                        let _ = resp.send(fut.await.map_err(Error::from));
                     }));
                 }
                 PeerstoreCommand::Remove { peer_id, resp } => {
                     let Some(store) = swarm.behaviour_mut().peer_store.as_mut() else {
-                        let _ = resp.send(Err(std::io::Error::other("peerstore not enabled")));
+                        let _ = resp.send(Err(Error::Disabled {
+                            protocol: Protocol::Other("peerstore"),
+                        }));
                         return;
                     };
                     let fut = store.remove(&peer_id);
                     self.peerstore_ops.insert(Box::pin(async move {
-                        let _ = resp.send(fut.await);
+                        let _ = resp.send(fut.await.map_err(Error::from));
                     }));
                 }
                 PeerstoreCommand::List { peer_id, resp } => {
                     let Some(store) = swarm.behaviour_mut().peer_store.as_mut() else {
-                        let _ = resp.send(Err(std::io::Error::other("peerstore not enabled")));
+                        let _ = resp.send(Err(Error::Disabled {
+                            protocol: Protocol::Other("peerstore"),
+                        }));
                         return;
                     };
                     let fut = store.address(&peer_id);
                     self.peerstore_ops.insert(Box::pin(async move {
-                        let _ = resp.send(fut.await);
+                        let _ = resp.send(fut.await.map_err(Error::from));
                     }));
                 }
                 PeerstoreCommand::ListAll { resp } => {
                     let Some(store) = swarm.behaviour_mut().peer_store.as_mut() else {
-                        let _ = resp.send(Err(std::io::Error::other("peerstore not enabled")));
+                        let _ = resp.send(Err(Error::Disabled {
+                            protocol: Protocol::Other("peerstore"),
+                        }));
                         return;
                     };
                     let fut = store.list_all();
                     self.peerstore_ops.insert(Box::pin(async move {
-                        let _ = resp.send(fut.await);
+                        let _ = resp.send(fut.await.map_err(Error::from));
                     }));
                 }
             },

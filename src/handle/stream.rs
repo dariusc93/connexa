@@ -1,3 +1,4 @@
+use crate::error::{ConnexaResult, Error};
 use crate::handle::Connexa;
 use crate::types::StreamCommand;
 use bytes::Bytes;
@@ -21,27 +22,29 @@ where
     pub async fn new_stream(
         &self,
         protocol: StreamProtocol,
-    ) -> std::io::Result<libp2p_stream::IncomingStreams> {
+    ) -> ConnexaResult<libp2p_stream::IncomingStreams> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
             .clone()
             .send(StreamCommand::NewStream { protocol, resp: tx }.into())
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Gets a control handle for managing streams
-    pub async fn control_handle(&self) -> std::io::Result<libp2p_stream::Control> {
+    pub async fn control_handle(&self) -> ConnexaResult<libp2p_stream::Control> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
             .clone()
             .send(StreamCommand::ControlHandle { resp: tx }.into())
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Opens a stream with the specified protocol
@@ -49,7 +52,7 @@ where
         &self,
         peer_id: PeerId,
         protocol: impl IntoStreamProtocol,
-    ) -> std::io::Result<libp2p::Stream> {
+    ) -> ConnexaResult<libp2p::Stream> {
         let protocol: StreamProtocol = protocol.into_protocol()?;
 
         let mut control = self.control_handle().await?;

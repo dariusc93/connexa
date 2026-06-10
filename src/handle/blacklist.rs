@@ -1,3 +1,4 @@
+use crate::error::{ConnexaResult, Error};
 use crate::handle::Connexa;
 use crate::prelude::PeerId;
 use crate::types::BlacklistCommand;
@@ -17,35 +18,38 @@ where
     }
 
     /// Adds a peer to the blacklist.
-    pub async fn add(&self, peer_id: PeerId) -> std::io::Result<()> {
+    pub async fn add(&self, peer_id: PeerId) -> ConnexaResult<()> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
             .clone()
             .send(BlacklistCommand::Add { peer_id, resp: tx }.into())
-            .await?;
-        rx.await.map_err(std::io::Error::other)?
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Removes a peer from the blacklist.
-    pub async fn remove(&self, peer_id: PeerId) -> std::io::Result<()> {
+    pub async fn remove(&self, peer_id: PeerId) -> ConnexaResult<()> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
             .clone()
             .send(BlacklistCommand::Remove { peer_id, resp: tx }.into())
-            .await?;
-        rx.await.map_err(std::io::Error::other)?
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Retrieves the list of blacklisted peers.
-    pub async fn list(&self) -> std::io::Result<Vec<PeerId>> {
+    pub async fn list(&self) -> ConnexaResult<Vec<PeerId>> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
             .clone()
             .send(BlacklistCommand::List { resp: tx }.into())
-            .await?;
-        rx.await.map_err(std::io::Error::other)?
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 }
