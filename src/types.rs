@@ -1,4 +1,5 @@
 #![allow(unused_imports)]
+use crate::error::ConnexaResult;
 use crate::handle::swarm::ConnectionTarget;
 use crate::prelude::swarm::{DialError, ListenError, ListenOpts, SwarmEvent};
 use bytes::Bytes;
@@ -23,6 +24,7 @@ use libp2p::{Multiaddr, PeerId, StreamProtocol};
 use libp2p_connection_limits::ConnectionLimits;
 use other_error::ArcError;
 use std::collections::HashSet;
+use std::convert::Infallible;
 use std::sync::Arc;
 
 type Result<T> = std::io::Result<T>;
@@ -134,7 +136,7 @@ impl<T> From<PeerstoreCommand> for Command<T> {
 pub enum SwarmCommand {
     Dial {
         opt: DialOpts,
-        resp: oneshot::Sender<Result<ConnectionId>>,
+        resp: oneshot::Sender<ConnexaResult<ConnectionId>>,
     },
     IsConnected {
         peer_id: PeerId,
@@ -142,30 +144,30 @@ pub enum SwarmCommand {
     },
     Disconnect {
         target_type: ConnectionTarget,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     ConnectedPeers {
         resp: oneshot::Sender<Vec<PeerId>>,
     },
     ListenOn {
         address: Multiaddr,
-        resp: oneshot::Sender<Result<ListenerId>>,
+        resp: oneshot::Sender<ConnexaResult<ListenerId>>,
     },
     GetListeningAddress {
         id: ListenerId,
-        resp: oneshot::Sender<Result<Vec<Multiaddr>>>,
+        resp: oneshot::Sender<ConnexaResult<Vec<Multiaddr>>>,
     },
     RemoveListener {
         listener_id: ListenerId,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     AddExternalAddress {
         address: Multiaddr,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     RemoveExternalAddress {
         address: Multiaddr,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     ListExternalAddresses {
         resp: oneshot::Sender<Vec<Multiaddr>>,
@@ -176,7 +178,7 @@ pub enum SwarmCommand {
     AddPeerAddress {
         peer_id: PeerId,
         address: Multiaddr,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     Listener {
         resp: oneshot::Sender<mpsc::Receiver<ConnexaSwarmEvent>>,
@@ -244,25 +246,25 @@ pub enum ConnexaSwarmEvent {
 pub enum FloodsubCommand {
     Subscribe {
         topic: libp2p::floodsub::Topic,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     Unsubscribe {
         topic: libp2p::floodsub::Topic,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     AddNodeToPartialView {
         peer_id: PeerId,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     RemoveNodeFromPartialView {
         peer_id: PeerId,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     FloodsubListener {
         topic: libp2p::floodsub::Topic,
-        resp: oneshot::Sender<Result<mpsc::Receiver<FloodsubEvent>>>,
+        resp: oneshot::Sender<ConnexaResult<mpsc::Receiver<FloodsubEvent>>>,
     },
-    Publish(PubsubFloodsubPublish, oneshot::Sender<Result<()>>),
+    Publish(PubsubFloodsubPublish, oneshot::Sender<ConnexaResult<()>>),
 }
 
 #[cfg(feature = "gossipsub")]
@@ -270,33 +272,33 @@ pub enum FloodsubCommand {
 pub enum GossipsubCommand {
     Subscribe {
         topic: libp2p::gossipsub::TopicHash,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     Unsubscribe {
         topic: libp2p::gossipsub::TopicHash,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     Subscribed {
-        resp: oneshot::Sender<Result<Vec<libp2p::gossipsub::TopicHash>>>,
+        resp: oneshot::Sender<ConnexaResult<Vec<libp2p::gossipsub::TopicHash>>>,
     },
     Peers {
         topic: libp2p::gossipsub::TopicHash,
-        resp: oneshot::Sender<Result<Vec<PeerId>>>,
+        resp: oneshot::Sender<ConnexaResult<Vec<PeerId>>>,
     },
     GossipsubListener {
         topic: libp2p::gossipsub::TopicHash,
-        resp: oneshot::Sender<Result<mpsc::Receiver<GossipsubEvent>>>,
+        resp: oneshot::Sender<ConnexaResult<mpsc::Receiver<GossipsubEvent>>>,
     },
     Publish {
         topic: libp2p::gossipsub::TopicHash,
         data: Bytes,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     ReportMessage {
         peer_id: PeerId,
         message_id: MessageId,
         accept: MessageAcceptance,
-        resp: oneshot::Sender<Result<bool>>,
+        resp: oneshot::Sender<ConnexaResult<bool>>,
     },
 }
 
@@ -336,23 +338,23 @@ pub enum PubsubFloodsubPublish {
 #[derive(Debug)]
 pub enum AutonatCommand {
     PublicAddress {
-        resp: oneshot::Sender<Result<Option<Multiaddr>>>,
+        resp: oneshot::Sender<ConnexaResult<Option<Multiaddr>>>,
     },
     NatStatus {
-        resp: oneshot::Sender<Result<libp2p::autonat::NatStatus>>,
+        resp: oneshot::Sender<ConnexaResult<libp2p::autonat::NatStatus>>,
     },
     AddServer {
         peer: PeerId,
         address: Option<Multiaddr>,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     RemoveServer {
         peer: PeerId,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     Probe {
         address: Multiaddr,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
 }
 
@@ -361,72 +363,72 @@ pub enum AutonatCommand {
 pub enum DHTCommand {
     FindPeer {
         peer_id: PeerId,
-        resp: oneshot::Sender<Result<Vec<PeerInfo>>>,
+        resp: oneshot::Sender<ConnexaResult<Vec<PeerInfo>>>,
     },
     Bootstrap {
         lazy: bool,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     Provide {
         key: RecordKey,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     StopProviding {
         key: RecordKey,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     GetProviders {
         key: RecordKey,
-        resp: oneshot::Sender<Result<mpsc::Receiver<Result<HashSet<PeerId>>>>>,
+        resp: oneshot::Sender<ConnexaResult<mpsc::Receiver<ConnexaResult<HashSet<PeerId>>>>>,
     },
     SetDHTMode {
         mode: Option<Mode>,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     DHTMode {
-        resp: oneshot::Sender<Result<Mode>>,
+        resp: oneshot::Sender<ConnexaResult<Mode>>,
     },
 
     AddAddress {
         peer_id: PeerId,
         addr: Multiaddr,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
 
     RemoveAddress {
         peer_id: PeerId,
         addr: Multiaddr,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
 
     RemovePeer {
         peer_id: PeerId,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     Get {
         key: RecordKey,
-        resp: oneshot::Sender<Result<mpsc::Receiver<Result<PeerRecord>>>>,
+        resp: oneshot::Sender<ConnexaResult<mpsc::Receiver<ConnexaResult<PeerRecord>>>>,
     },
     Put {
         key: RecordKey,
         data: Bytes,
         quorum: Quorum,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     Remove {
         key: RecordKey,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     PutTo {
         key: RecordKey,
         target: Vec<PeerId>,
         data: Bytes,
         quorum: Quorum,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     Listener {
         key: Option<RecordKey>,
-        resp: oneshot::Sender<Result<mpsc::Receiver<DHTEvent>>>,
+        resp: oneshot::Sender<ConnexaResult<mpsc::Receiver<DHTEvent>>>,
     },
 }
 
@@ -437,24 +439,24 @@ pub enum RequestResponseCommand {
         protocol: Option<StreamProtocol>,
         peers: IndexSet<PeerId>,
         request: Bytes,
-        resp: oneshot::Sender<Result<BoxStream<'static, (PeerId, Result<Bytes>)>>>,
+        resp: oneshot::Sender<ConnexaResult<BoxStream<'static, (PeerId, ConnexaResult<Bytes>)>>>,
     },
     SendRequest {
         protocol: Option<StreamProtocol>,
         peer_id: PeerId,
         request: Bytes,
-        resp: oneshot::Sender<Result<BoxFuture<'static, Result<Bytes>>>>,
+        resp: oneshot::Sender<ConnexaResult<BoxFuture<'static, ConnexaResult<Bytes>>>>,
     },
     SendResponse {
         protocol: Option<StreamProtocol>,
         peer_id: PeerId,
         request_id: InboundRequestId,
         response: Bytes,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     ListenForRequests {
         protocol: Option<StreamProtocol>,
-        resp: oneshot::Sender<Result<mpsc::Receiver<(PeerId, InboundRequestId, Bytes)>>>,
+        resp: oneshot::Sender<ConnexaResult<mpsc::Receiver<(PeerId, InboundRequestId, Bytes)>>>,
     },
 }
 
@@ -463,10 +465,10 @@ pub enum RequestResponseCommand {
 pub enum StreamCommand {
     NewStream {
         protocol: StreamProtocol,
-        resp: oneshot::Sender<Result<libp2p_stream::IncomingStreams>>,
+        resp: oneshot::Sender<ConnexaResult<libp2p_stream::IncomingStreams>>,
     },
     ControlHandle {
-        resp: oneshot::Sender<Result<libp2p_stream::Control>>,
+        resp: oneshot::Sender<ConnexaResult<libp2p_stream::Control>>,
     },
 }
 
@@ -477,19 +479,19 @@ pub enum RendezvousCommand {
         namespace: libp2p::rendezvous::Namespace,
         peer_id: PeerId,
         ttl: Option<u64>,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     Unregister {
         namespace: libp2p::rendezvous::Namespace,
         peer_id: PeerId,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     Discover {
         namespace: Option<libp2p::rendezvous::Namespace>,
         peer_id: PeerId,
         cookie: Option<Cookie>,
         ttl: Option<u64>,
-        resp: oneshot::Sender<Result<(Cookie, Vec<(PeerId, Vec<Multiaddr>)>)>>,
+        resp: oneshot::Sender<ConnexaResult<(Cookie, Vec<(PeerId, Vec<Multiaddr>)>)>>,
     },
 }
 
@@ -592,14 +594,14 @@ pub struct FloodsubMessage {
 pub enum WhitelistCommand {
     Add {
         peer_id: PeerId,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     Remove {
         peer_id: PeerId,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     List {
-        resp: oneshot::Sender<Result<Vec<PeerId>>>,
+        resp: oneshot::Sender<ConnexaResult<Vec<PeerId>>>,
     },
 }
 
@@ -607,14 +609,14 @@ pub enum WhitelistCommand {
 pub enum BlacklistCommand {
     Add {
         peer_id: PeerId,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     Remove {
         peer_id: PeerId,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     List {
-        resp: oneshot::Sender<Result<Vec<PeerId>>>,
+        resp: oneshot::Sender<ConnexaResult<Vec<PeerId>>>,
     },
 }
 
@@ -623,22 +625,22 @@ pub enum PeerstoreCommand {
     Add {
         peer_id: PeerId,
         addr: Multiaddr,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     RemoveAddress {
         peer_id: PeerId,
         addr: Multiaddr,
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     Remove {
         peer_id: PeerId,
-        resp: oneshot::Sender<Result<Vec<Multiaddr>>>,
+        resp: oneshot::Sender<ConnexaResult<Vec<Multiaddr>>>,
     },
     List {
         peer_id: PeerId,
-        resp: oneshot::Sender<Result<Vec<Multiaddr>>>,
+        resp: oneshot::Sender<ConnexaResult<Vec<Multiaddr>>>,
     },
     ListAll {
-        resp: oneshot::Sender<Result<Vec<(PeerId, Vec<Multiaddr>)>>>,
+        resp: oneshot::Sender<ConnexaResult<Vec<(PeerId, Vec<Multiaddr>)>>>,
     },
 }

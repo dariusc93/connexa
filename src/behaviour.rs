@@ -32,6 +32,7 @@ use libp2p::swarm::behaviour::toggle::Toggle;
 
 use crate::behaviour::peer_store::store::Store;
 use crate::builder::{Config, Protocols};
+use crate::error::{ConnexaResult, Error};
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkBehaviour;
 use libp2p_allow_block_list::{AllowedPeers, BlockedPeers};
@@ -132,11 +133,10 @@ where
         custom_behaviour: Option<C>,
         config: Config<S>,
         protocols: Protocols,
-    ) -> std::io::Result<(Self, Option<ClientTransport>)> {
+    ) -> ConnexaResult<(Self, Option<ClientTransport>)> {
         if protocols.allow_list && protocols.deny_list {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Interrupted,
-                "blocklist and whitelist cannot be enabled at the same time",
+            return Err(Error::InvalidConfig(
+                "blocklist and whitelist cannot be enabled at the same time".into(),
             ));
         }
 

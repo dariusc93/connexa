@@ -1,3 +1,4 @@
+use crate::error::{ConnexaResult, Error};
 use crate::handle::Connexa;
 use crate::types::RequestResponseCommand;
 use bytes::Bytes;
@@ -26,7 +27,7 @@ where
     pub async fn listen_for_requests(
         &self,
         protocol: impl Into<OptionalStreamProtocol>,
-    ) -> std::io::Result<BoxStream<'static, (PeerId, InboundRequestId, Bytes)>> {
+    ) -> ConnexaResult<BoxStream<'static, (PeerId, InboundRequestId, Bytes)>> {
         let protocol = protocol.into().into_inner();
         let (tx, rx) = oneshot::channel();
 
@@ -34,10 +35,11 @@ where
             .to_task
             .clone()
             .send(RequestResponseCommand::ListenForRequests { protocol, resp: tx }.into())
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
         rx.await
-            .map_err(std::io::Error::other)?
+            .map_err(|_| Error::ChannelClosed)?
             .map(StreamExt::boxed)
     }
 
@@ -46,16 +48,16 @@ where
         &self,
         peers: impl IntoIterator<Item = PeerId>,
         request: impl IntoRequest,
-    ) -> std::io::Result<BoxStream<'static, (PeerId, std::io::Result<Bytes>)>> {
+    ) -> ConnexaResult<BoxStream<'static, (PeerId, ConnexaResult<Bytes>)>> {
         let peers = IndexSet::from_iter(peers);
         let (protocol, request) = request.into_request()?;
         let protocol = protocol.into_inner();
 
         if peers.is_empty() {
-            return Err(std::io::Error::other("no peers were provided"));
+            return Err(Error::InvalidConfig("no peers were provided".into()));
         }
         if request.is_empty() {
-            return Err(std::io::Error::other("request is empty"));
+            return Err(Error::InvalidConfig("request is empty".into()));
         }
 
         let (tx, rx) = oneshot::channel();
@@ -72,10 +74,11 @@ where
                 }
                 .into(),
             )
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
         rx.await
-            .map_err(std::io::Error::other)?
+            .map_err(|_| Error::ChannelClosed)?
             .map(StreamExt::boxed)
     }
 
@@ -84,12 +87,12 @@ where
         &self,
         peer_id: PeerId,
         request: impl IntoRequest,
-    ) -> std::io::Result<Bytes> {
+    ) -> ConnexaResult<Bytes> {
         let (protocol, request) = request.into_request()?;
         let protocol = protocol.into_inner();
 
         if request.is_empty() {
-            return Err(std::io::Error::other("request is empty"));
+            return Err(Error::InvalidConfig("request is empty".into()));
         }
 
         let (tx, rx) = oneshot::channel();
@@ -106,9 +109,10 @@ where
                 }
                 .into(),
             )
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        let fut = rx.await.map_err(std::io::Error::other)??;
+        let fut = rx.await.map_err(|_| Error::ChannelClosed)??;
         fut.await
     }
 
@@ -118,12 +122,12 @@ where
         peer_id: PeerId,
         request_id: InboundRequestId,
         response: impl IntoRequest,
-    ) -> std::io::Result<()> {
+    ) -> ConnexaResult<()> {
         let (protocol, response) = response.into_request()?;
         let protocol = protocol.into_inner();
 
         if response.is_empty() {
-            return Err(std::io::Error::other("response is empty"));
+            return Err(Error::InvalidConfig("response is empty".into()));
         }
 
         let (tx, rx) = oneshot::channel();
@@ -141,9 +145,10 @@ where
                 }
                 .into(),
             )
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 }
 

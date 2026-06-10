@@ -1,5 +1,6 @@
 use crate::behaviour::BehaviourEvent;
 use crate::behaviour::peer_store::store::Store;
+use crate::error::Error;
 use crate::prelude::ConnexaSwarmEvent;
 use crate::task::ConnexaTask;
 #[cfg(feature = "rendezvous")]
@@ -66,7 +67,7 @@ where
                 let cause = cause.map(ArcError::new);
 
                 let ret = match cause.clone() {
-                    Some(e) => Err(std::io::Error::other(e)),
+                    Some(e) => Err(std::io::Error::other(e).into()),
                     None => Ok(()),
                 };
 
@@ -150,7 +151,7 @@ where
                 tracing::error!(%connection_id, ?peer_id, error=%error, "outgoing connection error");
                 let error = ArcError::new(error);
                 if let Some(sender) = self.pending_connection.shift_remove(&connection_id) {
-                    let _ = sender.send(Err(std::io::Error::other(error.clone())));
+                    let _ = sender.send(Err(Error::Dial(error.clone())));
                 }
 
                 for ch in self.connection_listeners.iter_mut() {
@@ -223,11 +224,11 @@ where
                         }
                         Err(e) => std::io::Error::other(e.to_string()),
                     };
-                    let _ = ch.send(Err(err));
+                    let _ = ch.send(Err(err.into()));
                 }
 
                 if let Some(ch) = self.pending_remove_listener.shift_remove(&listener_id) {
-                    let _ = ch.send(reason);
+                    let _ = ch.send(reason.map_err(Error::from));
                 }
 
                 for ch in self.connection_listeners.iter_mut() {
@@ -336,21 +337,17 @@ where
 
     #[cfg(feature = "rendezvous")]
     fn fail_pending_rendezvous(&mut self, peer_id: &PeerId) {
-        fn disconnected() -> std::io::Error {
-            std::io::Error::other("rendezvous node disconnected before responding")
-        }
-
         if let Some(namespaces) = self.pending_rendezvous_discover.shift_remove(peer_id) {
             for (_namespace, list) in namespaces {
                 for ch in list {
-                    let _ = ch.send(Err(disconnected()));
+                    let _ = ch.send(Err(crate::error::Error::NotConnected(*peer_id)));
                 }
             }
         }
 
         if let Some(list) = self.pending_rendezvous_discover_any.shift_remove(peer_id) {
             for ch in list {
-                let _ = ch.send(Err(disconnected()));
+                let _ = ch.send(Err(crate::error::Error::NotConnected(*peer_id)));
             }
         }
 
@@ -363,7 +360,7 @@ where
         for key in stale_keys {
             if let Some(list) = self.pending_rendezvous_register.shift_remove(&key) {
                 for ch in list {
-                    let _ = ch.send(Err(disconnected()));
+                    let _ = ch.send(Err(crate::error::Error::NotConnected(*peer_id)));
                 }
             }
         }

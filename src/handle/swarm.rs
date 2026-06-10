@@ -1,3 +1,4 @@
+use crate::error::{ConnexaResult, Error};
 use crate::handle::Connexa;
 use crate::types::{ConnexaSwarmEvent, SwarmCommand};
 use futures::StreamExt;
@@ -24,7 +25,7 @@ where
 
     /// Initiates a dial attempt to connect to a remote peer using provided dial options
     /// Returns the ConnectionId upon successful connection
-    pub async fn dial(&self, target: impl Into<DialOpts>) -> crate::handle::Result<ConnectionId> {
+    pub async fn dial(&self, target: impl Into<DialOpts>) -> ConnexaResult<ConnectionId> {
         let target = target.into();
         let (tx, rx) = oneshot::channel();
         self.connexa
@@ -37,16 +38,14 @@ where
                 }
                 .into(),
             )
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Disconnects from a peer specified by either PeerId or ConnectionId
-    pub async fn disconnect(
-        &self,
-        target_type: impl Into<ConnectionTarget>,
-    ) -> crate::handle::Result<()> {
+    pub async fn disconnect(&self, target_type: impl Into<ConnectionTarget>) -> ConnexaResult<()> {
         let target_type = target_type.into();
         let (tx, rx) = oneshot::channel();
         self.connexa
@@ -59,64 +58,66 @@ where
                 }
                 .into(),
             )
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Checks if we are connected to a specific peer
-    pub async fn is_connected(&self, peer_id: PeerId) -> crate::handle::Result<bool> {
+    pub async fn is_connected(&self, peer_id: PeerId) -> ConnexaResult<bool> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
             .clone()
             .send(SwarmCommand::IsConnected { peer_id, resp: tx }.into())
-            .await?;
-        rx.await.map_err(std::io::Error::other)
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
+        rx.await.map_err(|_| Error::ChannelClosed)
     }
 
     /// Returns a list of all currently connected peers
-    pub async fn connected_peers(&self) -> crate::handle::Result<Vec<PeerId>> {
+    pub async fn connected_peers(&self) -> ConnexaResult<Vec<PeerId>> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
             .clone()
             .send(SwarmCommand::ConnectedPeers { resp: tx }.into())
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)
+        rx.await.map_err(|_| Error::ChannelClosed)
     }
 
     /// Start listening for incoming connections on the given multiaddress
-    pub async fn listen_on(&self, addr: impl ToMultiaddr) -> crate::handle::Result<ListenerId> {
+    pub async fn listen_on(&self, addr: impl ToMultiaddr) -> ConnexaResult<ListenerId> {
         let address = addr.to_multiaddr()?;
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
             .clone()
             .send(SwarmCommand::ListenOn { address, resp: tx }.into())
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Get a listening address by an existing [`ListenerId`]
-    pub async fn get_listening_addresses(
-        &self,
-        id: ListenerId,
-    ) -> crate::handle::Result<Vec<Multiaddr>> {
+    pub async fn get_listening_addresses(&self, id: ListenerId) -> ConnexaResult<Vec<Multiaddr>> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
             .clone()
             .send(SwarmCommand::GetListeningAddress { id, resp: tx }.into())
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Stops listening to the address associated with the given [`ListenerId`]
-    pub async fn remove_listener(&self, listener_id: ListenerId) -> crate::handle::Result<()> {
+    pub async fn remove_listener(&self, listener_id: ListenerId) -> ConnexaResult<()> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
@@ -128,69 +129,67 @@ where
                 }
                 .into(),
             )
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Adds an external address that other peers can use to reach us
-    pub async fn add_external_address(
-        &self,
-        address: impl ToMultiaddr,
-    ) -> crate::handle::Result<()> {
+    pub async fn add_external_address(&self, address: impl ToMultiaddr) -> ConnexaResult<()> {
         let address = address.to_multiaddr()?;
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
             .clone()
             .send(SwarmCommand::AddExternalAddress { address, resp: tx }.into())
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Removes an external address
-    pub async fn remove_external_address(&self, address: Multiaddr) -> crate::handle::Result<()> {
+    pub async fn remove_external_address(&self, address: Multiaddr) -> ConnexaResult<()> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
             .clone()
             .send(SwarmCommand::RemoveExternalAddress { address, resp: tx }.into())
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Returns a list of all external addresses that other peers can use to reach us
-    pub async fn external_addresses(&self) -> crate::handle::Result<Vec<Multiaddr>> {
+    pub async fn external_addresses(&self) -> ConnexaResult<Vec<Multiaddr>> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
             .clone()
             .send(SwarmCommand::ListExternalAddresses { resp: tx }.into())
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)
+        rx.await.map_err(|_| Error::ChannelClosed)
     }
 
     /// Returns a list of all addresses we are currently listening on
-    pub async fn listening_addresses(&self) -> crate::handle::Result<Vec<Multiaddr>> {
+    pub async fn listening_addresses(&self) -> ConnexaResult<Vec<Multiaddr>> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
             .clone()
             .send(SwarmCommand::ListListeningAddresses { resp: tx }.into())
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)
+        rx.await.map_err(|_| Error::ChannelClosed)
     }
 
     /// Associates an address with a PeerId in the local address book
-    pub async fn add_peer_address(
-        &self,
-        peer_id: PeerId,
-        address: Multiaddr,
-    ) -> crate::handle::Result<()> {
+    pub async fn add_peer_address(&self, peer_id: PeerId, address: Multiaddr) -> ConnexaResult<()> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
@@ -203,21 +202,25 @@ where
                 }
                 .into(),
             )
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Subscribes to swarm connection events.
-    pub async fn listener(&self) -> std::io::Result<BoxStream<'static, ConnexaSwarmEvent>> {
+    pub async fn listener(&self) -> ConnexaResult<BoxStream<'static, ConnexaSwarmEvent>> {
         let (tx, rx) = oneshot::channel();
         self.connexa
             .to_task
             .clone()
             .send(SwarmCommand::Listener { resp: tx }.into())
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other).map(|rx| rx.boxed())
+        rx.await
+            .map_err(|_| Error::ChannelClosed)
+            .map(|rx| rx.boxed())
     }
 }
 

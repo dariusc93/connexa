@@ -1,4 +1,5 @@
 use crate::behaviour::peer_store::store::Store;
+use crate::error::{Error, Protocol, floodsub};
 use crate::prelude::{FloodsubMessage, PubsubFloodsubPublish};
 use crate::task::ConnexaTask;
 use crate::types::{FloodsubCommand, FloodsubEvent};
@@ -20,37 +21,46 @@ where
         match command {
             FloodsubCommand::Subscribe { topic, resp, .. } => {
                 let Some(pubsub) = swarm.behaviour_mut().floodsub.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("floodsub is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Floodsub,
+                    }));
                     return;
                 };
 
-                match pubsub.subscribe(topic) {
+                match pubsub.subscribe(topic.clone()) {
                     true => {
                         let _ = resp.send(Ok(()));
                     }
                     false => {
-                        let _ = resp.send(Err(std::io::Error::other("topic already subscribed")));
+                        let _ = resp.send(Err(Error::Floodsub(
+                            floodsub::Error::AlreadySubscribed(topic),
+                        )));
                     }
                 }
             }
             FloodsubCommand::Unsubscribe { topic, resp, .. } => {
                 let Some(pubsub) = swarm.behaviour_mut().floodsub.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("floodsub is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Floodsub,
+                    }));
                     return;
                 };
 
-                match pubsub.unsubscribe(topic) {
+                match pubsub.unsubscribe(topic.clone()) {
                     true => {
                         let _ = resp.send(Ok(()));
                     }
                     false => {
-                        let _ = resp.send(Err(std::io::Error::other("not subscribed to topic")));
+                        let _ =
+                            resp.send(Err(Error::Floodsub(floodsub::Error::NotSubscribed(topic))));
                     }
                 }
             }
             FloodsubCommand::Publish(pubsub_type, resp) => {
                 let Some(pubsub) = swarm.behaviour_mut().floodsub.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("floodsub is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Floodsub,
+                    }));
                     return;
                 };
 
@@ -73,7 +83,9 @@ where
             }
             FloodsubCommand::FloodsubListener { topic, resp } => {
                 if !swarm.behaviour_mut().floodsub.is_enabled() {
-                    let _ = resp.send(Err(std::io::Error::other("floodsub is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Floodsub,
+                    }));
                     return;
                 }
 
@@ -87,7 +99,9 @@ where
             }
             FloodsubCommand::AddNodeToPartialView { peer_id, resp } => {
                 let Some(pubsub) = swarm.behaviour_mut().floodsub.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("floodsub is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Floodsub,
+                    }));
                     return;
                 };
 
@@ -96,7 +110,9 @@ where
             }
             FloodsubCommand::RemoveNodeFromPartialView { peer_id, resp } => {
                 let Some(pubsub) = swarm.behaviour_mut().floodsub.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("floodsub is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Floodsub,
+                    }));
                     return;
                 };
 

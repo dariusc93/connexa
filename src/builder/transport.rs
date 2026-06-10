@@ -22,6 +22,7 @@ use libp2p::relay::client::Transport as ClientTransport;
 #[cfg(not(feature = "relay"))]
 type ClientTransport = ();
 
+use crate::error::{ConnexaResult, Error};
 use libp2p::identity::Keypair;
 use std::io;
 use std::time::Duration;
@@ -255,7 +256,7 @@ pub(crate) fn build_transport(
         #[cfg(feature = "quic")]
         quic_config_callback,
     }: TransportConfig,
-) -> io::Result<TTransport> {
+) -> ConnexaResult<TTransport> {
     #[cfg(all(feature = "noise", feature = "tls"))]
     use dual_transport::SelectSecurityUpgrade;
     #[cfg(feature = "dns")]
@@ -288,9 +289,8 @@ pub(crate) fn build_transport(
         has_transport |= enable_webrtc;
     }
     if !has_transport {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "no transport was enabled; enable at least one of tcp, quic, websocket, webrtc, or the memory transport",
+        return Err(Error::InvalidConfig(
+            "no transport was enabled; enable at least one of tcp, quic, websocket, webrtc, or the memory transport".into(),
         ));
     }
 
@@ -496,7 +496,7 @@ pub(crate) fn build_transport(
         enable_memory_transport,
         ..
     }: TransportConfig,
-) -> io::Result<TTransport> {
+) -> ConnexaResult<TTransport> {
     #[cfg(feature = "websocket")]
     use libp2p::websocket_websys;
     #[cfg(feature = "webtransport")]
