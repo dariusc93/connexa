@@ -65,6 +65,9 @@ pub enum Error<C = Infallible> {
     RequestResponse(#[from] libp2p::request_response::OutboundFailure),
 
     #[error(transparent)]
+    Keystore(#[from] crate::keystore::Error),
+
+    #[error(transparent)]
     Custom(C),
 
     #[error(transparent)]
@@ -140,6 +143,7 @@ where
                     Error::Gossipsub(_) => ErrorKind::Other,
                     #[cfg(feature = "floodsub")]
                     Error::Floodsub(_) => ErrorKind::Other,
+                    Error::Keystore(_) => ErrorKind::Other,
                     Error::Disabled { .. } | Error::Custom(_) => ErrorKind::Other,
                     Error::Io(_) => unreachable!("handled above"),
                 };

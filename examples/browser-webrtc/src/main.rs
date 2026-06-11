@@ -14,10 +14,11 @@ async fn main() {
     let connexa = DefaultConnexaBuilder::new_identity()
         .enable_webrtc()
         .with_ping()
-        .set_swarm_event_callback(|_, event, _| {
+        .set_swarm_event_callback(|_, _, event, _| {
             println!("swarm event: {event:?}");
         })
         .build()
+        .await
         .expect("should not fail");
 
     let id = connexa

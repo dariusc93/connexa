@@ -5,16 +5,23 @@ use bytes::Bytes;
 use futures::channel::oneshot;
 use libp2p::{PeerId, StreamProtocol};
 
-#[derive(Copy, Clone)]
-pub struct ConnexaStream<'a, T> {
-    connexa: &'a Connexa<T>,
+pub struct ConnexaStream<'a, T, K = crate::keystore::store::memory::MemoryKeystore> {
+    connexa: &'a Connexa<T, K>,
 }
 
-impl<'a, T> ConnexaStream<'a, T>
+impl<'a, T, K> Copy for ConnexaStream<'a, T, K> {}
+
+impl<'a, T, K> Clone for ConnexaStream<'a, T, K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, T, K> ConnexaStream<'a, T, K>
 where
     T: Send + Sync + 'static,
 {
-    pub(crate) fn new(connexa: &'a Connexa<T>) -> Self {
+    pub(crate) fn new(connexa: &'a Connexa<T, K>) -> Self {
         Self { connexa }
     }
 

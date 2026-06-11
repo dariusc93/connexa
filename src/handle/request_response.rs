@@ -10,16 +10,23 @@ use libp2p::request_response::InboundRequestId;
 use libp2p::{PeerId, StreamProtocol};
 use std::io::Result as IoResult;
 
-#[derive(Copy, Clone)]
-pub struct ConnexaRequestResponse<'a, T> {
-    connexa: &'a Connexa<T>,
+pub struct ConnexaRequestResponse<'a, T, K = crate::keystore::store::memory::MemoryKeystore> {
+    connexa: &'a Connexa<T, K>,
 }
 
-impl<'a, T> ConnexaRequestResponse<'a, T>
+impl<'a, T, K> Copy for ConnexaRequestResponse<'a, T, K> {}
+
+impl<'a, T, K> Clone for ConnexaRequestResponse<'a, T, K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, T, K> ConnexaRequestResponse<'a, T, K>
 where
     T: Send + Sync + 'static,
 {
-    pub(crate) fn new(connexa: &'a Connexa<T>) -> Self {
+    pub(crate) fn new(connexa: &'a Connexa<T, K>) -> Self {
         Self { connexa }
     }
 

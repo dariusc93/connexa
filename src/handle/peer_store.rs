@@ -5,16 +5,23 @@ use crate::types::PeerstoreCommand;
 use futures::channel::oneshot;
 use libp2p::Multiaddr;
 
-#[derive(Copy, Clone)]
-pub struct ConnexaPeerstore<'a, T = ()> {
-    connexa: &'a Connexa<T>,
+pub struct ConnexaPeerstore<'a, T = (), K = crate::keystore::store::memory::MemoryKeystore> {
+    connexa: &'a Connexa<T, K>,
 }
 
-impl<'a, T> ConnexaPeerstore<'a, T>
+impl<'a, T, K> Copy for ConnexaPeerstore<'a, T, K> {}
+
+impl<'a, T, K> Clone for ConnexaPeerstore<'a, T, K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, T, K> ConnexaPeerstore<'a, T, K>
 where
     T: Send + Sync + 'static,
 {
-    pub(crate) fn new(connexa: &'a Connexa<T>) -> Self {
+    pub(crate) fn new(connexa: &'a Connexa<T, K>) -> Self {
         Self { connexa }
     }
 

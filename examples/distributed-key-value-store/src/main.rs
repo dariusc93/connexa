@@ -37,7 +37,8 @@ async fn main() -> std::io::Result<()> {
             }
             config
         })
-        .build()?;
+        .build()
+        .await?;
 
     let addrs = match opt.listener.is_empty() {
         true => vec![

@@ -21,8 +21,9 @@ async fn create_node(port: impl Into<Option<u64>>) -> io::Result<(Connexa, Multi
                 .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
                 .boxed();
             Ok(transport)
-        })?
-        .build()?;
+        })
+        .build()
+        .await?;
 
     let port = port.into().unwrap_or_default();
 

@@ -8,8 +8,9 @@ use crate::builder::transport::DnsResolver;
 use crate::builder::transport::{
     TTransport, TransportConfig, TryIntoTransport, build_other_transport,
 };
-use crate::error::ConnexaResult;
+use crate::error::{ConnexaResult, Error};
 use crate::handle::Connexa;
+use crate::keystore::{Keychain, Keystore, generate_key, store::memory::MemoryKeystore};
 use crate::prelude::PeerId;
 use crate::task::ConnexaTask;
 use crate::{
@@ -53,24 +54,47 @@ pub enum FileDescLimit {
     Custom(u64),
 }
 
-pub struct ConnexaBuilder<B, Ctx, Cmd, S>
+#[allow(clippy::large_enum_variant)]
+enum Identity {
+    Explicit(Keypair),
+    FromKeychain { label: String, create: bool },
+}
+
+type CustomBehaviourFn<B> = Box<dyn FnOnce(&Keypair) -> ConnexaResult<B>>;
+type CustomTransportFn = Box<dyn FnOnce(&Keypair) -> ConnexaResult<TTransport>>;
+#[cfg(feature = "webrtc")]
+#[cfg(not(target_arch = "wasm32"))]
+type WebRtcCertFn = Box<dyn FnOnce(&Keypair) -> std::io::Result<String>>;
+#[cfg(feature = "websocket")]
+#[cfg(not(target_arch = "wasm32"))]
+type WebSocketCertFn = Box<dyn FnOnce(&Keypair) -> std::io::Result<(Vec<String>, String)>>;
+
+pub struct ConnexaBuilder<B, Ctx, Cmd, S, K = MemoryKeystore>
 where
     B: NetworkBehaviour,
     S: Store,
+    K: Keystore,
 {
-    keypair: Keypair,
+    identity: Identity,
+    keychain: Keychain<K>,
     context: Ctx,
-    custom_behaviour: Option<B>,
+    custom_behaviour: Option<CustomBehaviourFn<B>>,
     file_descriptor_limits: Option<FileDescLimit>,
-    custom_task_callback: TTaskCallback<B, Ctx, Cmd, S>,
-    custom_event_callback: TEventCallback<B, Ctx, S>,
-    swarm_event_callback: TSwarmEventCallback<B, Ctx, S>,
-    preload_callback: TPreloadCallback<B, Ctx, S>,
-    custom_pollable_callback: TPollableCallback<B, Ctx, S>,
+    custom_task_callback: TTaskCallback<B, Ctx, Cmd, S, K>,
+    custom_event_callback: TEventCallback<B, Ctx, S, K>,
+    swarm_event_callback: TSwarmEventCallback<B, Ctx, S, K>,
+    preload_callback: TPreloadCallback<B, Ctx, S, K>,
+    custom_pollable_callback: TPollableCallback<B, Ctx, S, K>,
     config: Config<S>,
     swarm_config: Box<dyn FnOnce(libp2p::swarm::Config) -> libp2p::swarm::Config>,
     transport_config: TransportConfig,
-    custom_transport: Option<TTransport>,
+    custom_transport: Option<CustomTransportFn>,
+    #[cfg(feature = "webrtc")]
+    #[cfg(not(target_arch = "wasm32"))]
+    webrtc_cert: Option<WebRtcCertFn>,
+    #[cfg(feature = "websocket")]
+    #[cfg(not(target_arch = "wasm32"))]
+    websocket_cert: Option<WebSocketCertFn>,
     protocols: Protocols,
 }
 
@@ -189,7 +213,7 @@ pub(crate) struct Protocols {
     pub(crate) peer_store: bool,
 }
 
-impl<B, Ctx, Cmd, S> ConnexaBuilder<B, Ctx, Cmd, S>
+impl<B, Ctx, Cmd, S> ConnexaBuilder<B, Ctx, Cmd, S, MemoryKeystore>
 where
     B: NetworkBehaviour,
     B: Send,
@@ -198,31 +222,86 @@ where
     Cmd: Send + Sync + 'static,
     S: Store,
 {
-    /// Create a new instance
+    /// Create a new instance.
     pub fn new_identity() -> Self {
-        let keypair = Keypair::generate_ed25519();
-        Self::with_existing_identity(keypair).expect("keypair generation doesnt failed")
+        Self::from_identity(
+            Identity::FromKeychain {
+                label: "identity".to_string(),
+                create: true,
+            },
+            default_keychain(),
+        )
     }
 
     /// Create an instance with an existing keypair.
-    pub fn with_existing_identity(keypair: impl IntoKeypair) -> ConnexaResult<Self> {
-        let keypair = keypair.into_keypair()?;
-        Ok(Self {
-            keypair,
+    pub fn with_existing_identity(
+        keypair: impl IntoKeypair<MemoryKeystore>,
+    ) -> ConnexaResult<Self> {
+        let (keypair, keychain) = keypair.into_keypair()?;
+        Ok(Self::from_identity(Identity::Explicit(keypair), keychain))
+    }
+}
+
+impl<B, Ctx, Cmd, S, K> ConnexaBuilder<B, Ctx, Cmd, S, K>
+where
+    B: NetworkBehaviour,
+    B: Send,
+    B::ToSwarm: Debug,
+    Ctx: Default + Unpin + Send + Sync + 'static,
+    Cmd: Send + Sync + 'static,
+    S: Store,
+    K: Keystore,
+{
+    /// Create an instance that resolves its identity from `keychain` under `label`
+    /// loading it, or generating and storing a new identity if none exists yet.
+    pub fn with_keychain_identity(keychain: Keychain<K>, label: impl Into<String>) -> Self {
+        Self::from_identity(
+            Identity::FromKeychain {
+                label: label.into(),
+                create: true,
+            },
+            keychain,
+        )
+    }
+
+    /// Create an instance that loads its identity from `keychain` under `label`.
+    pub fn with_existing_keychain_identity(
+        keychain: Keychain<K>,
+        label: impl Into<String>,
+    ) -> Self {
+        Self::from_identity(
+            Identity::FromKeychain {
+                label: label.into(),
+                create: false,
+            },
+            keychain,
+        )
+    }
+
+    fn from_identity(identity: Identity, keychain: Keychain<K>) -> Self {
+        Self {
+            identity,
+            keychain,
             custom_behaviour: None,
             context: Ctx::default(),
             file_descriptor_limits: None,
-            custom_task_callback: Box::new(|_, _, _| ()),
-            custom_event_callback: Box::new(|_, _, _| ()),
-            swarm_event_callback: Box::new(|_, _, _| ()),
-            preload_callback: Box::new(|_, _, _| ()),
-            custom_pollable_callback: Box::new(|_, _, _| Poll::Pending),
+            custom_task_callback: Box::new(|_, _, _, _| ()),
+            custom_event_callback: Box::new(|_, _, _, _| ()),
+            swarm_event_callback: Box::new(|_, _, _, _| ()),
+            preload_callback: Box::new(|_, _, _, _| ()),
+            custom_pollable_callback: Box::new(|_, _, _, _| Poll::Pending),
             config: Config::default(),
             protocols: Protocols::default(),
             swarm_config: Box::new(|config| config),
             transport_config: TransportConfig::default(),
             custom_transport: None,
-        })
+            #[cfg(feature = "webrtc")]
+            #[cfg(not(target_arch = "wasm32"))]
+            webrtc_cert: None,
+            #[cfg(feature = "websocket")]
+            #[cfg(not(target_arch = "wasm32"))]
+            websocket_cert: None,
+        }
     }
 
     /// Configuration for the swarm.
@@ -245,7 +324,7 @@ where
     /// Set a callback for custom task events.
     pub fn set_custom_task_callback<F>(mut self, f: F) -> Self
     where
-        F: Fn(&mut Swarm<behaviour::Behaviour<B, S>>, &mut Ctx, Cmd) + 'static + Send,
+        F: Fn(&mut Swarm<behaviour::Behaviour<B, S>>, &Keychain<K>, &mut Ctx, Cmd) + 'static + Send,
     {
         self.custom_task_callback = Box::new(f);
         self
@@ -254,7 +333,9 @@ where
     /// Handles events from the custom behaviour.
     pub fn set_custom_event_callback<F>(mut self, f: F) -> Self
     where
-        F: Fn(&mut Swarm<behaviour::Behaviour<B, S>>, &mut Ctx, B::ToSwarm) + 'static + Send,
+        F: Fn(&mut Swarm<behaviour::Behaviour<B, S>>, &Keychain<K>, &mut Ctx, B::ToSwarm)
+            + 'static
+            + Send,
     {
         self.custom_event_callback = Box::new(f);
         self
@@ -265,7 +346,12 @@ where
     /// it would be no-op since this is just to process futures or streams that may be held in context
     pub fn set_pollable_callback<F>(mut self, f: F) -> Self
     where
-        F: Fn(&mut Context<'_>, &mut Swarm<behaviour::Behaviour<B, S>>, &mut Ctx) -> Poll<()>
+        F: Fn(
+                &mut Context<'_>,
+                &mut Swarm<behaviour::Behaviour<B, S>>,
+                &Keychain<K>,
+                &mut Ctx,
+            ) -> Poll<()>
             + Send
             + 'static,
     {
@@ -278,6 +364,7 @@ where
     where
         F: Fn(
                 &mut Swarm<behaviour::Behaviour<B, S>>,
+                &Keychain<K>,
                 &SwarmEvent<behaviour::BehaviourEvent<B, S>>,
                 &mut Ctx,
             )
@@ -293,7 +380,9 @@ where
     /// immediate activation before any other events are processed.
     pub fn set_preload<F>(mut self, f: F) -> Self
     where
-        F: FnOnce(&Keypair, &mut Swarm<behaviour::Behaviour<B, S>>, &mut Ctx) + 'static + Send,
+        F: FnOnce(&Keypair, &mut Swarm<behaviour::Behaviour<B, S>>, &Keychain<K>, &mut Ctx)
+            + 'static
+            + Send,
     {
         self.preload_callback = Box::new(f);
         self
@@ -588,31 +677,28 @@ where
     /// Set a custom behaviour
     /// Note that if you want to communicate or interact with the behaviour, you would need to set a callback via
     /// `custom_event_callback` and `custom_task_callback`.
-    pub fn with_custom_behaviour<F>(mut self, f: F) -> ConnexaResult<Self>
+    pub fn with_custom_behaviour<F>(mut self, f: F) -> Self
     where
         F: FnOnce(&Keypair) -> std::io::Result<B>,
         F: 'static,
     {
-        let behaviour = f(&self.keypair)?;
-        self.custom_behaviour = Some(behaviour);
-        Ok(self)
+        self.custom_behaviour = Some(Box::new(move |keypair| f(keypair).map_err(Error::from)));
+        self
     }
 
     /// Set a custom behaviour with context
     /// Note that if you want to communicate or interact with the behaviour that you would need to set a callback via
     /// `custom_event_callback` and `custom_task_callback`.
-    pub fn with_custom_behaviour_with_context<F, IC>(
-        mut self,
-        context: IC,
-        f: F,
-    ) -> ConnexaResult<Self>
+    pub fn with_custom_behaviour_with_context<F, IC>(mut self, context: IC, f: F) -> Self
     where
         F: FnOnce(&Keypair, IC) -> std::io::Result<B>,
         F: 'static,
+        IC: 'static,
     {
-        let behaviour = f(&self.keypair, context)?;
-        self.custom_behaviour = Some(behaviour);
-        Ok(self)
+        self.custom_behaviour = Some(Box::new(move |keypair| {
+            f(keypair, context).map_err(Error::from)
+        }));
+        self
     }
 
     /// Enables quic transport
@@ -702,12 +788,14 @@ where
     /// Enables secure websocket transport
     #[cfg(feature = "websocket")]
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn enable_secure_websocket_with_config<F>(self, f: F) -> ConnexaResult<Self>
+    pub fn enable_secure_websocket_with_config<F>(mut self, f: F) -> Self
     where
-        F: FnOnce(&Keypair) -> std::io::Result<(Vec<String>, String)>,
+        F: FnOnce(&Keypair) -> std::io::Result<(Vec<String>, String)> + 'static,
     {
-        let (certs, keypair) = f(&self.keypair)?;
-        Ok(self.enable_secure_websocket_with_pem(keypair, certs))
+        self.transport_config.enable_secure_websocket = true;
+        self.transport_config.enable_websocket = true;
+        self.websocket_cert = Some(Box::new(f));
+        self
     }
 
     /// Enables DNS
@@ -734,13 +822,13 @@ where
     /// Enables WebRTC transport, allowing one to generate a certificate using the provided keypair in the closure.
     #[cfg(feature = "webrtc")]
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn enable_webrtc_with_config<F>(mut self, f: F) -> ConnexaResult<Self>
+    pub fn enable_webrtc_with_config<F>(mut self, f: F) -> Self
     where
-        F: FnOnce(&Keypair) -> std::io::Result<String>,
+        F: FnOnce(&Keypair) -> std::io::Result<String> + 'static,
     {
         self.transport_config.enable_webrtc = true;
-        self.transport_config.webrtc_pem = Some(f(&self.keypair)?);
-        Ok(self)
+        self.webrtc_cert = Some(Box::new(f));
+        self
     }
 
     /// Enable WebRTC transport with a provided pre-generated pem.
@@ -749,7 +837,6 @@ where
     pub fn enable_webrtc_with_pem(self, pem: impl Into<String>) -> Self {
         let pem = pem.into();
         self.enable_webrtc_with_config(move |_| Ok(pem))
-            .expect("pem is provided; should not fail")
     }
 
     /// Enables WebTransport.
@@ -767,7 +854,7 @@ where
     }
 
     /// Implements custom transport that will override the existing transport construction.
-    pub fn with_custom_transport<F, M, TP, R>(mut self, f: F) -> ConnexaResult<Self>
+    pub fn with_custom_transport<F, M, TP, R>(mut self, f: F) -> Self
     where
         M: libp2p::core::muxing::StreamMuxer + Send + 'static,
         M::Substream: Send,
@@ -777,16 +864,18 @@ where
         TP::Dial: Send,
         TP::ListenerUpgrade: Send,
         R: TryIntoTransport<TP>,
-        F: FnOnce(&Keypair) -> R,
+        F: FnOnce(&Keypair) -> R + 'static,
     {
-        let transport = build_other_transport(&self.keypair, f)?;
-        self.custom_transport = Some(transport);
-        Ok(self)
+        self.custom_transport = Some(Box::new(move |keypair| {
+            build_other_transport(keypair, f).map_err(Error::from)
+        }));
+        self
     }
 
-    pub fn build(self) -> ConnexaResult<Connexa<Cmd>> {
+    pub async fn build(self) -> ConnexaResult<Connexa<Cmd, K>> {
         let ConnexaBuilder {
-            keypair,
+            identity,
+            keychain,
             mut context,
             custom_behaviour,
             file_descriptor_limits,
@@ -800,7 +889,44 @@ where
             swarm_config,
             transport_config,
             custom_transport,
+            #[cfg(feature = "webrtc")]
+            #[cfg(not(target_arch = "wasm32"))]
+            webrtc_cert,
+            #[cfg(feature = "websocket")]
+            #[cfg(not(target_arch = "wasm32"))]
+            websocket_cert,
         } = self;
+
+        // Finalize the identity (this is the single async point), then run the keypair-dependent
+        // config that was deferred from the builder methods.
+        let keypair = match identity {
+            Identity::Explicit(keypair) => keypair,
+            Identity::FromKeychain { label, create } => {
+                if create {
+                    keychain.get_or_create(&label).await?
+                } else {
+                    keychain.get(&label).await?
+                }
+            }
+        };
+
+        let custom_behaviour = custom_behaviour.map(|f| f(&keypair)).transpose()?;
+
+        #[allow(unused_mut)]
+        let mut transport_config = transport_config;
+
+        #[cfg(feature = "webrtc")]
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(cert) = webrtc_cert {
+            transport_config.webrtc_pem = Some(cert(&keypair)?);
+        }
+        #[cfg(feature = "websocket")]
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(cert) = websocket_cert {
+            transport_config.websocket_pem = Some(cert(&keypair)?);
+        }
+
+        let custom_transport = custom_transport.map(|f| f(&keypair)).transpose()?;
 
         let span = Span::current();
 
@@ -842,10 +968,10 @@ where
 
         let swarm = Swarm::new(transport, behaviour, peer_id, swarm_config);
 
-        let mut connexa_task = ConnexaTask::new(swarm);
+        let mut connexa_task = ConnexaTask::new(swarm, keychain.clone());
 
         let swarm = connexa_task.swarm.as_mut().expect("valid swarm");
-        preload_callback(&keypair, swarm, &mut context);
+        preload_callback(&keypair, swarm, &keychain, &mut context);
 
         let to_task = async_rt::task::spawn_coroutine_with_context(
             (
@@ -868,53 +994,66 @@ where
             },
         );
 
-        let connexa = Connexa::new(span, keypair, to_task);
+        let connexa = Connexa::new(span, keypair, keychain, to_task);
 
         Ok(connexa)
     }
 }
 
-pub trait IntoKeypair {
-    fn into_keypair(self) -> std::io::Result<Keypair>;
+fn default_keychain() -> Keychain<MemoryKeystore> {
+    Keychain::in_memory(generate_key())
 }
 
-impl IntoKeypair for Keypair {
-    fn into_keypair(self) -> std::io::Result<Keypair> {
-        Ok(self)
+/// Resolves an identity (and the keychain that will hold runtime keys) for the builder. The
+/// built-in impls pair the identity with a fresh in-memory keychain; implement it for your own
+/// type to supply a different backend.
+pub trait IntoKeypair<S> {
+    fn into_keypair(self) -> std::io::Result<(Keypair, Keychain<S>)>;
+}
+
+impl IntoKeypair<MemoryKeystore> for Keypair {
+    fn into_keypair(self) -> std::io::Result<(Keypair, Keychain<MemoryKeystore>)> {
+        Ok((self, default_keychain()))
     }
 }
 
-impl IntoKeypair for &Keypair {
-    fn into_keypair(self) -> std::io::Result<Keypair> {
-        Ok(self.clone())
+impl IntoKeypair<MemoryKeystore> for &Keypair {
+    fn into_keypair(self) -> std::io::Result<(Keypair, Keychain<MemoryKeystore>)> {
+        Ok((self.clone(), default_keychain()))
     }
 }
 
 // should only be used in testing environments and not in productions
 #[cfg(feature = "testing")]
-impl IntoKeypair for u8 {
-    fn into_keypair(self) -> std::io::Result<Keypair> {
+impl IntoKeypair<MemoryKeystore> for u8 {
+    fn into_keypair(self) -> std::io::Result<(Keypair, Keychain<MemoryKeystore>)> {
         let mut bytes = [0u8; 32];
         bytes[0] = self;
         let kp = Keypair::ed25519_from_bytes(bytes).expect("only errors on wrong length");
-        Ok(kp)
+        Ok((kp, default_keychain()))
     }
 }
 
-impl IntoKeypair for &mut [u8] {
-    fn into_keypair(self) -> std::io::Result<Keypair> {
-        Keypair::ed25519_from_bytes(self).map_err(std::io::Error::other)
+impl IntoKeypair<MemoryKeystore> for &mut [u8] {
+    fn into_keypair(self) -> std::io::Result<(Keypair, Keychain<MemoryKeystore>)> {
+        Ok((
+            Keypair::ed25519_from_bytes(self).map_err(std::io::Error::other)?,
+            default_keychain(),
+        ))
     }
 }
 
-impl IntoKeypair for Vec<u8> {
-    fn into_keypair(self) -> std::io::Result<Keypair> {
-        Keypair::ed25519_from_bytes(self).map_err(std::io::Error::other)
+impl IntoKeypair<MemoryKeystore> for Vec<u8> {
+    fn into_keypair(self) -> std::io::Result<(Keypair, Keychain<MemoryKeystore>)> {
+        Ok((
+            Keypair::ed25519_from_bytes(self).map_err(std::io::Error::other)?,
+            default_keychain(),
+        ))
     }
 }
 
-impl<R: std::io::Read> IntoKeypair for std::io::BufReader<R> {
-    fn into_keypair(mut self) -> std::io::Result<Keypair> {
+impl<R: std::io::Read> IntoKeypair<MemoryKeystore> for std::io::BufReader<R> {
+    fn into_keypair(mut self) -> std::io::Result<(Keypair, Keychain<MemoryKeystore>)> {
         use std::io::Read;
         let mut kp_bytes = Vec::new();
         match self.read_to_end(&mut kp_bytes) {
@@ -933,15 +1072,15 @@ impl<R: std::io::Read> IntoKeypair for std::io::BufReader<R> {
 }
 
 #[cfg(feature = "keypair_base64_encoding")]
-impl IntoKeypair for String {
-    fn into_keypair(self) -> std::io::Result<Keypair> {
+impl IntoKeypair<MemoryKeystore> for String {
+    fn into_keypair(self) -> std::io::Result<(Keypair, Keychain<MemoryKeystore>)> {
         self.as_str().into_keypair()
     }
 }
 
 #[cfg(feature = "keypair_base64_encoding")]
-impl IntoKeypair for &str {
-    fn into_keypair(self) -> std::io::Result<Keypair> {
+impl IntoKeypair<MemoryKeystore> for &str {
+    fn into_keypair(self) -> std::io::Result<(Keypair, Keychain<MemoryKeystore>)> {
         use base64::{
             Engine,
             alphabet::STANDARD,
@@ -952,15 +1091,15 @@ impl IntoKeypair for &str {
         let keypair_bytes = engine.decode(self).map_err(std::io::Error::other)?;
         let keypair =
             Keypair::from_protobuf_encoding(&keypair_bytes).map_err(std::io::Error::other)?;
-        Ok(keypair)
+        Ok((keypair, default_keychain()))
     }
 }
 
-impl<K: IntoKeypair> IntoKeypair for Option<K> {
-    fn into_keypair(self) -> std::io::Result<Keypair> {
+impl<T: IntoKeypair<MemoryKeystore>> IntoKeypair<MemoryKeystore> for Option<T> {
+    fn into_keypair(self) -> std::io::Result<(Keypair, Keychain<MemoryKeystore>)> {
         match self {
             Some(kp) => kp.into_keypair(),
-            None => Ok(Keypair::generate_ed25519()),
+            None => Ok((Keypair::generate_ed25519(), default_keychain())),
         }
     }
 }

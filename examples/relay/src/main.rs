@@ -50,20 +50,26 @@ async fn main() -> io::Result<()> {
         .try_init();
     let opt = Opt::parse();
     let connexa = match opt.mode {
-        Mode::Server => DefaultConnexaBuilder::with_existing_identity(opt.seed)?
-            .enable_tcp()
-            .enable_quic()
-            .with_ping()
-            .with_identify()
-            .with_relay_server()
-            .build()?,
-        Mode::Dial | Mode::Listen => DefaultConnexaBuilder::with_existing_identity(opt.seed)?
-            .enable_tcp()
-            .enable_quic()
-            .with_ping()
-            .with_identify()
-            .with_relay()
-            .build()?,
+        Mode::Server => {
+            DefaultConnexaBuilder::with_existing_identity(opt.seed)?
+                .enable_tcp()
+                .enable_quic()
+                .with_ping()
+                .with_identify()
+                .with_relay_server()
+                .build()
+                .await?
+        }
+        Mode::Dial | Mode::Listen => {
+            DefaultConnexaBuilder::with_existing_identity(opt.seed)?
+                .enable_tcp()
+                .enable_quic()
+                .with_ping()
+                .with_identify()
+                .with_relay()
+                .build()
+                .await?
+        }
     };
 
     let peer_id = connexa.keypair().public().to_peer_id();

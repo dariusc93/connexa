@@ -10,16 +10,23 @@ use libp2p::swarm::dial_opts::DialOpts;
 use libp2p::{Multiaddr, PeerId};
 use std::str::FromStr;
 
-#[derive(Copy, Clone)]
-pub struct ConnexaSwarm<'a, T> {
-    connexa: &'a Connexa<T>,
+pub struct ConnexaSwarm<'a, T, K = crate::keystore::store::memory::MemoryKeystore> {
+    connexa: &'a Connexa<T, K>,
 }
 
-impl<'a, T> ConnexaSwarm<'a, T>
+impl<'a, T, K> Copy for ConnexaSwarm<'a, T, K> {}
+
+impl<'a, T, K> Clone for ConnexaSwarm<'a, T, K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, T, K> ConnexaSwarm<'a, T, K>
 where
     T: Send + Sync + 'static,
 {
-    pub(crate) fn new(connexa: &'a Connexa<T>) -> Self {
+    pub(crate) fn new(connexa: &'a Connexa<T, K>) -> Self {
         Self { connexa }
     }
 
