@@ -2,7 +2,8 @@ pub mod cipher;
 pub mod store;
 
 use cipher::xchacha20poly1305::XChaCha20Poly1305Cipher;
-use libp2p::identity::Keypair;
+use libp2p::PeerId;
+use libp2p::identity::{Keypair, PublicKey};
 use rand::RngCore;
 use std::future::Future;
 use std::sync::Arc;
@@ -29,6 +30,8 @@ pub enum Error {
     Backend(String),
     #[error("cannot generate a key of type {0:?}")]
     UnsupportedKeyType(KeyType),
+    #[error("key type mismatch: stored key is {has:?} but wanted {wanted:?}")]
+    KeyTypeMismatch { has: KeyType, wanted: KeyType },
 }
 
 /// The cryptographic family of a stored key, mirroring [`libp2p::identity::KeyType`].
@@ -110,12 +113,31 @@ pub struct KeyMetadata {
     pub version: u32,
     pub created_at: SystemTime,
     pub expires_at: Option<SystemTime>,
+    public_key: Vec<u8>,
 }
 
 impl KeyMetadata {
     /// Whether the key is past its expiration time.
     pub fn is_expired(&self) -> bool {
         self.expires_at.is_some_and(|exp| SystemTime::now() >= exp)
+    }
+
+    /// The [`PublicKey`] of the stored keypair.
+    pub fn public_key(&self) -> Result<PublicKey> {
+        let pubkey = PublicKey::try_decode_protobuf(&self.public_key).map_err(Error::from)?;
+        let pub_key_type: KeyType = KeyType::from(pubkey.key_type());
+        if pub_key_type != self.key_type {
+            return Err(Error::KeyTypeMismatch {
+                has: pub_key_type,
+                wanted: self.key_type,
+            });
+        }
+        Ok(pubkey)
+    }
+
+    /// The [`PeerId`] of the stored keypair.
+    pub fn peer_id(&self) -> Result<PeerId> {
+        Ok(self.public_key()?.to_peer_id())
     }
 }
 
@@ -291,6 +313,7 @@ impl<S: Keystore> Keychain<S> {
                 version,
                 created_at,
                 expires_at: expiry.resolve(created_at),
+                public_key: keypair.public().encode_protobuf(),
             },
             ciphertext,
         };
@@ -313,6 +336,24 @@ impl<S: Keystore> Keychain<S> {
                 .decrypt(Some(label.as_bytes()), &entry.ciphertext)?,
         );
         Keypair::from_protobuf_encoding(plaintext.as_slice()).map_err(Error::from)
+    }
+
+    /// The public key stored under `label`.
+    pub async fn public_key(&self, label: &str) -> Result<PublicKey> {
+        let entry = self
+            .backend
+            .get(label)
+            .await?
+            .ok_or_else(|| Error::NotFound(label.to_owned()))?;
+        if entry.metadata.is_expired() {
+            return Err(Error::Expired(label.to_owned()));
+        }
+        entry.metadata.public_key()
+    }
+
+    /// The [`PeerId`] stored under `label`.
+    pub async fn peer_id(&self, label: &str) -> Result<PeerId> {
+        Ok(self.public_key(label).await?.to_peer_id())
     }
 
     /// Load the keypair stored under `label`, or generate and store a new identity if none
