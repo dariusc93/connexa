@@ -56,6 +56,26 @@ impl Keystore for RedbKeystore {
         .map_err(backend)?
     }
 
+    async fn put_many(&self, entries: Vec<EncryptedEntry>) -> Result<()> {
+        let db = self.db().await?;
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            let tx = db.begin_write().map_err(backend)?;
+            {
+                let mut table = tx.open_table(TABLE).map_err(backend)?;
+                for entry in entries {
+                    let bytes = postcard::to_allocvec(&entry).map_err(backend)?;
+                    table
+                        .insert(entry.metadata.label.as_str(), bytes.as_slice())
+                        .map_err(backend)?;
+                }
+            }
+            tx.commit().map_err(backend)?;
+            Ok(())
+        })
+        .await
+        .map_err(backend)?
+    }
+
     async fn get(&self, label: &str) -> Result<Option<EncryptedEntry>> {
         let db = self.db().await?;
         let label = label.to_owned();

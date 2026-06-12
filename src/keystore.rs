@@ -2,6 +2,7 @@ pub mod cipher;
 pub mod store;
 
 use cipher::xchacha20poly1305::XChaCha20Poly1305Cipher;
+use futures::stream::FuturesUnordered;
 use libp2p::PeerId;
 use libp2p::identity::{Keypair, PublicKey};
 use rand::RngCore;
@@ -179,6 +180,14 @@ fn generate_keypair(key_type: KeyType) -> Result<Keypair> {
 pub trait Keystore: Send + Sync + 'static {
     /// Store (or replace) an entry, keyed by its `label`.
     fn put(&self, entry: EncryptedEntry) -> impl Future<Output = Result<()>> + Send;
+    /// Store (or replace) many entries.
+    fn put_many(&self, entries: Vec<EncryptedEntry>) -> impl Future<Output = Result<()>> + Send {
+        async move {
+            FuturesUnordered::from_iter(entries.into_iter().map(|entry| self.put(entry)))
+                .try_collect::<()>()
+                .await
+        }
+    }
     /// Fetch the entry for `label`, if present.
     fn get(&self, label: &str) -> impl Future<Output = Result<Option<EncryptedEntry>>> + Send;
     /// List metadata for all stored entries.

@@ -18,6 +18,14 @@ impl Keystore for MemoryKeystore {
         Ok(())
     }
 
+    async fn put_many(&self, entries: Vec<EncryptedEntry>) -> Result<(), Error> {
+        let mut inner = self.inner.write().await;
+        for entry in entries {
+            inner.insert(entry.metadata.label.clone(), entry);
+        }
+        Ok(())
+    }
+
     async fn get(&self, label: &str) -> Result<Option<EncryptedEntry>, Error> {
         Ok(self.inner.read().await.get(label).cloned())
     }

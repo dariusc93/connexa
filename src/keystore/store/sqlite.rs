@@ -72,6 +72,22 @@ impl Keystore for SqliteKeystore {
         Ok(())
     }
 
+    async fn put_many(&self, entries: Vec<EncryptedEntry>) -> Result<()> {
+        let pool = self.pool().await?;
+        let mut tx = pool.begin().await.map_err(backend)?;
+        for entry in entries {
+            let bytes = postcard::to_allocvec(&entry).map_err(backend)?;
+            sqlx::query("INSERT OR REPLACE INTO keys (label, data) VALUES (?1, ?2)")
+                .bind(entry.metadata.label)
+                .bind(bytes)
+                .execute(&mut *tx)
+                .await
+                .map_err(backend)?;
+        }
+        tx.commit().await.map_err(backend)?;
+        Ok(())
+    }
+
     async fn get(&self, label: &str) -> Result<Option<EncryptedEntry>> {
         let pool = self.pool().await?;
         let row: Option<(Vec<u8>,)> = sqlx::query_as("SELECT data FROM keys WHERE label = ?1")

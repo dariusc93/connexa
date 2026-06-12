@@ -63,6 +63,27 @@ impl Keystore for IndexedDbKeystore {
         })
     }
 
+    fn put_many(&self, entries: Vec<EncryptedEntry>) -> impl Future<Output = Result<()>> + Send {
+        SendWrapper::new(async move {
+            let db = self.db().await?;
+            let tx = db
+                .transaction(&[OBJECT_STORE], TransactionMode::ReadWrite)
+                .map_err(backend)?;
+            let store = tx.object_store(OBJECT_STORE).map_err(backend)?;
+            for entry in entries {
+                let value = serde_wasm_bindgen::to_value(&entry).map_err(backend)?;
+                let key = JsValue::from_str(&entry.metadata.label);
+                store
+                    .put(&value, Some(&key))
+                    .map_err(backend)?
+                    .await
+                    .map_err(backend)?;
+            }
+            tx.commit().map_err(backend)?.await.map_err(backend)?;
+            Ok(())
+        })
+    }
+
     fn get(&self, label: &str) -> impl Future<Output = Result<Option<EncryptedEntry>>> + Send {
         let key = JsValue::from_str(label);
         SendWrapper::new(async move {
