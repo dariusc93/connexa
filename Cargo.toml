@@ -57,6 +57,7 @@ serde = ["dep:serde", "web-time/serde"]
 fs = ["dep:postcard", "serde"]
 indexeddb = ["dep:idb", "serde"]
 redb = ["dep:redb", "dep:postcard", "serde"]
+sqlite = ["dep:sqlx", "dep:postcard", "serde"]
 
 webrtc =["dep:libp2p-webrtc", "dep:libp2p-webrtc-websys"]
 websocket = ["libp2p/websocket", "rcgen", "dep:pem", "libp2p/websocket-websys"]
@@ -100,6 +101,7 @@ rlimit = "0.10.2"
 send_wrapper = "0.6.0"
 serde = { version = "1.0.219" }
 serde-wasm-bindgen = "0.6.5"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite"] }
 thiserror = "2.0.18"
 tracing = { version = "0.1.41" }
 zeroize = "1.8.1"
@@ -144,6 +146,7 @@ hickory-resolver.workspace = true
 rcgen = { workspace = true, optional = true }
 redb = { workspace = true, optional = true }
 rlimit.workspace = true
+sqlx = { workspace = true, optional = true }
 tokio = { features = ["full"], workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
