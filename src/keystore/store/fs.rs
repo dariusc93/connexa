@@ -27,14 +27,25 @@ impl FilesystemKeystore {
 
 impl Keystore for FilesystemKeystore {
     async fn put(&self, entry: EncryptedEntry) -> Result<()> {
+        use tokio::io::AsyncWriteExt;
+
         let path = self.entry_path(&entry.metadata.label)?;
         let bytes = postcard::to_allocvec(&entry).map_err(|e| Error::Backend(e.to_string()))?;
-        tokio::fs::create_dir_all(&self.dir)
-            .await
-            .map_err(|e| Error::Backend(e.to_string()))?;
-        tokio::fs::write(&path, bytes)
-            .await
-            .map_err(|e| Error::Backend(e.to_string()))
+
+        let tmp_dir = self.dir.join(".tmp");
+        async {
+            tokio::fs::create_dir_all(&tmp_dir).await?;
+            let tmp = tmp_dir.join(format!("{:016x}", rand::random::<u64>()));
+
+            let mut file = tokio::fs::File::create(&tmp).await?;
+            file.write_all(&bytes).await?;
+            file.sync_all().await?;
+            drop(file);
+
+            tokio::fs::rename(&tmp, &path).await
+        }
+        .await
+        .map_err(|e| Error::Backend(e.to_string()))
     }
 
     async fn get(&self, label: &str) -> Result<Option<EncryptedEntry>> {
