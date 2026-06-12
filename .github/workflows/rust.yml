@@ -40,3 +40,13 @@ jobs:
         with:
           toolchain: stable
       - run: cargo test
+
+  test-keystore-backends:
+    name: Test (keystore backends + ciphers)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - run: cargo test --features "fs redb sqlite aes-gcm plaintext serde"
