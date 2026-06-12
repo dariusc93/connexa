@@ -3,3 +3,5 @@ pub mod fs;
 #[cfg(all(feature = "indexeddb", target_arch = "wasm32"))]
 pub mod indexeddb;
 pub mod memory;
+#[cfg(all(feature = "redb", not(target_arch = "wasm32")))]
+pub mod redb;

@@ -56,6 +56,7 @@ plaintext = []
 serde = ["dep:serde", "web-time/serde"]
 fs = ["dep:postcard", "serde"]
 indexeddb = ["dep:idb", "serde"]
+redb = ["dep:redb", "dep:postcard", "serde"]
 
 webrtc =["dep:libp2p-webrtc", "dep:libp2p-webrtc-websys"]
 websocket = ["libp2p/websocket", "rcgen", "dep:pem", "libp2p/websocket-websys"]
@@ -94,6 +95,7 @@ postcard = { version = "1", features = ["alloc"] }
 rand = "0.8.5"
 rand_09 = { version = "0.9.2", package = "rand" }
 rcgen = { version = "0.14.3", features = ["pem", "x509-parser"] }
+redb = "2"
 rlimit = "0.10.2"
 send_wrapper = "0.6.0"
 serde = { version = "1.0.219" }
@@ -140,6 +142,7 @@ libp2p = { features = ["macros", "tokio", "serde"], workspace = true }
 libp2p-webrtc = { workspace = true, features = ["tokio"], optional = true }
 hickory-resolver.workspace = true
 rcgen = { workspace = true, optional = true }
+redb = { workspace = true, optional = true }
 rlimit.workspace = true
 tokio = { features = ["full"], workspace = true }
 
