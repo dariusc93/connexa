@@ -54,8 +54,9 @@ aes-gcm = ["dep:aes-gcm"]
 plaintext = []
 
 serde = ["dep:serde", "web-time/serde"]
+fs = ["dep:postcard", "serde"]
 
-webrtc = ["dep:libp2p-webrtc", "dep:libp2p-webrtc-websys"]
+webrtc =["dep:libp2p-webrtc", "dep:libp2p-webrtc-websys"]
 websocket = ["libp2p/websocket", "rcgen", "dep:pem", "libp2p/websocket-websys"]
 webtransport = ["libp2p/webtransport-websys"]
 
@@ -87,6 +88,7 @@ libp2p-webrtc-websys = "0.4.0"
 other-error = "0.1.1"
 pollable-map = "0.1.7"
 pem = { version = "3.0.5" }
+postcard = { version = "1", features = ["alloc"] }
 rand = "0.8.5"
 rand_09 = { version = "0.9.2", package = "rand" }
 rcgen = { version = "0.14.3", features = ["pem", "x509-parser"] }
@@ -121,6 +123,7 @@ libp2p-stream = { workspace = true, optional = true }
 other-error.workspace = true
 pem = { workspace = true, optional = true }
 pollable-map.workspace = true
+postcard = { workspace = true, optional = true }
 rand.workspace = true
 serde = { features = ["derive"], workspace = true, optional = true }
 thiserror.workspace = true

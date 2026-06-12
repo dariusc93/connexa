@@ -1,0 +1,139 @@
+use crate::keystore::{EncryptedEntry, Error, KeyMetadata, Keystore, Result};
+use std::path::{Path, PathBuf};
+
+/// Filesystem [`Keystore`] backend.
+#[derive(Debug, Clone)]
+pub struct FilesystemKeystore {
+    dir: PathBuf,
+}
+
+impl FilesystemKeystore {
+    /// Point the keystore at `dir`; it is created on first write if absent.
+    pub fn new(dir: impl AsRef<Path>) -> Self {
+        Self {
+            dir: dir.as_ref().to_path_buf(),
+        }
+    }
+
+    fn entry_path(&self, label: &str) -> Result<PathBuf> {
+        if label.is_empty() || label == "." || label == ".." || label.contains(['/', '\\', '\0']) {
+            return Err(Error::Backend(format!(
+                "invalid key label for filesystem keystore: {label:?}"
+            )));
+        }
+        Ok(self.dir.join(label))
+    }
+}
+
+impl Keystore for FilesystemKeystore {
+    async fn put(&self, entry: EncryptedEntry) -> Result<()> {
+        let path = self.entry_path(&entry.metadata.label)?;
+        let bytes = postcard::to_allocvec(&entry).map_err(|e| Error::Backend(e.to_string()))?;
+        tokio::fs::create_dir_all(&self.dir)
+            .await
+            .map_err(|e| Error::Backend(e.to_string()))?;
+        tokio::fs::write(&path, bytes)
+            .await
+            .map_err(|e| Error::Backend(e.to_string()))
+    }
+
+    async fn get(&self, label: &str) -> Result<Option<EncryptedEntry>> {
+        let path = self.entry_path(label)?;
+        match tokio::fs::read(&path).await {
+            Ok(bytes) => Ok(Some(
+                postcard::from_bytes(&bytes).map_err(|e| Error::Backend(e.to_string()))?,
+            )),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(Error::Backend(e.to_string())),
+        }
+    }
+
+    async fn list(&self) -> Result<Vec<KeyMetadata>> {
+        let mut read_dir = match tokio::fs::read_dir(&self.dir).await {
+            Ok(read_dir) => read_dir,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) => return Err(Error::Backend(e.to_string())),
+        };
+
+        let mut metadata = Vec::new();
+        while let Some(entry) = read_dir
+            .next_entry()
+            .await
+            .map_err(|e| Error::Backend(e.to_string()))?
+        {
+            // Skip non-files and anything that doesn't decode, so the directory can coexist with
+            // unrelated files; a genuinely corrupt key still surfaces via `get`.
+            if !entry
+                .file_type()
+                .await
+                .map(|t| t.is_file())
+                .unwrap_or(false)
+            {
+                continue;
+            }
+            if let Ok(bytes) = tokio::fs::read(entry.path()).await {
+                if let Ok(decoded) = postcard::from_bytes::<EncryptedEntry>(&bytes) {
+                    metadata.push(decoded.metadata);
+                }
+            }
+        }
+        Ok(metadata)
+    }
+
+    async fn remove(&self, label: &str) -> Result<bool> {
+        let path = self.entry_path(label)?;
+        match tokio::fs::remove_file(&path).await {
+            Ok(()) => Ok(true),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+            Err(e) => Err(Error::Backend(e.to_string())),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(feature = "ed25519")]
+    #[tokio::test]
+    async fn persists_across_instances() {
+        use crate::keystore::{Keychain, generate_key};
+        use libp2p::identity::Keypair;
+
+        let dir = std::env::temp_dir().join(format!("connexa-fskeystore-{}", std::process::id()));
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+        let key = generate_key();
+        let keypair = Keypair::generate_ed25519();
+
+        Keychain::new(key, FilesystemKeystore::new(&dir))
+            .insert("identity", &keypair)
+            .await
+            .unwrap();
+
+        // A fresh keychain over the same dir + master key reads the persisted entry.
+        let reopened = Keychain::new(key, FilesystemKeystore::new(&dir));
+        let recovered = reopened.get("identity").await.unwrap();
+        assert_eq!(
+            recovered.public().to_peer_id(),
+            keypair.public().to_peer_id()
+        );
+        assert_eq!(reopened.list().await.unwrap().len(), 1);
+        assert!(reopened.remove("identity").await.unwrap());
+        assert!(matches!(
+            reopened.get("identity").await,
+            Err(Error::NotFound(_))
+        ));
+
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+    }
+
+    #[tokio::test]
+    async fn rejects_unsafe_label() {
+        let store = FilesystemKeystore::new(std::env::temp_dir());
+        assert!(matches!(
+            store.get("../escape").await,
+            Err(Error::Backend(_))
+        ));
+        assert!(matches!(store.remove("a/b").await, Err(Error::Backend(_))));
+    }
+}
