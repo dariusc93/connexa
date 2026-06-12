@@ -1,6 +1,6 @@
 use crate::keystore::{EncryptedEntry, Error, KeyMetadata, Keystore, Result};
 use sqlx::SqlitePool;
-use sqlx::sqlite::SqliteConnectOptions;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::path::Path;
 use std::str::FromStr;
 use tokio::sync::OnceCell;
@@ -8,6 +8,7 @@ use tokio::sync::OnceCell;
 /// SQLite [`Keystore`] backend.
 pub struct SqliteKeystore {
     options: SqliteConnectOptions,
+    pool_options: SqlitePoolOptions,
     pool: OnceCell<SqlitePool>,
 }
 
@@ -16,18 +17,23 @@ impl SqliteKeystore {
         let options = SqliteConnectOptions::new()
             .filename(path)
             .create_if_missing(true);
-        Ok(Self::from_options(options))
+        Ok(Self::from_options(options, SqlitePoolOptions::new()))
     }
 
     pub fn in_memory() -> Result<Self> {
         let options =
             SqliteConnectOptions::from_str("sqlite:file::memory:?cache=shared").map_err(backend)?;
-        Ok(Self::from_options(options))
+        let pool_options = SqlitePoolOptions::new()
+            .min_connections(1)
+            .idle_timeout(None)
+            .max_lifetime(None);
+        Ok(Self::from_options(options, pool_options))
     }
 
-    fn from_options(options: SqliteConnectOptions) -> Self {
+    fn from_options(options: SqliteConnectOptions, pool_options: SqlitePoolOptions) -> Self {
         Self {
             options,
+            pool_options,
             pool: OnceCell::new(),
         }
     }
@@ -35,7 +41,10 @@ impl SqliteKeystore {
     async fn pool(&self) -> Result<&SqlitePool> {
         self.pool
             .get_or_try_init(|| async {
-                let pool = SqlitePool::connect_with(self.options.clone())
+                let pool = self
+                    .pool_options
+                    .clone()
+                    .connect_with(self.options.clone())
                     .await
                     .map_err(backend)?;
                 sqlx::query(
