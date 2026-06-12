@@ -53,6 +53,8 @@ testing = []
 aes-gcm = ["dep:aes-gcm"]
 plaintext = []
 
+serde = ["dep:serde", "web-time/serde"]
+
 webrtc = ["dep:libp2p-webrtc", "dep:libp2p-webrtc-websys"]
 websocket = ["libp2p/websocket", "rcgen", "dep:pem", "libp2p/websocket-websys"]
 webtransport = ["libp2p/webtransport-websys"]
@@ -120,7 +122,7 @@ other-error.workspace = true
 pem = { workspace = true, optional = true }
 pollable-map.workspace = true
 rand.workspace = true
-serde = { features = ["derive"], workspace = true }
+serde = { features = ["derive"], workspace = true, optional = true }
 thiserror.workspace = true
 tracing = { workspace = true }
 web-time = { workspace = true }

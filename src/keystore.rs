@@ -32,6 +32,7 @@ pub enum Error {
 }
 
 /// The cryptographic family of a stored key, mirroring [`libp2p::identity::KeyType`].
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyType {
     Ed25519,
@@ -100,6 +101,7 @@ impl Expiry {
 }
 
 /// Metadata describing a stored key.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct KeyMetadata {
     pub label: String,
@@ -118,6 +120,7 @@ impl KeyMetadata {
 }
 
 /// An encrypted key entry as seen by a [`Keystore`] backend. Backends only ever handle ciphertext.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct EncryptedEntry {
     pub metadata: KeyMetadata,
