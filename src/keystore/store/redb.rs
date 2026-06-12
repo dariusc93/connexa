@@ -1,30 +1,44 @@
 use crate::keystore::{EncryptedEntry, Error, KeyMetadata, Keystore, Result};
 use redb::{Database, ReadableTable, TableDefinition, TableError};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tokio::sync::OnceCell;
 
 const TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("keys");
 
 /// redb [`Keystore`] backend.
-#[derive(Clone)]
 pub struct RedbKeystore {
-    db: Arc<Database>,
+    path: PathBuf,
+    db: OnceCell<Arc<Database>>,
 }
 
 impl RedbKeystore {
-    pub async fn new(path: impl AsRef<Path>) -> Result<Self> {
-        let path = path.as_ref().to_path_buf();
-        let db = tokio::task::spawn_blocking(move || Database::create(path))
-            .await
-            .map_err(backend)?
-            .map_err(backend)?;
-        Ok(Self { db: Arc::new(db) })
+    pub fn new(path: impl AsRef<Path>) -> Self {
+        Self {
+            path: path.as_ref().to_path_buf(),
+            db: OnceCell::new(),
+        }
+    }
+
+    async fn db(&self) -> Result<Arc<Database>> {
+        let db = self
+            .db
+            .get_or_try_init(|| async {
+                let path = self.path.clone();
+                let database = tokio::task::spawn_blocking(move || Database::create(path))
+                    .await
+                    .map_err(backend)?
+                    .map_err(backend)?;
+                Ok::<_, Error>(Arc::new(database))
+            })
+            .await?;
+        Ok(db.clone())
     }
 }
 
 impl Keystore for RedbKeystore {
     async fn put(&self, entry: EncryptedEntry) -> Result<()> {
-        let db = self.db.clone();
+        let db = self.db().await?;
         let bytes = postcard::to_allocvec(&entry).map_err(backend)?;
         let label = entry.metadata.label;
         tokio::task::spawn_blocking(move || -> Result<()> {
@@ -43,7 +57,7 @@ impl Keystore for RedbKeystore {
     }
 
     async fn get(&self, label: &str) -> Result<Option<EncryptedEntry>> {
-        let db = self.db.clone();
+        let db = self.db().await?;
         let label = label.to_owned();
         tokio::task::spawn_blocking(move || -> Result<Option<EncryptedEntry>> {
             let tx = db.begin_read().map_err(backend)?;
@@ -62,7 +76,7 @@ impl Keystore for RedbKeystore {
     }
 
     async fn list(&self) -> Result<Vec<KeyMetadata>> {
-        let db = self.db.clone();
+        let db = self.db().await?;
         tokio::task::spawn_blocking(move || -> Result<Vec<KeyMetadata>> {
             let tx = db.begin_read().map_err(backend)?;
             let table = match tx.open_table(TABLE) {
@@ -84,7 +98,7 @@ impl Keystore for RedbKeystore {
     }
 
     async fn remove(&self, label: &str) -> Result<bool> {
-        let db = self.db.clone();
+        let db = self.db().await?;
         let label = label.to_owned();
         tokio::task::spawn_blocking(move || -> Result<bool> {
             let tx = db.begin_write().map_err(backend)?;
@@ -119,12 +133,12 @@ mod tests {
         let key = generate_key();
         let keypair = Keypair::generate_ed25519();
 
-        Keychain::new(key, RedbKeystore::new(&path).await.unwrap())
+        Keychain::new(key, RedbKeystore::new(&path))
             .insert("identity", &keypair)
             .await
             .unwrap();
 
-        let reopened = Keychain::new(key, RedbKeystore::new(&path).await.unwrap());
+        let reopened = Keychain::new(key, RedbKeystore::new(&path));
         let recovered = reopened.get("identity").await.unwrap();
         assert_eq!(
             recovered.public().to_peer_id(),

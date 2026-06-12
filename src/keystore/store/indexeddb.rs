@@ -2,40 +2,54 @@ use crate::keystore::{EncryptedEntry, Error, KeyMetadata, Keystore, Result};
 use idb::{Database, DatabaseEvent, Factory, ObjectStoreParams, TransactionMode};
 use send_wrapper::SendWrapper;
 use std::future::Future;
+use tokio::sync::OnceCell;
 use wasm_bindgen::JsValue;
 
 const OBJECT_STORE: &str = "keys";
 
 /// IndexedDB [`Keystore`] backend for wasm.
 pub struct IndexedDbKeystore {
-    db: SendWrapper<Database>,
+    identifier: String,
+    db: OnceCell<SendWrapper<Database>>,
 }
 
 impl IndexedDbKeystore {
-    /// Open (creating it if needed) the IndexedDB database for `identifier`.
-    pub async fn new(identifier: impl AsRef<str>) -> Result<Self> {
-        let factory = Factory::new().map_err(backend)?;
-        let name = format!("connexa-keystore-{}", identifier.as_ref());
-        let mut request = factory.open(&name, Some(1)).map_err(backend)?;
-        request.on_upgrade_needed(|event| {
-            if let Ok(db) = event.database() {
-                let _ = db.create_object_store(OBJECT_STORE, ObjectStoreParams::new());
-            }
-        });
-        let db = request.await.map_err(backend)?;
-        Ok(Self {
-            db: SendWrapper::new(db),
-        })
+    pub fn new(identifier: impl Into<String>) -> Self {
+        Self {
+            identifier: identifier.into(),
+            db: OnceCell::new(),
+        }
+    }
+
+    async fn db(&self) -> Result<&Database> {
+        let db = self
+            .db
+            .get_or_try_init(|| {
+                SendWrapper::new(async {
+                    let factory = Factory::new().map_err(backend)?;
+                    let name = format!("connexa-keystore-{}", self.identifier);
+                    let mut request = factory.open(&name, Some(1)).map_err(backend)?;
+                    request.on_upgrade_needed(|event| {
+                        if let Ok(db) = event.database() {
+                            let _ = db.create_object_store(OBJECT_STORE, ObjectStoreParams::new());
+                        }
+                    });
+                    let database = request.await.map_err(backend)?;
+                    Ok::<_, Error>(SendWrapper::new(database))
+                })
+            })
+            .await?;
+        Ok(&**db)
     }
 }
 
 impl Keystore for IndexedDbKeystore {
     fn put(&self, entry: EncryptedEntry) -> impl Future<Output = Result<()>> + Send {
         SendWrapper::new(async move {
+            let db = self.db().await?;
             let value = serde_wasm_bindgen::to_value(&entry).map_err(backend)?;
             let key = JsValue::from_str(&entry.metadata.label);
-            let tx = self
-                .db
+            let tx = db
                 .transaction(&[OBJECT_STORE], TransactionMode::ReadWrite)
                 .map_err(backend)?;
             let store = tx.object_store(OBJECT_STORE).map_err(backend)?;
@@ -52,8 +66,8 @@ impl Keystore for IndexedDbKeystore {
     fn get(&self, label: &str) -> impl Future<Output = Result<Option<EncryptedEntry>>> + Send {
         let key = JsValue::from_str(label);
         SendWrapper::new(async move {
-            let tx = self
-                .db
+            let db = self.db().await?;
+            let tx = db
                 .transaction(&[OBJECT_STORE], TransactionMode::ReadOnly)
                 .map_err(backend)?;
             let store = tx.object_store(OBJECT_STORE).map_err(backend)?;
@@ -68,8 +82,8 @@ impl Keystore for IndexedDbKeystore {
 
     fn list(&self) -> impl Future<Output = Result<Vec<KeyMetadata>>> + Send {
         SendWrapper::new(async move {
-            let tx = self
-                .db
+            let db = self.db().await?;
+            let tx = db
                 .transaction(&[OBJECT_STORE], TransactionMode::ReadOnly)
                 .map_err(backend)?;
             let store = tx.object_store(OBJECT_STORE).map_err(backend)?;
@@ -91,8 +105,8 @@ impl Keystore for IndexedDbKeystore {
     fn remove(&self, label: &str) -> impl Future<Output = Result<bool>> + Send {
         let key = JsValue::from_str(label);
         SendWrapper::new(async move {
-            let tx = self
-                .db
+            let db = self.db().await?;
+            let tx = db
                 .transaction(&[OBJECT_STORE], TransactionMode::ReadWrite)
                 .map_err(backend)?;
             let store = tx.object_store(OBJECT_STORE).map_err(backend)?;
