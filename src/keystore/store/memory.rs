@@ -1,13 +1,12 @@
 use crate::keystore::Error;
 use crate::keystore::{EncryptedEntry, KeyMetadata, Keystore};
 use std::collections::HashMap;
-use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// In-memory [`Keystore`] backend. Entries live only for the lifetime of the process.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct MemoryKeystore {
-    inner: Arc<RwLock<HashMap<String, EncryptedEntry>>>,
+    inner: RwLock<HashMap<String, EncryptedEntry>>,
 }
 
 impl Keystore for MemoryKeystore {

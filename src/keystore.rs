@@ -445,14 +445,14 @@ mod tests {
     #[cfg(feature = "ed25519")]
     #[tokio::test]
     async fn wrong_master_key_fails_to_decrypt() {
-        let backend = store::memory::MemoryKeystore::default();
         let keypair = Keypair::generate_ed25519();
-        Keychain::new(generate_key(), backend.clone())
-            .insert("k", &keypair)
-            .await
-            .unwrap();
+        let first = Keychain::in_memory(generate_key());
+        first.insert("k", &keypair).await.unwrap();
 
-        let other = Keychain::new(generate_key(), backend);
+        let other = Keychain {
+            cipher: Arc::new(XChaCha20Poly1305Cipher::new(generate_key())),
+            backend: first.backend.clone(),
+        };
         assert!(matches!(other.get("k").await, Err(Error::DecryptFailed)));
     }
 
