@@ -458,6 +458,22 @@ mod tests {
 
     #[cfg(feature = "ed25519")]
     #[tokio::test]
+    async fn relabeled_ciphertext_fails_to_decrypt() {
+        let keychain = Keychain::in_memory(generate_key());
+        keychain
+            .insert("a", &Keypair::generate_ed25519())
+            .await
+            .unwrap();
+
+        let mut entry = keychain.backend.get("a").await.unwrap().unwrap();
+        entry.metadata.label = "b".into();
+        keychain.backend.put(entry).await.unwrap();
+
+        assert!(matches!(keychain.get("b").await, Err(Error::DecryptFailed)));
+    }
+
+    #[cfg(feature = "ed25519")]
+    #[tokio::test]
     async fn get_or_create_persists_identity() {
         let keychain = Keychain::in_memory(generate_key());
         let first = keychain.get_or_create("id").await.unwrap();

@@ -55,3 +55,49 @@ impl Cipher for AesGcmCipher {
             .map_err(|_| Error::DecryptFailed)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cipher() -> AesGcmCipher {
+        AesGcmCipher::new([7u8; 32])
+    }
+
+    #[test]
+    fn round_trip_with_aad() {
+        let c = cipher();
+        let blob = c.encrypt(Some(b"label"), b"secret").unwrap();
+        assert_eq!(c.decrypt(Some(b"label"), &blob).unwrap(), b"secret");
+    }
+
+    #[test]
+    fn tampered_ciphertext_is_rejected() {
+        let c = cipher();
+        let mut blob = c.encrypt(Some(b"label"), b"secret").unwrap();
+        *blob.last_mut().unwrap() ^= 0xff;
+        assert!(matches!(
+            c.decrypt(Some(b"label"), &blob),
+            Err(Error::DecryptFailed)
+        ));
+    }
+
+    #[test]
+    fn truncated_blob_below_nonce_len_is_rejected() {
+        let c = cipher();
+        assert!(matches!(
+            c.decrypt(Some(b"label"), &[0u8; NONCE_LEN - 1]),
+            Err(Error::DecryptFailed)
+        ));
+    }
+
+    #[test]
+    fn mismatched_aad_fails() {
+        let c = cipher();
+        let blob = c.encrypt(Some(b"label-a"), b"secret").unwrap();
+        assert!(matches!(
+            c.decrypt(Some(b"label-b"), &blob),
+            Err(Error::DecryptFailed)
+        ));
+    }
+}
