@@ -2,6 +2,7 @@ pub mod cipher;
 pub mod store;
 
 use cipher::xchacha20poly1305::XChaCha20Poly1305Cipher;
+use futures::TryStreamExt;
 use futures::stream::FuturesUnordered;
 use libp2p::PeerId;
 use libp2p::identity::{Keypair, PublicKey};
@@ -411,6 +412,45 @@ impl<S: Keystore> Keychain<S> {
             }
         }
         Ok(removed)
+    }
+
+    /// Re-encrypt every entry under a new cipher, returning a keychain that shares this backend but
+    /// uses the new cipher (the old cipher can no longer read the store).
+    pub async fn migrate_cipher(&self, new_cipher: impl Cipher) -> Result<Keychain<S>> {
+        let new_cipher: Arc<dyn Cipher> = Arc::new(new_cipher);
+
+        let prev_entries = self.backend.list().await?;
+
+        let entries = FuturesUnordered::from_iter(prev_entries.into_iter().map(|metadata| {
+            let new_cipher = new_cipher.clone();
+            async move {
+                let label = &metadata.label;
+                let entry = self
+                    .backend
+                    .get(label)
+                    .await?
+                    .ok_or_else(|| Error::NotFound(label.clone()))?;
+                let plaintext = Zeroizing::new(
+                    self.cipher
+                        .decrypt(Some(label.as_bytes()), &entry.ciphertext)?,
+                );
+                let ciphertext =
+                    new_cipher.encrypt(Some(label.as_bytes()), plaintext.as_slice())?;
+                Ok::<_, Error>(EncryptedEntry {
+                    metadata,
+                    ciphertext,
+                })
+            }
+        }))
+        .try_collect::<Vec<_>>()
+        .await?;
+
+        self.backend.put_many(entries).await?;
+
+        Ok(Keychain {
+            cipher: new_cipher,
+            backend: self.backend.clone(),
+        })
     }
 }
 
