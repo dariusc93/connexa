@@ -612,6 +612,34 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "secp256k1")]
+    #[tokio::test]
+    async fn generate_secp256k1_round_trip() {
+        let keychain = Keychain::in_memory(generate_key());
+        let kp = keychain.generate_secp256k1("id").await.unwrap();
+        let meta = keychain.metadata("id").await.unwrap().unwrap();
+        assert_eq!(meta.key_type, KeyType::Secp256k1);
+        assert_eq!(meta.peer_id().unwrap(), kp.public().to_peer_id());
+        assert_eq!(
+            keychain.get("id").await.unwrap().public().to_peer_id(),
+            kp.public().to_peer_id()
+        );
+    }
+
+    #[cfg(feature = "ecdsa")]
+    #[tokio::test]
+    async fn generate_ecdsa_round_trip() {
+        let keychain = Keychain::in_memory(generate_key());
+        let kp = keychain.generate_ecdsa("id").await.unwrap();
+        let meta = keychain.metadata("id").await.unwrap().unwrap();
+        assert_eq!(meta.key_type, KeyType::Ecdsa);
+        assert_eq!(meta.peer_id().unwrap(), kp.public().to_peer_id());
+        assert_eq!(
+            keychain.get("id").await.unwrap().public().to_peer_id(),
+            kp.public().to_peer_id()
+        );
+    }
+
     #[cfg(feature = "ed25519")]
     #[tokio::test]
     async fn rotate_generate_makes_fresh_key() {
