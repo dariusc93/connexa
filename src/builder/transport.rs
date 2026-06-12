@@ -21,8 +21,10 @@ use libp2p::pnet::{PnetConfig, PreSharedKey};
 use libp2p::relay::client::Transport as ClientTransport;
 #[cfg(not(feature = "relay"))]
 type ClientTransport = ();
+use crate::error::ConnexaResult;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::error::Error;
 
-use crate::error::{ConnexaResult, Error};
 use libp2p::identity::Keypair;
 use std::io;
 use std::time::Duration;
@@ -519,7 +521,7 @@ pub(crate) fn build_transport(
     #[cfg(not(feature = "relay"))]
     let _ = relay;
 
-    let noise_config = libp2p::noise::Config::new(&keypair).map_err(io::Error::other)?;
+    let noise_config = libp2p::noise::Config::new(keypair).map_err(io::Error::other)?;
     let yamux_config = libp2p::yamux::Config::default();
 
     #[cfg(feature = "websocket")]
