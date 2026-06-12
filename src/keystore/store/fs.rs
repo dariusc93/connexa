@@ -34,10 +34,10 @@ impl Keystore for FilesystemKeystore {
 
         let tmp_dir = self.dir.join(".tmp");
         async {
-            tokio::fs::create_dir_all(&tmp_dir).await?;
+            create_dir(&tmp_dir).await?;
             let tmp = tmp_dir.join(format!("{:016x}", rand::random::<u64>()));
 
-            let mut file = tokio::fs::File::create(&tmp).await?;
+            let mut file = create_file(&tmp).await?;
             file.write_all(&bytes).await?;
             file.sync_all().await?;
             drop(file);
@@ -101,6 +101,36 @@ impl Keystore for FilesystemKeystore {
     }
 }
 
+#[cfg(unix)]
+async fn create_dir(dir: &Path) -> std::io::Result<()> {
+    tokio::fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(dir)
+        .await
+}
+
+#[cfg(not(unix))]
+async fn create_dir(dir: &Path) -> std::io::Result<()> {
+    tokio::fs::create_dir_all(dir).await
+}
+
+#[cfg(unix)]
+async fn create_file(path: &Path) -> std::io::Result<tokio::fs::File> {
+    tokio::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)
+        .await
+}
+
+#[cfg(not(unix))]
+async fn create_file(path: &Path) -> std::io::Result<tokio::fs::File> {
+    tokio::fs::File::create(path).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -146,5 +176,38 @@ mod tests {
             Err(Error::Backend(_))
         ));
         assert!(matches!(store.remove("a/b").await, Err(Error::Backend(_))));
+    }
+
+    #[cfg(all(unix, feature = "ed25519"))]
+    #[tokio::test]
+    async fn unix_files_are_owner_only() {
+        use crate::keystore::{Keychain, generate_key};
+        use libp2p::identity::Keypair;
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = std::env::temp_dir().join(format!("connexa-fsperms-{}", std::process::id()));
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+
+        Keychain::new(generate_key(), FilesystemKeystore::new(&dir))
+            .insert("identity", &Keypair::generate_ed25519())
+            .await
+            .unwrap();
+
+        let dir_mode = tokio::fs::metadata(&dir)
+            .await
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        let file_mode = tokio::fs::metadata(dir.join("identity"))
+            .await
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(dir_mode, 0o700);
+        assert_eq!(file_mode, 0o600);
+
+        let _ = tokio::fs::remove_dir_all(&dir).await;
     }
 }
