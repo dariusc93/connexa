@@ -115,9 +115,9 @@ impl Keystore for IndexedDbKeystore {
                 .map_err(backend)?;
             let mut metadata = Vec::with_capacity(values.len());
             for value in values {
-                let entry: EncryptedEntry =
-                    serde_wasm_bindgen::from_value(value).map_err(backend)?;
-                metadata.push(entry.metadata);
+                if let Ok(entry) = serde_wasm_bindgen::from_value::<EncryptedEntry>(value) {
+                    metadata.push(entry.metadata);
+                }
             }
             Ok(metadata)
         })

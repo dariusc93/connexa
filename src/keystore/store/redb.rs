@@ -107,9 +107,9 @@ impl Keystore for RedbKeystore {
             let mut metadata = Vec::new();
             for entry in table.iter().map_err(backend)? {
                 let (_label, value) = entry.map_err(backend)?;
-                let decoded: EncryptedEntry =
-                    postcard::from_bytes(value.value()).map_err(backend)?;
-                metadata.push(decoded.metadata);
+                if let Ok(decoded) = postcard::from_bytes::<EncryptedEntry>(value.value()) {
+                    metadata.push(decoded.metadata);
+                }
             }
             Ok(metadata)
         })

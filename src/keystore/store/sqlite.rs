@@ -109,8 +109,9 @@ impl Keystore for SqliteKeystore {
             .map_err(backend)?;
         let mut metadata = Vec::with_capacity(rows.len());
         for (bytes,) in rows {
-            let entry: EncryptedEntry = postcard::from_bytes(&bytes).map_err(backend)?;
-            metadata.push(entry.metadata);
+            if let Ok(entry) = postcard::from_bytes::<EncryptedEntry>(&bytes) {
+                metadata.push(entry.metadata);
+            }
         }
         Ok(metadata)
     }
