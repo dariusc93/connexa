@@ -3,15 +3,15 @@ use crate::types::RelayServerCommand;
 use libp2p::relay::Status as RelayServerStatus;
 
 #[derive(Copy, Clone)]
-pub struct ConnexaRelayServer<'a, T = ()> {
-    connexa: &'a Connexa<T>,
+pub struct ConnexaRelayServer<'a, T = (), K = crate::keystore::store::memory::MemoryKeystore> {
+    connexa: &'a Connexa<T, K>,
 }
 
-impl<'a, T> ConnexaRelayServer<'a, T>
+impl<'a, T, K> ConnexaRelayServer<'a, T, K>
 where
     T: Send + Sync + 'static,
 {
-    pub(crate) fn new(connexa: &'a Connexa<T>) -> Self {
+    pub(crate) fn new(connexa: &'a Connexa<T, K>) -> Self {
         Self { connexa }
     }
 

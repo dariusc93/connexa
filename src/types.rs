@@ -514,6 +514,7 @@ pub enum RendezvousCommand {
     },
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "relay")]
 #[derive(Debug)]
 pub enum RelayServerCommand {

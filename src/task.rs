@@ -583,6 +583,7 @@ where
             Command::Rendezvous(rendezvous_command) => {
                 self.process_rendezvous_command(rendezvous_command)
             }
+            #[cfg(not(target_arch = "wasm32"))]
             #[cfg(feature = "relay")]
             Command::RelayServer(relay_server_command) => {
                 self.process_relay_server_command(relay_server_command)
