@@ -2,7 +2,6 @@ use crate::behaviour::autorelay;
 use crate::behaviour::peer_store::store::Store;
 use crate::task::ConnexaTask;
 use crate::types::AutoRelayCommand;
-#[cfg(not(target_arch = "wasm32"))]
 use crate::types::RelayServerCommand;
 use libp2p::relay::{Event as RelayServerEvent, client::Event as RelayClientEvent};
 use libp2p::swarm::NetworkBehaviour;
@@ -122,7 +121,6 @@ where
         }
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn process_relay_server_event(&mut self, event: RelayServerEvent) {
         match event {
             RelayServerEvent::ReservationReqAccepted {
@@ -168,8 +166,7 @@ where
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-impl<X, C: NetworkBehaviour, S, T, K> ConnexaTask<X, C, S, T, K>
+impl<X, C: NetworkBehaviour, S, T> ConnexaTask<X, C, S, T>
 where
     X: Default + Send + 'static,
     C: Send,

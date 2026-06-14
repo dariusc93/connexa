@@ -36,7 +36,6 @@ use crate::handle::peer_store::ConnexaPeerstore;
 #[cfg(feature = "relay")]
 use crate::handle::relay::ConnexaRelay;
 #[cfg(feature = "relay")]
-#[cfg(not(target_arch = "wasm32"))]
 use crate::handle::relay_server::ConnexaRelayServer;
 #[cfg(feature = "rendezvous")]
 use crate::handle::rendezvous::ConnexaRendezvous;
@@ -154,9 +153,8 @@ where
     }
 
     /// Returns a handle for relay server functions
-    #[cfg(not(target_arch = "wasm32"))]
     #[cfg(feature = "relay")]
-    pub fn relay_server(&self) -> ConnexaRelayServer<'_, T, K> {
+    pub fn relay_server(&self) -> ConnexaRelayServer<'_, T> {
         ConnexaRelayServer::new(self)
     }
 
