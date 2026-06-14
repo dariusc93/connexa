@@ -13,6 +13,12 @@ pub struct IndexedDbKeystore {
     db: OnceCell<SendWrapper<Database>>,
 }
 
+impl Default for IndexedDbKeystore {
+    fn default() -> Self {
+        Self::new("connexa-default-keystore")
+    }
+}
+
 impl IndexedDbKeystore {
     pub fn new(identifier: impl Into<String>) -> Self {
         Self {

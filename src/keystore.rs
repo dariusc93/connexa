@@ -1,6 +1,7 @@
 pub mod cipher;
 pub mod store;
 
+use crate::keystore::store::memory::MemoryKeystore;
 use cipher::xchacha20poly1305::XChaCha20Poly1305Cipher;
 use futures::TryStreamExt;
 use futures::stream::FuturesUnordered;
@@ -204,7 +205,7 @@ pub trait Cipher: Send + Sync + 'static {
 }
 
 /// An encrypted keychain
-pub struct Keychain<S> {
+pub struct Keychain<S = MemoryKeystore> {
     cipher: Arc<dyn Cipher>,
     backend: Arc<S>,
 }
@@ -218,20 +219,21 @@ impl<S> Clone for Keychain<S> {
     }
 }
 
-impl Keychain<store::memory::MemoryKeystore> {
-    /// Create a keychain backed by an in-memory store using the given 32-byte master key.
-    pub fn in_memory(key: [u8; 32]) -> Self {
-        Self::new(key, store::memory::MemoryKeystore::default())
+impl<S: Keystore + Default> Keychain<S> {
+    /// Create a keychain.
+    pub fn new(key: [u8; 32]) -> Self {
+        Self::with_cipher(XChaCha20Poly1305Cipher::new(key), S::default())
     }
 
-    pub fn in_memory_with_custom_cipher(cipher: impl Cipher) -> Self {
-        Self::with_cipher(cipher, store::memory::MemoryKeystore::default())
+    /// Create a new keychain with a custom cipher.
+    pub fn new_with_custom_cipher(cipher: impl Cipher) -> Self {
+        Self::with_cipher(cipher, S::default())
     }
 }
 
 impl<S: Keystore> Keychain<S> {
-    /// Create a keychain over `backend`.
-    pub fn new(key: [u8; 32], backend: S) -> Self {
+    /// Create a keychain with a custom storage backend.
+    pub fn new_with_store(key: [u8; 32], backend: S) -> Self {
         Self::with_cipher(XChaCha20Poly1305Cipher::new(key), backend)
     }
 
@@ -461,7 +463,7 @@ mod tests {
     #[cfg(feature = "ed25519")]
     #[tokio::test]
     async fn round_trip_list_remove() {
-        let keychain = Keychain::in_memory(generate_key());
+        let keychain = Keychain::<MemoryKeystore>::new(generate_key());
         let keypair = Keypair::generate_ed25519();
 
         keychain.insert("identity", &keypair).await.unwrap();
@@ -488,7 +490,7 @@ mod tests {
     #[cfg(feature = "ed25519")]
     #[tokio::test]
     async fn expired_key_is_rejected_and_purged() {
-        let keychain = Keychain::in_memory(generate_key());
+        let keychain = Keychain::<MemoryKeystore>::new(generate_key());
         let keypair = Keypair::generate_ed25519();
 
         keychain
@@ -511,7 +513,7 @@ mod tests {
     #[cfg(feature = "ed25519")]
     #[tokio::test]
     async fn rotate_bumps_version_and_replaces_key() {
-        let keychain = Keychain::in_memory(generate_key());
+        let keychain = Keychain::<MemoryKeystore>::new(generate_key());
         let first = Keypair::generate_ed25519();
         let second = Keypair::generate_ed25519();
 
@@ -536,7 +538,7 @@ mod tests {
     #[tokio::test]
     async fn wrong_master_key_fails_to_decrypt() {
         let keypair = Keypair::generate_ed25519();
-        let first = Keychain::in_memory(generate_key());
+        let first = Keychain::<MemoryKeystore>::new(generate_key());
         first.insert("k", &keypair).await.unwrap();
 
         let other = Keychain {
@@ -549,7 +551,7 @@ mod tests {
     #[cfg(feature = "ed25519")]
     #[tokio::test]
     async fn relabeled_ciphertext_fails_to_decrypt() {
-        let keychain = Keychain::in_memory(generate_key());
+        let keychain = Keychain::<MemoryKeystore>::new(generate_key());
         keychain
             .insert("a", &Keypair::generate_ed25519())
             .await
@@ -565,7 +567,7 @@ mod tests {
     #[cfg(feature = "ed25519")]
     #[tokio::test]
     async fn get_or_create_persists_identity() {
-        let keychain = Keychain::in_memory(generate_key());
+        let keychain = Keychain::<MemoryKeystore>::new(generate_key());
         let first = keychain.get_or_create("id").await.unwrap();
         let second = keychain.get_or_create("id").await.unwrap();
         assert_eq!(
@@ -590,7 +592,7 @@ mod tests {
             }
         }
 
-        let keychain = Keychain::in_memory_with_custom_cipher(XorCipher(0x5a));
+        let keychain = Keychain::<MemoryKeystore>::new_with_custom_cipher(XorCipher(0x5a));
         let keypair = Keypair::generate_ed25519();
         keychain.insert("id", &keypair).await.unwrap();
         let recovered = keychain.get("id").await.unwrap();
@@ -603,7 +605,7 @@ mod tests {
     #[cfg(feature = "ed25519")]
     #[tokio::test]
     async fn generate_stores_and_returns() {
-        let keychain = Keychain::in_memory(generate_key());
+        let keychain = Keychain::<MemoryKeystore>::new(generate_key());
         let kp = keychain.generate_ed25519("id").await.unwrap();
         assert_eq!(keychain.metadata("id").await.unwrap().unwrap().version, 1);
         assert_eq!(
@@ -615,7 +617,7 @@ mod tests {
     #[cfg(feature = "secp256k1")]
     #[tokio::test]
     async fn generate_secp256k1_round_trip() {
-        let keychain = Keychain::in_memory(generate_key());
+        let keychain = Keychain::<MemoryKeystore>::new(generate_key());
         let kp = keychain.generate_secp256k1("id").await.unwrap();
         let meta = keychain.metadata("id").await.unwrap().unwrap();
         assert_eq!(meta.key_type, KeyType::Secp256k1);
@@ -629,7 +631,7 @@ mod tests {
     #[cfg(feature = "ecdsa")]
     #[tokio::test]
     async fn generate_ecdsa_round_trip() {
-        let keychain = Keychain::in_memory(generate_key());
+        let keychain = Keychain::<MemoryKeystore>::new(generate_key());
         let kp = keychain.generate_ecdsa("id").await.unwrap();
         let meta = keychain.metadata("id").await.unwrap().unwrap();
         assert_eq!(meta.key_type, KeyType::Ecdsa);
@@ -643,7 +645,7 @@ mod tests {
     #[cfg(feature = "ed25519")]
     #[tokio::test]
     async fn rotate_generate_makes_fresh_key() {
-        let keychain = Keychain::in_memory(generate_key());
+        let keychain = Keychain::<MemoryKeystore>::new(generate_key());
         let original = keychain.generate_ed25519("id").await.unwrap();
 
         keychain
@@ -660,7 +662,7 @@ mod tests {
 
     #[tokio::test]
     async fn generate_rsa_is_unsupported() {
-        let keychain = Keychain::in_memory(generate_key());
+        let keychain = Keychain::<MemoryKeystore>::new(generate_key());
         assert!(matches!(
             keychain.generate("x", KeyType::Rsa).await,
             Err(Error::UnsupportedKeyType(KeyType::Rsa))
@@ -670,9 +672,9 @@ mod tests {
     #[cfg(all(feature = "aes-gcm", feature = "ed25519"))]
     #[tokio::test]
     async fn aesgcm_round_trip() {
-        let keychain = Keychain::in_memory_with_custom_cipher(cipher::aes_gcm::AesGcmCipher::new(
-            generate_key(),
-        ));
+        let keychain = Keychain::<MemoryKeystore>::new_with_custom_cipher(
+            cipher::aes_gcm::AesGcmCipher::new(generate_key()),
+        );
         let keypair = Keypair::generate_ed25519();
         keychain.insert("id", &keypair).await.unwrap();
         let recovered = keychain.get("id").await.unwrap();

@@ -1001,7 +1001,7 @@ where
 }
 
 fn default_keychain() -> Keychain<MemoryKeystore> {
-    Keychain::in_memory(generate_key())
+    Keychain::new(generate_key())
 }
 
 /// Resolves an identity (and the keychain that will hold runtime keys) for the builder. The

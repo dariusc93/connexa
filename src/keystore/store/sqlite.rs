@@ -12,6 +12,12 @@ pub struct SqliteKeystore {
     pool: OnceCell<SqlitePool>,
 }
 
+impl Default for SqliteKeystore {
+    fn default() -> Self {
+        Self::in_memory().expect("valid configuration for in memory database")
+    }
+}
+
 impl SqliteKeystore {
     pub fn new(path: impl AsRef<Path>) -> Result<Self> {
         let options = SqliteConnectOptions::new()
@@ -146,12 +152,12 @@ mod tests {
         let key = generate_key();
         let keypair = Keypair::generate_ed25519();
 
-        Keychain::new(key, SqliteKeystore::new(&path).unwrap())
+        Keychain::new_with_store(key, SqliteKeystore::new(&path).unwrap())
             .insert("identity", &keypair)
             .await
             .unwrap();
 
-        let reopened = Keychain::new(key, SqliteKeystore::new(&path).unwrap());
+        let reopened = Keychain::new_with_store(key, SqliteKeystore::new(&path).unwrap());
         assert_eq!(
             reopened
                 .get("identity")

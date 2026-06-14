@@ -146,13 +146,13 @@ mod tests {
         let key = generate_key();
         let keypair = Keypair::generate_ed25519();
 
-        Keychain::new(key, FilesystemKeystore::new(&dir))
+        Keychain::new_with_store(key, FilesystemKeystore::new(&dir))
             .insert("identity", &keypair)
             .await
             .unwrap();
 
         // A fresh keychain over the same dir + master key reads the persisted entry.
-        let reopened = Keychain::new(key, FilesystemKeystore::new(&dir));
+        let reopened = Keychain::new_with_store(key, FilesystemKeystore::new(&dir));
         let recovered = reopened.get("identity").await.unwrap();
         assert_eq!(
             recovered.public().to_peer_id(),
@@ -188,7 +188,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("connexa-fsperms-{}", std::process::id()));
         let _ = tokio::fs::remove_dir_all(&dir).await;
 
-        Keychain::new(generate_key(), FilesystemKeystore::new(&dir))
+        Keychain::new_with_store(generate_key(), FilesystemKeystore::new(&dir))
             .insert("identity", &Keypair::generate_ed25519())
             .await
             .unwrap();

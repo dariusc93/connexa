@@ -1,5 +1,5 @@
 use crate::keystore::{EncryptedEntry, Error, KeyMetadata, Keystore, Result};
-use redb::{Database, ReadableTable, TableDefinition, TableError};
+use redb::{Database, ReadableTable, TableDefinition, TableError, backends::InMemoryBackend};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::OnceCell;
@@ -8,14 +8,14 @@ const TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("keys");
 
 /// redb [`Keystore`] backend.
 pub struct RedbKeystore {
-    path: PathBuf,
+    path: Option<PathBuf>,
     db: OnceCell<Arc<Database>>,
 }
 
 impl RedbKeystore {
     pub fn new(path: impl AsRef<Path>) -> Self {
         Self {
-            path: path.as_ref().to_path_buf(),
+            path: Some(path.as_ref().to_path_buf()),
             db: OnceCell::new(),
         }
     }
@@ -25,10 +25,18 @@ impl RedbKeystore {
             .db
             .get_or_try_init(|| async {
                 let path = self.path.clone();
-                let database = tokio::task::spawn_blocking(move || Database::create(path))
-                    .await
-                    .map_err(backend)?
-                    .map_err(backend)?;
+                let database = tokio::task::spawn_blocking(move || match path {
+                    Some(path) => Database::create(path).map_err(backend),
+                    None => {
+                        let mem = InMemoryBackend::new();
+                        Database::builder()
+                            .create_with_backend(mem)
+                            .map_err(backend)
+                    }
+                })
+                .await
+                .map_err(backend)?
+                .map_err(backend)?;
                 Ok::<_, Error>(Arc::new(database))
             })
             .await?;
@@ -153,12 +161,12 @@ mod tests {
         let key = generate_key();
         let keypair = Keypair::generate_ed25519();
 
-        Keychain::new(key, RedbKeystore::new(&path))
+        Keychain::new_with_store(key, RedbKeystore::new(&path))
             .insert("identity", &keypair)
             .await
             .unwrap();
 
-        let reopened = Keychain::new(key, RedbKeystore::new(&path));
+        let reopened = Keychain::new_with_store(key, RedbKeystore::new(&path));
         let recovered = reopened.get("identity").await.unwrap();
         assert_eq!(
             recovered.public().to_peer_id(),
