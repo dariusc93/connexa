@@ -8,8 +8,8 @@ use libp2p::core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{DialOpts, ListenerId, TransportError, TransportEvent},
 };
+use parking_lot::Mutex;
 use send_wrapper::SendWrapper;
-use std::sync::Mutex;
 use std::{
     error, fmt, io,
     ops::DerefMut,
@@ -74,13 +74,12 @@ where
     ) -> Result<(), TransportError<Self::Error>> {
         self.inner
             .lock()
-            .unwrap()
             .listen_on(id, addr)
             .map_err(|e| e.map(Error::Transport))
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
-        self.inner.lock().unwrap().remove_listener(id)
+        self.inner.lock().remove_listener(id)
     }
 
     fn dial(
@@ -95,7 +94,7 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock();
         libp2p::Transport::poll(Pin::new(inner.deref_mut()), cx).map(|event| {
             event
                 .map_upgrade(|upgr| upgr.map_err::<_, fn(_) -> _>(Error::Transport))
@@ -194,7 +193,7 @@ where
                     tracing::debug!(address=%addr, "Dialing address");
 
                     let transport = inner.clone();
-                    let dial = transport.lock().unwrap().dial(addr, dial_opts);
+                    let dial = transport.lock().dial(addr, dial_opts);
                     let result = match dial {
                         Ok(out) => {
                             // We only count attempts that the inner transport
