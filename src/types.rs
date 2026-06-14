@@ -46,9 +46,9 @@ pub enum Command<T = ()> {
     Rendezvous(RendezvousCommand),
     #[cfg(feature = "autonat")]
     Autonat(AutonatCommand),
-    #[cfg(not(target_arch = "wasm32"))]
     #[cfg(feature = "relay")]
     AutoRelay(AutoRelayCommand),
+    #[cfg(not(target_arch = "wasm32"))]
     #[cfg(feature = "relay")]
     RelayServer(RelayServerCommand),
     Whitelist(WhitelistCommand),
@@ -113,7 +113,6 @@ impl<T> From<RendezvousCommand> for Command<T> {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "relay")]
 impl<T> From<AutoRelayCommand> for Command<T> {
     fn from(cmd: AutoRelayCommand) -> Self {
@@ -121,6 +120,7 @@ impl<T> From<AutoRelayCommand> for Command<T> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "relay")]
 impl<T> From<RelayServerCommand> for Command<T> {
     fn from(cmd: RelayServerCommand) -> Self {
