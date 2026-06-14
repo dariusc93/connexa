@@ -8,6 +8,8 @@ pub(crate) mod floodsub;
 #[cfg(feature = "gossipsub")]
 pub(crate) mod gossipsub;
 mod peer_store;
+
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "relay")]
 mod relay_server;
 #[cfg(feature = "rendezvous")]
