@@ -30,6 +30,7 @@ use crate::handle::floodsub::ConnexaFloodsub;
 #[cfg(feature = "gossipsub")]
 use crate::handle::gossipsub::ConnexaGossipsub;
 use crate::handle::peer_store::ConnexaPeerstore;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::handle::relay_server::ConnexaRelayServer;
 #[cfg(feature = "rendezvous")]
 use crate::handle::rendezvous::ConnexaRendezvous;
