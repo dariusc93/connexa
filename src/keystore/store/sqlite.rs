@@ -133,8 +133,8 @@ impl Keystore for SqliteKeystore {
     }
 }
 
-fn backend<E: std::fmt::Display>(err: E) -> Error {
-    Error::Backend(err.to_string())
+fn backend<E: Into<Box<dyn std::error::Error + Send + Sync>>>(err: E) -> Error {
+    Error::Backend(std::io::Error::other(err))
 }
 
 #[cfg(test)]

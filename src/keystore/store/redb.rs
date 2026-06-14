@@ -26,17 +26,12 @@ impl RedbKeystore {
             .get_or_try_init(|| async {
                 let path = self.path.clone();
                 let database = tokio::task::spawn_blocking(move || match path {
-                    Some(path) => Database::create(path).map_err(backend),
-                    None => {
-                        let mem = InMemoryBackend::new();
-                        Database::builder()
-                            .create_with_backend(mem)
-                            .map_err(backend)
-                    }
+                    Some(path) => Database::create(path),
+                    None => Database::builder().create_with_backend(InMemoryBackend::new()),
                 })
                 .await
                 .map_err(backend)?
-                .map_err(backend)?;
+                .map_err(open_error)?;
                 Ok::<_, Error>(Arc::new(database))
             })
             .await?;
@@ -144,8 +139,16 @@ impl Keystore for RedbKeystore {
     }
 }
 
-fn backend<E: std::fmt::Display>(err: E) -> Error {
-    Error::Backend(err.to_string())
+fn backend<E: Into<Box<dyn std::error::Error + Send + Sync>>>(err: E) -> Error {
+    Error::Backend(std::io::Error::other(err))
+}
+
+fn open_error(err: redb::DatabaseError) -> Error {
+    let kind = match &err {
+        redb::DatabaseError::DatabaseAlreadyOpen => std::io::ErrorKind::ResourceBusy,
+        _ => std::io::ErrorKind::Other,
+    };
+    Error::Backend(std::io::Error::new(kind, err))
 }
 
 #[cfg(test)]

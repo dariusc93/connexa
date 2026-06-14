@@ -31,7 +31,7 @@ pub enum Error {
     #[error(transparent)]
     Key(#[from] libp2p::identity::DecodingError),
     #[error("keystore backend error: {0}")]
-    Backend(String),
+    Backend(std::io::Error),
     #[error("cannot generate a key of type {0}")]
     UnsupportedKeyType(KeyType),
     #[error("key type mismatch: stored key is {has:?} but wanted {wanted:?}")]

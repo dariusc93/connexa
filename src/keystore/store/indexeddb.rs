@@ -151,5 +151,5 @@ impl Keystore for IndexedDbKeystore {
 }
 
 fn backend<E: std::fmt::Display>(err: E) -> Error {
-    Error::Backend(err.to_string())
+    Error::Backend(std::io::Error::other(err.to_string()))
 }

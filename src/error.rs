@@ -124,6 +124,7 @@ where
         use std::io::ErrorKind;
         match err {
             Error::Io(e) => e,
+            Error::Keystore(crate::keystore::Error::Backend(e)) => e,
             other => {
                 let kind = match &other {
                     Error::NotFound(_) => ErrorKind::NotFound,

@@ -26,8 +26,7 @@ impl Keystore for FilesystemKeystore {
         use tokio::io::AsyncWriteExt;
 
         let path = self.entry_path(&entry.metadata.label)?;
-        let bytes = cbor4ii::serde::to_vec(Vec::new(), &entry)
-            .map_err(|e| Error::Backend(e.to_string()))?;
+        let bytes = cbor4ii::serde::to_vec(Vec::new(), &entry).map_err(backend)?;
 
         let tmp_dir = self.dir.join(".tmp");
         async {
@@ -42,7 +41,7 @@ impl Keystore for FilesystemKeystore {
             tokio::fs::rename(&tmp, &path).await
         }
         .await
-        .map_err(|e| Error::Backend(e.to_string()))
+        .map_err(Error::Backend)
     }
 
     async fn put_many(&self, entries: Vec<EncryptedEntry>) -> Result<()> {
@@ -51,8 +50,7 @@ impl Keystore for FilesystemKeystore {
         let mut staged = Vec::with_capacity(entries.len());
         for entry in &entries {
             let path = self.entry_path(&entry.metadata.label)?;
-            let bytes = cbor4ii::serde::to_vec(Vec::new(), entry)
-                .map_err(|e| Error::Backend(e.to_string()))?;
+            let bytes = cbor4ii::serde::to_vec(Vec::new(), entry).map_err(backend)?;
             staged.push((path, bytes));
         }
 
@@ -75,17 +73,15 @@ impl Keystore for FilesystemKeystore {
             Ok::<_, std::io::Error>(())
         }
         .await
-        .map_err(|e| Error::Backend(e.to_string()))
+        .map_err(Error::Backend)
     }
 
     async fn get(&self, label: &str) -> Result<Option<EncryptedEntry>> {
         let path = self.entry_path(label)?;
         match tokio::fs::read(&path).await {
-            Ok(bytes) => Ok(Some(
-                cbor4ii::serde::from_slice(&bytes).map_err(|e| Error::Backend(e.to_string()))?,
-            )),
+            Ok(bytes) => Ok(Some(cbor4ii::serde::from_slice(&bytes).map_err(backend)?)),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(Error::Backend(e.to_string())),
+            Err(e) => Err(Error::Backend(e)),
         }
     }
 
@@ -93,15 +89,11 @@ impl Keystore for FilesystemKeystore {
         let mut read_dir = match tokio::fs::read_dir(&self.dir).await {
             Ok(read_dir) => read_dir,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(e) => return Err(Error::Backend(e.to_string())),
+            Err(e) => return Err(Error::Backend(e)),
         };
 
         let mut metadata = Vec::new();
-        while let Some(entry) = read_dir
-            .next_entry()
-            .await
-            .map_err(|e| Error::Backend(e.to_string()))?
-        {
+        while let Some(entry) = read_dir.next_entry().await.map_err(Error::Backend)? {
             // Skip non-files and anything that doesn't decode, so the directory can coexist with
             // unrelated files; a genuinely corrupt key still surfaces via `get`.
             if !entry
@@ -126,7 +118,7 @@ impl Keystore for FilesystemKeystore {
         match tokio::fs::remove_file(&path).await {
             Ok(()) => Ok(true),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
-            Err(e) => Err(Error::Backend(e.to_string())),
+            Err(e) => Err(Error::Backend(e)),
         }
     }
 }
@@ -159,6 +151,10 @@ async fn create_file(path: &Path) -> std::io::Result<tokio::fs::File> {
 #[cfg(not(unix))]
 async fn create_file(path: &Path) -> std::io::Result<tokio::fs::File> {
     tokio::fs::File::create(path).await
+}
+
+fn backend<E: Into<Box<dyn std::error::Error + Send + Sync>>>(err: E) -> Error {
+    Error::Backend(std::io::Error::other(err))
 }
 
 #[cfg(test)]
