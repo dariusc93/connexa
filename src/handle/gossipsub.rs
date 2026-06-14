@@ -8,7 +8,7 @@ use futures::stream::BoxStream;
 use libp2p::PeerId;
 use libp2p::gossipsub::{Hasher, IdentTopic, MessageAcceptance, MessageId, Topic, TopicHash};
 
-pub struct ConnexaGossipsub<'a, T, K = crate::keystore::store::memory::MemoryKeystore> {
+pub struct ConnexaGossipsub<'a, T, K> {
     connexa: &'a Connexa<T, K>,
 }
 

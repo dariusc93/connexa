@@ -10,7 +10,7 @@ use libp2p::request_response::InboundRequestId;
 use libp2p::{PeerId, StreamProtocol};
 use std::io::Result as IoResult;
 
-pub struct ConnexaRequestResponse<'a, T, K = crate::keystore::store::memory::MemoryKeystore> {
+pub struct ConnexaRequestResponse<'a, T, K> {
     connexa: &'a Connexa<T, K>,
 }
 

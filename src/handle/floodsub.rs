@@ -8,7 +8,7 @@ use futures::stream::BoxStream;
 use libp2p::PeerId;
 use libp2p::floodsub::Topic;
 
-pub struct ConnexaFloodsub<'a, T = (), K = crate::keystore::store::memory::MemoryKeystore> {
+pub struct ConnexaFloodsub<'a, T, K> {
     connexa: &'a Connexa<T, K>,
 }
 

@@ -5,7 +5,7 @@ use crate::types::PeerstoreCommand;
 use futures::channel::oneshot;
 use libp2p::Multiaddr;
 
-pub struct ConnexaPeerstore<'a, T = (), K = crate::keystore::store::memory::MemoryKeystore> {
+pub struct ConnexaPeerstore<'a, T, K> {
     connexa: &'a Connexa<T, K>,
 }
 

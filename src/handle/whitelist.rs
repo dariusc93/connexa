@@ -4,7 +4,7 @@ use crate::prelude::PeerId;
 use crate::types::WhitelistCommand;
 use futures::channel::oneshot;
 
-pub struct ConnexaWhitelist<'a, T = (), K = crate::keystore::store::memory::MemoryKeystore> {
+pub struct ConnexaWhitelist<'a, T, K> {
     connexa: &'a Connexa<T, K>,
 }
 

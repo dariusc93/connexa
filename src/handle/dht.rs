@@ -9,7 +9,7 @@ use libp2p::kad::{Mode, PeerInfo, PeerRecord, Quorum, RecordKey};
 use libp2p::{Multiaddr, PeerId};
 use std::collections::HashSet;
 
-pub struct ConnexaDht<'a, T, K = crate::keystore::store::memory::MemoryKeystore> {
+pub struct ConnexaDht<'a, T, K> {
     connexa: &'a Connexa<T, K>,
 }
 

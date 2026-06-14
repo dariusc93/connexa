@@ -7,7 +7,7 @@ use libp2p::rendezvous::{Cookie, Namespace};
 use libp2p::{Multiaddr, PeerId};
 use std::io;
 
-pub struct ConnexaRendezvous<'a, T, K = crate::keystore::store::memory::MemoryKeystore> {
+pub struct ConnexaRendezvous<'a, T, K> {
     connexa: &'a Connexa<T, K>,
 }
 

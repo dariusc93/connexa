@@ -5,7 +5,7 @@ use futures::channel::oneshot;
 use libp2p::autonat::NatStatus;
 use libp2p::{Multiaddr, PeerId};
 
-pub struct ConnexaAutonat<'a, T = (), K = crate::keystore::store::memory::MemoryKeystore> {
+pub struct ConnexaAutonat<'a, T, K> {
     connexa: &'a Connexa<T, K>,
 }
 
