@@ -26,7 +26,8 @@ impl Keystore for FilesystemKeystore {
         use tokio::io::AsyncWriteExt;
 
         let path = self.entry_path(&entry.metadata.label)?;
-        let bytes = postcard::to_allocvec(&entry).map_err(|e| Error::Backend(e.to_string()))?;
+        let bytes = cbor4ii::serde::to_vec(Vec::new(), &entry)
+            .map_err(|e| Error::Backend(e.to_string()))?;
 
         let tmp_dir = self.dir.join(".tmp");
         async {
@@ -48,7 +49,7 @@ impl Keystore for FilesystemKeystore {
         let path = self.entry_path(label)?;
         match tokio::fs::read(&path).await {
             Ok(bytes) => Ok(Some(
-                postcard::from_bytes(&bytes).map_err(|e| Error::Backend(e.to_string()))?,
+                cbor4ii::serde::from_slice(&bytes).map_err(|e| Error::Backend(e.to_string()))?,
             )),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(e) => Err(Error::Backend(e.to_string())),
@@ -79,7 +80,7 @@ impl Keystore for FilesystemKeystore {
                 continue;
             }
             if let Ok(bytes) = tokio::fs::read(entry.path()).await {
-                if let Ok(decoded) = postcard::from_bytes::<EncryptedEntry>(&bytes) {
+                if let Ok(decoded) = cbor4ii::serde::from_slice::<EncryptedEntry>(&bytes) {
                     metadata.push(decoded.metadata);
                 }
             }

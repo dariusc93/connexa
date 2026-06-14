@@ -130,6 +130,7 @@ pub struct KeyMetadata {
     pub version: u32,
     pub created_at: SystemTime,
     pub expires_at: Option<SystemTime>,
+    #[cfg_attr(feature = "serde", serde(with = "serde_bytes"))]
     public_key: Vec<u8>,
 }
 
@@ -164,6 +165,7 @@ impl KeyMetadata {
 pub struct EncryptedEntry {
     pub metadata: KeyMetadata,
     /// Opaque ciphertext blob produced by the [`Cipher`] backend (it owns any nonce/framing).
+    #[cfg_attr(feature = "serde", serde(with = "serde_bytes"))]
     ciphertext: Vec<u8>,
 }
 

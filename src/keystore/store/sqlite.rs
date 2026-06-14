@@ -68,7 +68,7 @@ impl SqliteKeystore {
 impl Keystore for SqliteKeystore {
     async fn put(&self, entry: EncryptedEntry) -> Result<()> {
         let pool = self.pool().await?;
-        let bytes = postcard::to_allocvec(&entry).map_err(backend)?;
+        let bytes = cbor4ii::serde::to_vec(Vec::new(), &entry).map_err(backend)?;
         sqlx::query("INSERT OR REPLACE INTO keys (label, data) VALUES (?1, ?2)")
             .bind(entry.metadata.label)
             .bind(bytes)
@@ -82,7 +82,7 @@ impl Keystore for SqliteKeystore {
         let pool = self.pool().await?;
         let mut tx = pool.begin().await.map_err(backend)?;
         for entry in entries {
-            let bytes = postcard::to_allocvec(&entry).map_err(backend)?;
+            let bytes = cbor4ii::serde::to_vec(Vec::new(), &entry).map_err(backend)?;
             sqlx::query("INSERT OR REPLACE INTO keys (label, data) VALUES (?1, ?2)")
                 .bind(entry.metadata.label)
                 .bind(bytes)
@@ -102,7 +102,7 @@ impl Keystore for SqliteKeystore {
             .await
             .map_err(backend)?;
         match row {
-            Some((bytes,)) => Ok(Some(postcard::from_bytes(&bytes).map_err(backend)?)),
+            Some((bytes,)) => Ok(Some(cbor4ii::serde::from_slice(&bytes).map_err(backend)?)),
             None => Ok(None),
         }
     }
@@ -115,7 +115,7 @@ impl Keystore for SqliteKeystore {
             .map_err(backend)?;
         let mut metadata = Vec::with_capacity(rows.len());
         for (bytes,) in rows {
-            if let Ok(entry) = postcard::from_bytes::<EncryptedEntry>(&bytes) {
+            if let Ok(entry) = cbor4ii::serde::from_slice::<EncryptedEntry>(&bytes) {
                 metadata.push(entry.metadata);
             }
         }

@@ -47,7 +47,7 @@ impl RedbKeystore {
 impl Keystore for RedbKeystore {
     async fn put(&self, entry: EncryptedEntry) -> Result<()> {
         let db = self.db().await?;
-        let bytes = postcard::to_allocvec(&entry).map_err(backend)?;
+        let bytes = cbor4ii::serde::to_vec(Vec::new(), &entry).map_err(backend)?;
         let label = entry.metadata.label;
         tokio::task::spawn_blocking(move || -> Result<()> {
             let tx = db.begin_write().map_err(backend)?;
@@ -71,7 +71,7 @@ impl Keystore for RedbKeystore {
             {
                 let mut table = tx.open_table(TABLE).map_err(backend)?;
                 for entry in entries {
-                    let bytes = postcard::to_allocvec(&entry).map_err(backend)?;
+                    let bytes = cbor4ii::serde::to_vec(Vec::new(), &entry).map_err(backend)?;
                     table
                         .insert(entry.metadata.label.as_str(), bytes.as_slice())
                         .map_err(backend)?;
@@ -95,7 +95,9 @@ impl Keystore for RedbKeystore {
                 Err(e) => return Err(backend(e)),
             };
             match table.get(label.as_str()).map_err(backend)? {
-                Some(value) => Ok(Some(postcard::from_bytes(value.value()).map_err(backend)?)),
+                Some(value) => Ok(Some(
+                    cbor4ii::serde::from_slice(value.value()).map_err(backend)?,
+                )),
                 None => Ok(None),
             }
         })
@@ -115,7 +117,7 @@ impl Keystore for RedbKeystore {
             let mut metadata = Vec::new();
             for entry in table.iter().map_err(backend)? {
                 let (_label, value) = entry.map_err(backend)?;
-                if let Ok(decoded) = postcard::from_bytes::<EncryptedEntry>(value.value()) {
+                if let Ok(decoded) = cbor4ii::serde::from_slice::<EncryptedEntry>(value.value()) {
                     metadata.push(decoded.metadata);
                 }
             }
