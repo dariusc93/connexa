@@ -1,5 +1,7 @@
 use crate::behaviour::peer_store::store::Store;
 use crate::task::ConnexaTask;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::types::RelayServerCommand;
 use libp2p::relay::{Event as RelayServerEvent, client::Event as RelayClientEvent};
 use libp2p::swarm::NetworkBehaviour;
 use std::fmt::Debug;
@@ -32,6 +34,7 @@ where
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn process_relay_server_event(&mut self, event: RelayServerEvent) {
         match event {
             RelayServerEvent::ReservationReqAccepted {
@@ -69,7 +72,37 @@ where
             } => {
                 tracing::warn!(%src_peer_id, %dst_peer_id, ?error, "relay server circuit closed");
             }
+            RelayServerEvent::StatusChanged { status } => {
+                tracing::info!(?status, "relay server status changed");
+            }
             _ => {}
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl<X, C: NetworkBehaviour, S, T, K> ConnexaTask<X, C, S, T, K>
+where
+    X: Default + Send + 'static,
+    C: Send,
+    C::ToSwarm: Debug,
+    S: Store,
+{
+    pub fn process_relay_server_command(&mut self, command: RelayServerCommand) {
+        let swarm = self.swarm.as_mut().expect("swarm is active");
+        match command {
+            RelayServerCommand::StatusChanged { status, resp } => {
+                let Some(relay) = swarm.behaviour_mut().relay.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other(
+                        "relay server protocol is not enabled",
+                    )));
+                    return;
+                };
+
+                relay.set_status(status);
+
+                let _ = resp.send(Ok(()));
+            }
         }
     }
 }

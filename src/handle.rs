@@ -8,6 +8,10 @@ pub(crate) mod floodsub;
 #[cfg(feature = "gossipsub")]
 pub(crate) mod gossipsub;
 mod peer_store;
+
+#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "relay")]
+mod relay_server;
 #[cfg(feature = "rendezvous")]
 pub(crate) mod rendezvous;
 #[cfg(feature = "request-response")]
@@ -28,6 +32,8 @@ use crate::handle::floodsub::ConnexaFloodsub;
 #[cfg(feature = "gossipsub")]
 use crate::handle::gossipsub::ConnexaGossipsub;
 use crate::handle::peer_store::ConnexaPeerstore;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::handle::relay_server::ConnexaRelayServer;
 #[cfg(feature = "rendezvous")]
 use crate::handle::rendezvous::ConnexaRendezvous;
 #[cfg(feature = "request-response")]
@@ -135,6 +141,13 @@ where
     #[cfg(feature = "rendezvous")]
     pub fn rendezvous(&self) -> ConnexaRendezvous<'_, T, K> {
         ConnexaRendezvous::new(self)
+    }
+
+    /// Returns a handle for relay server functions
+    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(feature = "relay")]
+    pub fn relay_server(&self) -> ConnexaRelayServer<'_, T, K> {
+        ConnexaRelayServer::new(self)
     }
 
     /// Returns a handle to manage peer whitelist functionality
