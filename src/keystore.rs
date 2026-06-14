@@ -595,6 +595,31 @@ mod tests {
 
     #[cfg(feature = "ed25519")]
     #[tokio::test]
+    async fn rejects_invalid_labels_on_any_backend() {
+        let keychain = Keychain::<MemoryKeystore>::new(generate_key());
+        let keypair = Keypair::generate_ed25519();
+
+        for bad in ["", ".", "..", "a/b", "a\\b", "a\0b"] {
+            assert!(
+                matches!(
+                    keychain.insert(bad, &keypair).await,
+                    Err(Error::InvalidLabel(_))
+                ),
+                "insert({bad:?}) should be rejected"
+            );
+            assert!(
+                matches!(keychain.get(bad).await, Err(Error::InvalidLabel(_))),
+                "get({bad:?}) should be rejected"
+            );
+            assert!(
+                matches!(keychain.remove(bad).await, Err(Error::InvalidLabel(_))),
+                "remove({bad:?}) should be rejected"
+            );
+        }
+    }
+
+    #[cfg(feature = "ed25519")]
+    #[tokio::test]
     async fn get_or_create_persists_identity() {
         let keychain = Keychain::<MemoryKeystore>::new(generate_key());
         let first = keychain.get_or_create("id").await.unwrap();
