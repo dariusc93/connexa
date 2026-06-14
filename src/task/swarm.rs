@@ -291,6 +291,7 @@ where
         };
 
         match event {
+            #[cfg(not(target_arch = "wasm32"))]
             #[cfg(feature = "relay")]
             BehaviourEvent::Relay(event) => self.process_relay_server_event(event),
             #[cfg(feature = "relay")]
