@@ -3,11 +3,12 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     num::NonZeroU8,
     task::{Context, Poll, Waker},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use crate::behaviour::autorelay::handler::Out;
 use crate::multiaddr_ext::MultiaddrExt;
+use crate::prelude::swarm::derive_prelude::{ListenerId, PortUse};
 use crate::prelude::swarm::{
     ExternalAddresses, ListenOpts, NewListenAddr, NotifyHandler,
     derive_prelude::{
@@ -21,8 +22,7 @@ use crate::prelude::swarm::{
 use crate::prelude::transport::Endpoint;
 use crate::prelude::{PeerId, Protocol};
 use either::Either;
-
-use crate::prelude::swarm::derive_prelude::{ListenerId, PortUse};
+use web_time::{Instant, SystemTime};
 
 mod handler;
 
@@ -46,7 +46,7 @@ pub struct Behaviour {
 
     failure_counts: HashMap<PeerId, u32>,
 
-    previous_relays: VecDeque<(PeerId, Multiaddr, Instant)>,
+    previous_relays: VecDeque<(PeerId, Multiaddr, SystemTime)>,
 
     relays_available: bool,
 
@@ -117,7 +117,7 @@ pub struct Config {
     failure_cooldown: Duration,
     failure_cooldown_max: Duration,
     max_previous_relays: usize,
-    static_relays: HashMap<PeerId, Multiaddr>,
+    static_relays: HashMap<PeerId, Vec<Multiaddr>>,
 }
 
 impl Default for Config {
@@ -153,8 +153,13 @@ impl Config {
         self
     }
 
-    pub fn add_static_relay(mut self, peer_id: PeerId, address: Multiaddr) -> Self {
-        self.static_relays.insert(peer_id, address);
+    pub fn add_static_relay(mut self, peer_id: PeerId, addresses: Vec<Multiaddr>) -> Self {
+        let entry = self.static_relays.entry(peer_id).or_default();
+        for addr in addresses {
+            if !entry.contains(&addr) {
+                entry.push(addr);
+            }
+        }
         self
     }
 }
@@ -177,8 +182,10 @@ impl Behaviour {
             config,
             ..Default::default()
         };
-        for (peer_id, address) in initial_static_relays {
-            behaviour.add_static_relay(peer_id, address);
+        for (peer_id, addresses) in initial_static_relays {
+            for address in addresses {
+                behaviour.add_static_relay(peer_id, address);
+            }
         }
         behaviour
     }
@@ -213,10 +220,10 @@ impl Behaviour {
     /// This will dial and establish a connection to the peer if it doesn't already have a direct
     /// connection.
     /// Note that peers that are through a relay cannot be used as a static peer
-    pub fn add_static_relay(&mut self, peer_id: PeerId, address: Multiaddr) -> bool {
+    pub fn add_static_relay(&mut self, peer_id: PeerId, address: Multiaddr) {
         if address.is_relayed() {
             tracing::warn!(%peer_id, %address, "static relay address is relayed. ignoring.");
-            return false;
+            return;
         }
 
         let entry = self.static_relays.entry(peer_id).or_default();
@@ -225,21 +232,19 @@ impl Behaviour {
         } else {
             entry.push(address);
         }
-        let addrs = entry.clone();
+        let combined = entry.clone();
 
         if self.is_peer_idle(&peer_id) {
             self.evict_for_static_peer(peer_id);
         }
 
-        if !self.queue_static_dial(peer_id, addrs) {
+        if !self.queue_static_dial(peer_id, combined) {
             self.meet_reservation_target();
         }
 
         if let Some(waker) = self.waker.take() {
             waker.wake();
         }
-
-        return true;
     }
 
     /// Remove peer as a static relay.
@@ -255,7 +260,7 @@ impl Behaviour {
             .map(|(peer, addrs)| (peer, addrs.as_slice()))
     }
 
-    pub fn previous_relays(&self) -> impl Iterator<Item = (&PeerId, &Multiaddr, &Instant)> {
+    pub fn previous_relays(&self) -> impl Iterator<Item = (&PeerId, &Multiaddr, &SystemTime)> {
         self.previous_relays
             .iter()
             .map(|(peer, addr, ts)| (peer, addr, ts))
@@ -289,7 +294,7 @@ impl Behaviour {
             self.previous_relays.pop_front();
         }
         self.previous_relays
-            .push_back((peer_id, address, Instant::now()));
+            .push_back((peer_id, address, SystemTime::now()));
     }
 
     fn forget_previous_relay(&mut self, peer_id: &PeerId) {
@@ -388,7 +393,8 @@ impl Behaviour {
         let addr_with_peer_id = match info.address.clone().with_p2p(peer_id) {
             Ok(addr) => addr,
             Err(addr) => {
-                tracing::warn!(%addr, "address unexpectedly contains a different peer id than the connection");
+                tracing::warn!(%addr, "address unexpectedly contains a different peer id than the connection; marking relay connection ineligible");
+                info.relay_status = RelayStatus::NotSupported;
                 return;
             }
         };
@@ -404,7 +410,7 @@ impl Behaviour {
     }
 
     /// Removes all existing reservations.
-    pub fn remove_all_reservations(&mut self) {
+    fn remove_all_reservations(&mut self) {
         let relay_listeners = self
             .reservations
             .iter()
@@ -511,8 +517,8 @@ impl Behaviour {
             return;
         }
 
-        let mut static_candidates = Vec::new();
-        let mut candidates = HashMap::new();
+        let mut static_candidates = BTreeMap::new();
+        let mut candidates: BTreeMap<_, ConnectionId> = BTreeMap::new();
         for ((peer_id, connection_id), info) in self.connections.iter() {
             if covered.contains(peer_id) {
                 continue;
@@ -524,13 +530,15 @@ impl Behaviour {
             {
                 continue;
             }
-            if self.static_relays.contains_key(peer_id) {
-                if !static_candidates.iter().any(|(p, _)| p == peer_id) {
-                    static_candidates.push((*peer_id, *connection_id));
-                }
+            let bucket = if self.static_relays.contains_key(peer_id) {
+                &mut static_candidates
             } else {
-                candidates.entry(*peer_id).or_insert(*connection_id);
-            }
+                &mut candidates
+            };
+            bucket
+                .entry(*peer_id)
+                .and_modify(|existing| *existing = (*existing).min(*connection_id))
+                .or_insert(*connection_id);
         }
 
         let selected_candidates: Vec<(PeerId, ConnectionId)> = static_candidates
@@ -636,10 +644,13 @@ impl NetworkBehaviour for Behaviour {
                 connection_id,
                 ..
             }) => {
-                let connection = self
-                    .connections
-                    .remove(&(peer_id, connection_id))
-                    .expect("valid connection");
+                let Some(connection) = self.connections.remove(&(peer_id, connection_id)) else {
+                    return;
+                };
+
+                if !self.connections.keys().any(|(pid, _)| *pid == peer_id) {
+                    self.clear_failure(&peer_id);
+                }
 
                 let had_reservation = matches!(
                     connection.relay_status,
@@ -662,8 +673,8 @@ impl NetworkBehaviour for Behaviour {
                     self.record_previous_relay(peer_id, connection.address);
                 }
 
-                if let Some(address) = self.static_relays.get(&peer_id).cloned() {
-                    self.queue_static_dial(peer_id, address);
+                if let Some(addresses) = self.static_relays.get(&peer_id).cloned() {
+                    self.queue_static_dial(peer_id, addresses);
                 }
 
                 self.update_relay_availability();
@@ -674,10 +685,9 @@ impl NetworkBehaviour for Behaviour {
                 old: _,
                 new,
             }) => {
-                let connection = self
-                    .connections
-                    .get_mut(&(peer_id, connection_id))
-                    .expect("valid connection");
+                let Some(connection) = self.connections.get_mut(&(peer_id, connection_id)) else {
+                    return;
+                };
 
                 let new_addr = new.get_remote_address();
 
@@ -690,10 +700,10 @@ impl NetworkBehaviour for Behaviour {
 
                 if let Some((peer_id, connection_id)) = self.reservations.get(&listener_id).copied()
                 {
-                    let connection = self
-                        .connections
-                        .get_mut(&(peer_id, connection_id))
-                        .expect("valid connection");
+                    let Some(connection) = self.connections.get_mut(&(peer_id, connection_id))
+                    else {
+                        return;
+                    };
 
                     if matches!(
                         connection.relay_status,
@@ -749,10 +759,9 @@ impl NetworkBehaviour for Behaviour {
     ) {
         let Either::Left(event) = event;
 
-        let connection = self
-            .connections
-            .get_mut(&(peer_id, connection_id))
-            .expect("valid connection");
+        let Some(connection) = self.connections.get_mut(&(peer_id, connection_id)) else {
+            return;
+        };
 
         match event {
             Out::Supported => {
