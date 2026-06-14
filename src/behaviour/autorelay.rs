@@ -40,6 +40,10 @@ pub struct Behaviour {
 
     external_reservations: HashMap<ListenerId, PeerId>,
 
+    // placeholder for reservations.
+    // TODO: Removed once https://github.com/libp2p/rust-libp2p/pull/3222 is published or backported.
+    reservation_addrs: HashMap<ListenerId, HashSet<Multiaddr>>,
+
     static_relays: HashMap<PeerId, Vec<Multiaddr>>,
 
     static_dial_cooldowns: HashMap<PeerId, Instant>,
@@ -64,6 +68,7 @@ impl Default for Behaviour {
             connections: HashMap::new(),
             reservations: HashMap::new(),
             external_reservations: HashMap::new(),
+            reservation_addrs: HashMap::new(),
             static_relays: HashMap::new(),
             static_dial_cooldowns: HashMap::new(),
             failure_counts: HashMap::new(),
@@ -443,6 +448,8 @@ impl Behaviour {
     }
 
     fn disable_reservation(&mut self, id: ListenerId, failed: bool) {
+        self.expire_reservation_addrs(id);
+
         if self.external_reservations.remove(&id).is_some() {
             self.meet_reservation_target();
             return;
@@ -496,6 +503,62 @@ impl Behaviour {
 
         self.record_previous_relay(peer_id, address);
         self.meet_reservation_target();
+    }
+
+    fn reconcile_reservation_addrs(&mut self) {
+        let confirmed: HashSet<Multiaddr> = self
+            .external_addresses
+            .iter()
+            .filter(|addr| addr.is_relayed())
+            .cloned()
+            .collect();
+
+        for addrs in self.reservation_addrs.values_mut() {
+            addrs.retain(|addr| confirmed.contains(addr));
+        }
+        self.reservation_addrs.retain(|_, addrs| !addrs.is_empty());
+
+        for addr in confirmed {
+            let Some(relay_peer) = addr.relay_peer_id() else {
+                continue;
+            };
+
+            let listeners = self
+                .reservations
+                .iter()
+                .filter(|(_, (peer_id, _))| *peer_id == relay_peer)
+                .map(|(id, _)| *id)
+                .chain(
+                    self.external_reservations
+                        .iter()
+                        .filter(|(_, peer_id)| **peer_id == relay_peer)
+                        .map(|(id, _)| *id),
+                )
+                .collect::<Vec<_>>();
+
+            for id in listeners {
+                self.reservation_addrs
+                    .entry(id)
+                    .or_default()
+                    .insert(addr.clone());
+            }
+        }
+    }
+
+    fn expire_reservation_addrs(&mut self, id: ListenerId) {
+        let Some(addrs) = self.reservation_addrs.remove(&id) else {
+            return;
+        };
+
+        for addr in addrs {
+            let still_backed = self
+                .reservation_addrs
+                .values()
+                .any(|other| other.contains(&addr));
+            if !still_backed {
+                self.events.push_back(ToSwarm::ExternalAddrExpired(addr));
+            }
+        }
     }
 
     fn covered_peers(&self) -> HashSet<PeerId> {
@@ -616,6 +679,10 @@ impl NetworkBehaviour for Behaviour {
 
         if self.auto_status_change && change {
             self.determine_status_from_external_addresses();
+        }
+
+        if change {
+            self.reconcile_reservation_addrs();
         }
 
         match event {
@@ -791,6 +858,7 @@ impl NetworkBehaviour for Behaviour {
                 let lost_address = drop_listener.map(|_| connection.address.clone());
                 connection.relay_status = RelayStatus::NotSupported;
                 if let Some(id) = drop_listener {
+                    self.expire_reservation_addrs(id);
                     self.reservations.remove(&id);
                     self.events.push_back(ToSwarm::RemoveListener { id });
                     self.meet_reservation_target();
