@@ -45,6 +45,39 @@ impl Keystore for FilesystemKeystore {
         .map_err(|e| Error::Backend(e.to_string()))
     }
 
+    async fn put_many(&self, entries: Vec<EncryptedEntry>) -> Result<()> {
+        use tokio::io::AsyncWriteExt;
+
+        let mut staged = Vec::with_capacity(entries.len());
+        for entry in &entries {
+            let path = self.entry_path(&entry.metadata.label)?;
+            let bytes = cbor4ii::serde::to_vec(Vec::new(), entry)
+                .map_err(|e| Error::Backend(e.to_string()))?;
+            staged.push((path, bytes));
+        }
+
+        let tmp_dir = self.dir.join(".tmp");
+        async {
+            create_dir(&tmp_dir).await?;
+
+            let mut renames = Vec::with_capacity(staged.len());
+            for (path, bytes) in &staged {
+                let tmp = tmp_dir.join(format!("{:016x}", rand::random::<u64>()));
+                let mut file = create_file(&tmp).await?;
+                file.write_all(bytes).await?;
+                file.sync_all().await?;
+                drop(file);
+                renames.push((tmp, path));
+            }
+            for (tmp, path) in renames {
+                tokio::fs::rename(&tmp, path).await?;
+            }
+            Ok::<_, std::io::Error>(())
+        }
+        .await
+        .map_err(|e| Error::Backend(e.to_string()))
+    }
+
     async fn get(&self, label: &str) -> Result<Option<EncryptedEntry>> {
         let path = self.entry_path(label)?;
         match tokio::fs::read(&path).await {
