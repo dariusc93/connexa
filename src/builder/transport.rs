@@ -25,6 +25,8 @@ use crate::error::ConnexaResult;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::error::Error;
 
+#[cfg(all(feature = "dns", target_arch = "wasm32"))]
+use crate::builder::dns_websys;
 use libp2p::identity::Keypair;
 use std::io;
 use std::time::Duration;
@@ -94,6 +96,8 @@ pub struct TransportConfig {
     #[cfg(not(target_arch = "wasm32"))]
     #[cfg(feature = "pnet")]
     pub pnet_psk: Option<PreSharedKey>,
+    #[cfg(all(feature = "dns", target_arch = "wasm32"))]
+    pub dns_config_fn: Box<dyn FnOnce(dns_websys::Config) -> dns_websys::Config>,
 }
 
 impl Debug for TransportConfig {
@@ -144,6 +148,9 @@ impl Default for TransportConfig {
             #[cfg(not(target_arch = "wasm32"))]
             #[cfg(feature = "pnet")]
             pnet_psk: None,
+            #[cfg(target_arch = "wasm32")]
+            #[cfg(feature = "dns")]
+            dns_config_fn: Box::new(|config| config),
         }
     }
 }
@@ -508,6 +515,12 @@ pub(crate) fn build_transport(
         #[cfg(feature = "webtransport")]
         enable_webtransport,
         enable_memory_transport,
+        #[cfg(feature = "dns")]
+        enable_dns,
+        #[cfg(feature = "dns")]
+        dns_resolver,
+        #[cfg(feature = "dns")]
+        dns_config_fn,
         ..
     }: TransportConfig,
 ) -> ConnexaResult<TTransport> {
@@ -581,6 +594,24 @@ pub(crate) fn build_transport(
                     FutureEither::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
                 })
                 .boxed()
+        }
+        false => transport,
+    };
+
+    #[cfg(feature = "dns")]
+    let transport = match enable_dns {
+        true => {
+            let resolver = dns_resolver.unwrap_or_default();
+
+            let config = match resolver {
+                DnsResolver::Cloudflare => dns_websys::Config::cloudflare(),
+                DnsResolver::Google | _ => dns_websys::Config::google(),
+            };
+
+            let config = dns_config_fn(config);
+
+            let transport = dns_websys::Transport::with_config(transport, config);
+            transport.boxed()
         }
         false => transport,
     };

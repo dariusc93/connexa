@@ -10,7 +10,7 @@ use libp2p::swarm::dial_opts::DialOpts;
 use libp2p::{Multiaddr, PeerId};
 use std::str::FromStr;
 
-pub struct ConnexaSwarm<'a, T, K = crate::keystore::store::memory::MemoryKeystore> {
+pub struct ConnexaSwarm<'a, T, K> {
     connexa: &'a Connexa<T, K>,
 }
 

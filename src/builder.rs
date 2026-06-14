@@ -1,6 +1,9 @@
 mod executor;
 pub(crate) mod transport;
 
+#[cfg(all(feature = "dns", target_arch = "wasm32"))]
+pub(crate) mod dns_websys;
+
 #[cfg(feature = "request-response")]
 use crate::behaviour::request_response::RequestResponseConfig;
 #[cfg(feature = "dns")]
@@ -832,6 +835,19 @@ where
     #[cfg(feature = "dns")]
     pub fn enable_dns_with_resolver(mut self, resolver: DnsResolver) -> Self {
         self.transport_config.dns_resolver = Some(resolver);
+        self.transport_config.enable_dns = true;
+        self
+    }
+
+    /// Enables DNS with a specific resolver and configuration
+    #[cfg(target_arch = "wasm32")]
+    #[cfg(feature = "dns")]
+    pub fn enable_dns_with_resolver_and_config<F>(mut self, resolver: DnsResolver, f: F) -> Self
+    where
+        F: FnOnce(dns_websys::Config) -> dns_websys::Config + 'static,
+    {
+        self.transport_config.dns_resolver = Some(resolver);
+        self.transport_config.dns_config_fn = Box::new(f);
         self.transport_config.enable_dns = true;
         self
     }

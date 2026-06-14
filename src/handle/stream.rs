@@ -5,7 +5,7 @@ use bytes::Bytes;
 use futures::channel::oneshot;
 use libp2p::{PeerId, StreamProtocol};
 
-pub struct ConnexaStream<'a, T, K = crate::keystore::store::memory::MemoryKeystore> {
+pub struct ConnexaStream<'a, T, K> {
     connexa: &'a Connexa<T, K>,
 }
 

@@ -22,7 +22,7 @@ pub async fn run(address: String) -> Result<(), JsError> {
         .set_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(30)))
         .set_swarm_event_callback({
             let body = body.clone();
-            move |_, e, _| {
+            move |_, _, e, _| {
                 body.append_p(&format!("{e:?}"))
                     .expect("failed to append <p>");
             }
