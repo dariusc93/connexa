@@ -37,7 +37,8 @@ async fn main() -> std::io::Result<()> {
             }
             config
         })
-        .build()?;
+        .build()
+        .await?;
 
     let addrs = match opt.listener.is_empty() {
         true => vec![
@@ -55,8 +56,7 @@ async fn main() -> std::io::Result<()> {
 
     let ids = FuturesUnordered::from_iter(
         addrs
-            .iter()
-            .cloned()
+            .into_iter()
             .map(|addr| async { (addr.clone(), connexa.swarm().listen_on(addr).await) }),
     )
     .filter_map(|(addr, result)| {
@@ -254,12 +254,12 @@ async fn main() -> std::io::Result<()> {
 
 /// small wrapper that caches the providers and pass the difference on
 struct ProviderStream {
-    st: BoxStream<'static, std::io::Result<HashSet<PeerId>>>,
+    st: BoxStream<'static, connexa::error::ConnexaResult<HashSet<PeerId>>>,
     cache: HashSet<PeerId>,
 }
 
 impl ProviderStream {
-    fn new(st: BoxStream<'static, std::io::Result<HashSet<PeerId>>>) -> Self {
+    fn new(st: BoxStream<'static, connexa::error::ConnexaResult<HashSet<PeerId>>>) -> Self {
         Self {
             st,
             cache: HashSet::new(),
@@ -268,7 +268,7 @@ impl ProviderStream {
 }
 
 impl Stream for ProviderStream {
-    type Item = std::io::Result<HashSet<PeerId>>;
+    type Item = connexa::error::ConnexaResult<HashSet<PeerId>>;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match futures::ready!(self.st.poll_next_unpin(cx)) {
             Some(Ok(peers)) => {
@@ -289,47 +289,35 @@ fn provider_record_to_writer<W: Write>(
     writer: &mut W,
     record: RecordHandle<ProviderRecord>,
 ) -> io::Result<()> {
-    if let RecordHandle {
-        record: Some(record),
-        confirm: Some(ch),
-    } = record
-    {
+    if let Some(rec) = record.record() {
         writeln!(
             writer,
             ">>> record key: {}",
-            String::from_utf8_lossy(record.key.as_ref())
+            String::from_utf8_lossy(rec.key.as_ref())
         )?;
-        writeln!(writer, ">>> record provider: {}", record.provider)?;
-        writeln!(
-            writer,
-            ">>> record provider address: {:?}",
-            record.addresses
-        )?;
-        let _ = ch.send(Ok(record));
+        writeln!(writer, ">>> record provider: {}", rec.provider)?;
+        writeln!(writer, ">>> record provider address: {:?}", rec.addresses)?;
     }
+    record.accept();
     Ok(())
 }
 
 fn record_to_writer<W: Write>(writer: &mut W, record: RecordHandle<Record>) -> io::Result<()> {
-    if let RecordHandle {
-        record: Some(record),
-        confirm: Some(ch),
-    } = record
-    {
+    if let Some(rec) = record.record() {
         writeln!(
             writer,
             ">>> record key: {}",
-            String::from_utf8_lossy(record.key.as_ref())
+            String::from_utf8_lossy(rec.key.as_ref())
         )?;
         writeln!(
             writer,
             ">>> record value: {:?}",
-            String::from_utf8_lossy(record.value.as_ref())
+            String::from_utf8_lossy(rec.value.as_ref())
         )?;
-        if let Some(publisher) = record.publisher {
+        if let Some(publisher) = &rec.publisher {
             writeln!(writer, ">>> record publisher: {}", publisher)?;
         }
-        let _ = ch.send(Ok(record));
     }
+    record.accept();
     Ok(())
 }

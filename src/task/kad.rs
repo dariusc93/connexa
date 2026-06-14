@@ -1,4 +1,5 @@
 use crate::behaviour::peer_store::store::Store;
+use crate::error::{Protocol, dht::RoutingOp};
 use crate::prelude::{DHTEvent, RecordHandle};
 use crate::task::ConnexaTask;
 use crate::types::DHTCommand;
@@ -9,10 +10,12 @@ use libp2p::kad::{
     GetProvidersOk, GetRecordOk, InboundRequest, PutRecordOk, QueryResult, Record, RoutingUpdate,
 };
 use libp2p::swarm::NetworkBehaviour;
+use std::convert::Infallible;
 use std::fmt::Debug;
-use std::io;
 
-impl<X, C: NetworkBehaviour, S, T> ConnexaTask<X, C, S, T>
+type Error = crate::error::Error<Infallible>;
+
+impl<X, C: NetworkBehaviour, S, T, K> ConnexaTask<X, C, S, T, K>
 where
     X: Default + Send + 'static,
     C: Send,
@@ -24,7 +27,9 @@ where
         match command {
             DHTCommand::FindPeer { peer_id, resp } => {
                 let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Kademlia,
+                    }));
                     return;
                 };
 
@@ -34,14 +39,16 @@ where
             }
             DHTCommand::Bootstrap { lazy, resp } => {
                 let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Kademlia,
+                    }));
                     return;
                 };
 
                 let id = match kad.bootstrap() {
                     Ok(id) => id,
                     Err(e) => {
-                        let _ = resp.send(Err(std::io::Error::other(e)));
+                        let _ = resp.send(Err(Error::Dht(e.into())));
                         return;
                     }
                 };
@@ -55,14 +62,16 @@ where
             }
             DHTCommand::Provide { key, resp } => {
                 let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Kademlia,
+                    }));
                     return;
                 };
 
                 let id = match kad.start_providing(key.clone()) {
                     Ok(id) => id,
                     Err(e) => {
-                        let _ = resp.send(Err(std::io::Error::other(e)));
+                        let _ = resp.send(Err(Error::Dht(e.into())));
                         return;
                     }
                 };
@@ -71,7 +80,9 @@ where
             }
             DHTCommand::StopProviding { key, resp } => {
                 let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Kademlia,
+                    }));
                     return;
                 };
 
@@ -81,7 +92,9 @@ where
             }
             DHTCommand::GetProviders { key, resp } => {
                 let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Kademlia,
+                    }));
                     return;
                 };
 
@@ -98,7 +111,9 @@ where
                 resp,
             } => {
                 if !swarm.behaviour_mut().kademlia.is_enabled() {
-                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Kademlia,
+                    }));
                     return;
                 }
 
@@ -111,7 +126,9 @@ where
 
             DHTCommand::Listener { key: _, resp } => {
                 if !swarm.behaviour_mut().kademlia.is_enabled() {
-                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Kademlia,
+                    }));
                     return;
                 }
 
@@ -123,7 +140,9 @@ where
             }
             DHTCommand::SetDHTMode { mode, resp } => {
                 let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Kademlia,
+                    }));
                     return;
                 };
 
@@ -134,7 +153,9 @@ where
             }
             DHTCommand::DHTMode { resp } => {
                 let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Kademlia,
+                    }));
                     return;
                 };
 
@@ -146,7 +167,9 @@ where
                 resp,
             } => {
                 let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Kademlia,
+                    }));
                     return;
                 };
 
@@ -154,9 +177,7 @@ where
                 // TODO: If its pending then maybe we should wait until there is some status update?
                 let ret = match routing {
                     RoutingUpdate::Success | RoutingUpdate::Pending => Ok(()),
-                    RoutingUpdate::Failed => {
-                        Err(std::io::Error::other("failed to add peer to routing table"))
-                    }
+                    RoutingUpdate::Failed => Err(Error::Routing(RoutingOp::AddAddress)),
                 };
 
                 let _ = resp.send(ret);
@@ -167,7 +188,9 @@ where
                 resp,
             } => {
                 let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Kademlia,
+                    }));
                     return;
                 };
 
@@ -176,15 +199,15 @@ where
                         let _ = resp.send(Ok(()));
                     }
                     false => {
-                        let _ = resp.send(Err(std::io::Error::other(
-                            "failed to remove peer from routing table",
-                        )));
+                        let _ = resp.send(Err(Error::Routing(RoutingOp::RemoveAddress)));
                     }
                 }
             }
             DHTCommand::RemovePeer { peer_id, resp } => {
                 let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Kademlia,
+                    }));
                     return;
                 };
 
@@ -193,15 +216,15 @@ where
                         let _ = resp.send(Ok(()));
                     }
                     false => {
-                        let _ = resp.send(Err(std::io::Error::other(
-                            "failed to remove peer from routing table",
-                        )));
+                        let _ = resp.send(Err(Error::Routing(RoutingOp::RemovePeer)));
                     }
                 }
             }
             DHTCommand::Get { key, resp } => {
                 let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Kademlia,
+                    }));
                     return;
                 };
 
@@ -220,7 +243,9 @@ where
                 resp,
             } => {
                 let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Kademlia,
+                    }));
                     return;
                 };
 
@@ -229,7 +254,7 @@ where
                 let id = match kad.put_record(record, quorum) {
                     Ok(id) => id,
                     Err(e) => {
-                        let _ = resp.send(Err(std::io::Error::other(e)));
+                        let _ = resp.send(Err(Error::Dht(e.into())));
                         return;
                     }
                 };
@@ -244,7 +269,9 @@ where
                 resp,
             } => {
                 let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("kademlia is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Kademlia,
+                    }));
                     return;
                 };
                 // We check and confirm that the record exist first since this is not your usual dht operation
@@ -252,7 +279,7 @@ where
                 {
                     let store = kad.store_mut();
                     if !store.records().any(|r| r.key == key) {
-                        let _ = resp.send(Err(io::Error::other("record not found")));
+                        let _ = resp.send(Err(Error::NotFound("record".into())));
                         return;
                     }
                 }
@@ -265,13 +292,15 @@ where
             }
             DHTCommand::Remove { key, resp } => {
                 let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() else {
-                    let _ = resp.send(Err(io::Error::other("kademlia is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Kademlia,
+                    }));
                     return;
                 };
                 {
                     let store = kad.store_mut();
                     if !store.records().any(|r| r.key == key) {
-                        let _ = resp.send(Err(io::Error::other("record not found")));
+                        let _ = resp.send(Err(Error::NotFound("record".into())));
                         return;
                     }
                 }
@@ -411,15 +440,15 @@ where
                             }
                         }
                     }
-                    Err(
-                        e @ BootstrapError::Timeout {
-                            peer,
-                            num_remaining,
-                        },
-                    ) => {
+                    Err(BootstrapError::Timeout {
+                        peer,
+                        num_remaining,
+                    }) => {
                         tracing::info!(?peer, ?num_remaining, "kademlia bootstrap timeout");
-                        if let Some(ch) = self.pending_dht_bootstrap.shift_remove(&id) {
-                            let _ = ch.send(Err(io::Error::new(io::ErrorKind::TimedOut, e)));
+                        if step.last {
+                            if let Some(ch) = self.pending_dht_bootstrap.shift_remove(&id) {
+                                let _ = ch.send(Err(Error::Timeout));
+                            }
                         }
                     }
                 },
@@ -433,8 +462,7 @@ where
                     Err(e) => {
                         tracing::error!(%id, %e, "kademlia get closest peers error");
                         if let Some(ch) = self.pending_dht_find_closest_peer.shift_remove(&id) {
-                            let _ =
-                                ch.send(Err(std::io::Error::new(std::io::ErrorKind::TimedOut, e)));
+                            let _ = ch.send(Err(Error::Timeout));
                         }
                     }
                 },
@@ -455,7 +483,7 @@ where
                         tracing::error!(%e, "error getting providers");
                         if let Some(mut ch) = self.pending_dht_get_provider_record.shift_remove(&id)
                         {
-                            let _ = ch.try_send(Err(std::io::Error::other(e)));
+                            let _ = ch.try_send(Err(Error::Dht(e.into())));
                         }
                     }
                 },
@@ -468,7 +496,7 @@ where
                     }
                     Err(e) => {
                         if let Some(ch) = self.pending_dht_put_provider_record.shift_remove(&id) {
-                            let _ = ch.send(Err(std::io::Error::other(e)));
+                            let _ = ch.send(Err(Error::Dht(e.into())));
                         }
                     }
                 },
@@ -496,7 +524,7 @@ where
                     }
                     Err(e) => {
                         if let Some(mut ch) = self.pending_dht_get_record.shift_remove(&id) {
-                            let _ = ch.try_send(Err(std::io::Error::other(e)));
+                            let _ = ch.try_send(Err(Error::Dht(e.into())));
                         }
                     }
                 },
@@ -510,7 +538,7 @@ where
                     Err(e) => {
                         tracing::error!(%e, "kademlia put record error");
                         if let Some(ch) = self.pending_dht_put_record.shift_remove(&id) {
-                            let _ = ch.send(Err(std::io::Error::other(e)));
+                            let _ = ch.send(Err(Error::Dht(e.into())));
                         }
                     }
                 },

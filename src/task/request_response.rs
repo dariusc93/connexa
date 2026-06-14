@@ -1,10 +1,11 @@
 use crate::behaviour::peer_store::store::Store;
+use crate::error::{Error, Protocol};
 use crate::task::ConnexaTask;
 use crate::types::RequestResponseCommand;
 use libp2p::swarm::NetworkBehaviour;
 use std::fmt::Debug;
 
-impl<X, C: NetworkBehaviour, S, T> ConnexaTask<X, C, S, T>
+impl<X, C: NetworkBehaviour, S, T, K> ConnexaTask<X, C, S, T, K>
 where
     X: Default + Send + 'static,
     C: Send,
@@ -21,9 +22,9 @@ where
                 resp,
             } => {
                 let Some(rr) = swarm.behaviour_mut().request_response(protocol) else {
-                    let _ = resp.send(Err(std::io::Error::other(
-                        "request response protocol is not enabled",
-                    )));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::RequestResponse,
+                    }));
                     return;
                 };
 
@@ -37,9 +38,9 @@ where
                 resp,
             } => {
                 let Some(rr) = swarm.behaviour_mut().request_response(protocol) else {
-                    let _ = resp.send(Err(std::io::Error::other(
-                        "request response protocol is not enabled",
-                    )));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::RequestResponse,
+                    }));
                     return;
                 };
 
@@ -54,9 +55,9 @@ where
                 resp,
             } => {
                 let Some(rr) = swarm.behaviour_mut().request_response(protocol) else {
-                    let _ = resp.send(Err(std::io::Error::other(
-                        "request response protocol is not enabled",
-                    )));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::RequestResponse,
+                    }));
                     return;
                 };
 
@@ -66,9 +67,9 @@ where
             }
             RequestResponseCommand::ListenForRequests { protocol, resp } => {
                 let Some(rr) = swarm.behaviour_mut().request_response(protocol) else {
-                    let _ = resp.send(Err(std::io::Error::other(
-                        "request response protocol is not enabled",
-                    )));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::RequestResponse,
+                    }));
                     return;
                 };
                 let rx = rr.subscribe();

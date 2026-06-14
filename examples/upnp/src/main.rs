@@ -8,7 +8,7 @@ async fn main() -> std::io::Result<()> {
     let connexa = DefaultConnexaBuilder::new_identity()
         .enable_tcp()
         .with_upnp()
-        .set_swarm_event_callback(|_, event, _| match event {
+        .set_swarm_event_callback(|_, _, event, _| match event {
             SwarmEvent::NewListenAddr { address: addr, .. } => {
                 println!("New listen address: {addr}")
             }
@@ -24,7 +24,8 @@ async fn main() -> std::io::Result<()> {
             },
             _ => {}
         })
-        .build()?;
+        .build()
+        .await?;
 
     let id = connexa.swarm().listen_on("/ip4/0.0.0.0/tcp/0").await?;
 

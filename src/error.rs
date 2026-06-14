@@ -1,70 +1,156 @@
-use std::ops::Deref;
+#[cfg(feature = "kad")]
+pub mod dht;
+#[cfg(feature = "floodsub")]
+pub mod floodsub;
+#[cfg(feature = "gossipsub")]
+pub mod gossipsub;
 
-/// Error that is sharable between threads
-pub struct ArcError<E> {
-    inner_error: std::sync::Arc<E>,
+use libp2p::PeerId;
+use std::borrow::Cow;
+use std::convert::Infallible;
+use std::fmt::Display;
+use thiserror::Error;
+
+pub type ConnexaResult<T> = Result<T, Error>;
+
+/// Connexa's structured error type.
+#[derive(Debug, Error)]
+pub enum Error<C = Infallible> {
+    #[error("background task is no longer running")]
+    ChannelClosed,
+
+    #[error("{protocol} is not enabled")]
+    Disabled { protocol: Protocol },
+
+    #[error("not found: {0}")]
+    NotFound(Cow<'static, str>),
+
+    #[error("already exists: {0}")]
+    AlreadyExists(Cow<'static, str>),
+
+    #[error("not connected to peer {0}")]
+    NotConnected(PeerId),
+
+    #[error("invalid configuration: {0}")]
+    InvalidConfig(Cow<'static, str>),
+
+    #[error("operation timed out")]
+    Timeout,
+
+    #[cfg(feature = "kad")]
+    #[error(transparent)]
+    Dht(dht::Error),
+
+    #[cfg(feature = "kad")]
+    #[error("kademlia {0:?} failed")]
+    Routing(dht::RoutingOp),
+
+    #[cfg(feature = "gossipsub")]
+    #[error(transparent)]
+    Gossipsub(#[from] gossipsub::Error),
+
+    #[cfg(feature = "floodsub")]
+    #[error(transparent)]
+    Floodsub(#[from] floodsub::Error),
+
+    #[error(transparent)]
+    Dial(other_error::ArcError<libp2p::swarm::DialError>),
+
+    #[cfg(feature = "rendezvous")]
+    #[error(transparent)]
+    Rendezvous(#[from] rendezvous::Error),
+
+    #[cfg(feature = "request-response")]
+    #[error(transparent)]
+    RequestResponse(#[from] libp2p::request_response::OutboundFailure),
+
+    #[error(transparent)]
+    Keystore(#[from] crate::keystore::Error),
+
+    #[error(transparent)]
+    Custom(C),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }
 
-impl<E> Clone for ArcError<E> {
-    fn clone(&self) -> Self {
-        Self {
-            inner_error: self.inner_error.clone(),
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Protocol {
+    #[cfg(feature = "gossipsub")]
+    Gossipsub,
+    #[cfg(feature = "floodsub")]
+    Floodsub,
+    #[cfg(feature = "kad")]
+    Kademlia,
+    #[cfg(feature = "rendezvous")]
+    Rendezvous,
+    #[cfg(feature = "request-response")]
+    RequestResponse,
+    #[cfg(feature = "autonat")]
+    Autonat,
+    #[cfg(feature = "stream")]
+    Stream,
+    Other(&'static str),
+}
+
+impl Display for Protocol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            #[cfg(feature = "gossipsub")]
+            Protocol::Gossipsub => write!(f, "gossipsub"),
+            #[cfg(feature = "floodsub")]
+            Protocol::Floodsub => write!(f, "floodsub"),
+            #[cfg(feature = "kad")]
+            Protocol::Kademlia => write!(f, "kad"),
+            #[cfg(feature = "rendezvous")]
+            Protocol::Rendezvous => write!(f, "rendezvous"),
+            #[cfg(feature = "request-response")]
+            Protocol::RequestResponse => write!(f, "request-response"),
+            #[cfg(feature = "autonat")]
+            Protocol::Autonat => write!(f, "autonat"),
+            #[cfg(feature = "stream")]
+            Protocol::Stream => write!(f, "stream"),
+            Protocol::Other(s) => write!(f, "{s}"),
         }
     }
 }
 
-impl<E> Deref for ArcError<E> {
-    type Target = E;
-    fn deref(&self) -> &E {
-        &self.inner_error
-    }
-}
-
-// TODO: Determine if this is needed in the future
-// impl<E> PartialEq for ArcError<E> {
-//     fn eq(&self, other: &Self) -> bool {
-//         // Note that this only points to the same allocation and not a different one.
-//         std::sync::Arc::ptr_eq(&self.inner_error, &other.inner_error)
-//     }
-// }
-//
-// impl<E> Eq for ArcError<E> {}
-
-impl<E> AsRef<E> for ArcError<E> {
-    fn as_ref(&self) -> &E {
-        &self.inner_error
-    }
-}
-
-impl<E> From<E> for ArcError<E> {
-    fn from(inner_error: E) -> Self {
-        Self::new(inner_error)
-    }
-}
-
-impl<E> ArcError<E> {
-    pub fn new(inner_error: E) -> Self {
-        Self {
-            inner_error: std::sync::Arc::new(inner_error),
+impl<C> From<Error<C>> for std::io::Error
+where
+    C: std::error::Error + Send + Sync + 'static,
+{
+    fn from(err: Error<C>) -> Self {
+        use std::io::ErrorKind;
+        match err {
+            Error::Io(e) => e,
+            Error::Keystore(crate::keystore::Error::Backend(e)) => e,
+            other => {
+                let kind = match &other {
+                    Error::NotFound(_) => ErrorKind::NotFound,
+                    Error::AlreadyExists(_) => ErrorKind::AlreadyExists,
+                    Error::NotConnected(_) => ErrorKind::NotConnected,
+                    Error::Timeout => ErrorKind::TimedOut,
+                    Error::InvalidConfig(_) => ErrorKind::InvalidInput,
+                    Error::ChannelClosed => ErrorKind::BrokenPipe,
+                    #[cfg(feature = "kad")]
+                    Error::Dht(_) | Error::Routing(_) => ErrorKind::Other,
+                    Error::Dial(_) => ErrorKind::Other,
+                    #[cfg(feature = "rendezvous")]
+                    Error::Rendezvous(_) => ErrorKind::Other,
+                    #[cfg(feature = "request-response")]
+                    Error::RequestResponse(_) => ErrorKind::Other,
+                    #[cfg(feature = "gossipsub")]
+                    Error::Gossipsub(_) => ErrorKind::Other,
+                    #[cfg(feature = "floodsub")]
+                    Error::Floodsub(_) => ErrorKind::Other,
+                    Error::Keystore(_) => ErrorKind::Other,
+                    Error::Disabled { .. } | Error::Custom(_) => ErrorKind::Other,
+                    Error::Io(_) => unreachable!("handled above"),
+                };
+                std::io::Error::new(kind, other)
+            }
         }
-    }
-}
-
-impl<E: std::fmt::Debug> std::fmt::Debug for ArcError<E> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(&self.inner_error, f)
-    }
-}
-
-impl<E: std::fmt::Display> std::fmt::Display for ArcError<E> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.inner_error, f)
-    }
-}
-
-impl<E: std::error::Error> std::error::Error for ArcError<E> {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.inner_error.source()
     }
 }
 

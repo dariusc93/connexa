@@ -1,14 +1,17 @@
 use crate::behaviour::BehaviourEvent;
 use crate::behaviour::peer_store::store::Store;
-use crate::error::ArcError;
+use crate::error::Error;
 use crate::prelude::ConnexaSwarmEvent;
 use crate::task::ConnexaTask;
+#[cfg(feature = "rendezvous")]
+use libp2p::PeerId;
 use libp2p::swarm::NetworkBehaviour;
 use libp2p::swarm::SwarmEvent;
+use other_error::ArcError;
 use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 
-impl<X, C: NetworkBehaviour, S, T> ConnexaTask<X, C, S, T>
+impl<X, C: NetworkBehaviour, S, T, K> ConnexaTask<X, C, S, T, K>
 where
     X: Default + Send + 'static,
     C: Send,
@@ -19,7 +22,7 @@ where
         let Some(swarm) = self.swarm.as_mut() else {
             return;
         };
-        (self.swarm_event_callback)(swarm, &event, &mut self.context);
+        (self.swarm_event_callback)(swarm, &self.keychain, &event, &mut self.context);
         match event {
             SwarmEvent::Behaviour(event) => self.process_swarm_behaviour_event(event),
             SwarmEvent::ConnectionEstablished {
@@ -64,7 +67,7 @@ where
                 let cause = cause.map(ArcError::new);
 
                 let ret = match cause.clone() {
-                    Some(e) => Err(std::io::Error::other(e)),
+                    Some(e) => Err(std::io::Error::other(e).into()),
                     None => Ok(()),
                 };
 
@@ -95,6 +98,11 @@ where
                     }) {
                         tracing::warn!(%peer_id, %connection_id, ?endpoint, %num_established, error=%e, "failed to send connection closed event");
                     }
+                }
+
+                #[cfg(feature = "rendezvous")]
+                if num_established == 0 {
+                    self.fail_pending_rendezvous(&peer_id);
                 }
             }
             SwarmEvent::IncomingConnection {
@@ -143,7 +151,7 @@ where
                 tracing::error!(%connection_id, ?peer_id, error=%error, "outgoing connection error");
                 let error = ArcError::new(error);
                 if let Some(sender) = self.pending_connection.shift_remove(&connection_id) {
-                    let _ = sender.send(Err(std::io::Error::other(error.clone())));
+                    let _ = sender.send(Err(Error::Dial(error.clone())));
                 }
 
                 for ch in self.connection_listeners.iter_mut() {
@@ -209,8 +217,18 @@ where
                 tracing::info!(%listener_id, ?addresses, ?reason, "listener closed");
                 self.listener_addresses.remove(&listener_id);
 
+                if let Some(ch) = self.pending_listen_on.shift_remove(&listener_id) {
+                    let err = match &reason {
+                        Ok(()) => {
+                            std::io::Error::other("listener closed before producing an address")
+                        }
+                        Err(e) => std::io::Error::other(e.to_string()),
+                    };
+                    let _ = ch.send(Err(err.into()));
+                }
+
                 if let Some(ch) = self.pending_remove_listener.shift_remove(&listener_id) {
-                    let _ = ch.send(reason);
+                    let _ = ch.send(reason.map_err(Error::from));
                 }
 
                 for ch in self.connection_listeners.iter_mut() {
@@ -224,9 +242,6 @@ where
             }
             SwarmEvent::ListenerError { listener_id, error } => {
                 tracing::error!(%listener_id, error=%error, "listener error");
-                if let Some(ch) = self.pending_listen_on.shift_remove(&listener_id) {
-                    let _ = ch.send(Err(std::io::Error::other(error)));
-                }
             }
             SwarmEvent::Dialing {
                 peer_id,
@@ -284,7 +299,7 @@ where
             #[cfg(feature = "upnp")]
             BehaviourEvent::Upnp(event) => self.process_upnp_event(event),
             #[cfg(not(target_arch = "wasm32"))]
-            #[cfg(all(feature = "dcutr", feature = "relay"))]
+            #[cfg(feature = "dcutr")]
             BehaviourEvent::Dcutr(event) => self.process_dcutr_event(event),
             #[cfg(feature = "rendezvous")]
             BehaviourEvent::RendezvousClient(event) => self.process_rendezvous_client_event(event),
@@ -309,10 +324,45 @@ where
             BehaviourEvent::AutonatV2Client(event) => self.process_autonat_v2_client_event(event),
             #[cfg(feature = "autonat")]
             BehaviourEvent::AutonatV2Server(event) => self.process_autonat_v2_server_event(event),
-            BehaviourEvent::Custom(custom_event) => {
-                (self.custom_event_callback)(swarm, &mut self.context, custom_event)
+            BehaviourEvent::PeerStore(event) => {
+                tracing::debug!(?event, "peer store event");
             }
-            _ => unreachable!(),
+            BehaviourEvent::Custom(custom_event) => {
+                (self.custom_event_callback)(swarm, &self.keychain, &mut self.context, custom_event)
+            }
+            #[allow(unreachable_patterns)]
+            _ => {}
+        }
+    }
+
+    #[cfg(feature = "rendezvous")]
+    fn fail_pending_rendezvous(&mut self, peer_id: &PeerId) {
+        if let Some(namespaces) = self.pending_rendezvous_discover.shift_remove(peer_id) {
+            for (_namespace, list) in namespaces {
+                for ch in list {
+                    let _ = ch.send(Err(crate::error::Error::NotConnected(*peer_id)));
+                }
+            }
+        }
+
+        if let Some(list) = self.pending_rendezvous_discover_any.shift_remove(peer_id) {
+            for ch in list {
+                let _ = ch.send(Err(crate::error::Error::NotConnected(*peer_id)));
+            }
+        }
+
+        let stale_keys = self
+            .pending_rendezvous_register
+            .keys()
+            .filter(|(node, _)| node == peer_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        for key in stale_keys {
+            if let Some(list) = self.pending_rendezvous_register.shift_remove(&key) {
+                for ch in list {
+                    let _ = ch.send(Err(crate::error::Error::NotConnected(*peer_id)));
+                }
+            }
         }
     }
 }

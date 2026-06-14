@@ -9,7 +9,8 @@ fn test_keypair_into_keypair() {
     let result = original
         .clone()
         .into_keypair()
-        .expect("should convert successfully");
+        .expect("should convert successfully")
+        .0;
     assert_eq!(result.public(), original_public);
 }
 
@@ -20,7 +21,8 @@ fn test_keypair_ref_into_keypair() {
 
     let result = (&original)
         .into_keypair()
-        .expect("should convert successfully");
+        .expect("should convert successfully")
+        .0;
     assert_eq!(result.public(), original_public);
 
     // Verify original is still usable
@@ -31,14 +33,14 @@ fn test_keypair_ref_into_keypair() {
 #[cfg(feature = "testing")]
 fn test_u8_into_keypair() {
     let seed: u8 = 42;
-    let keypair1 = seed.into_keypair().expect("should convert successfully");
-    let keypair2 = seed.into_keypair().expect("should convert successfully");
+    let keypair1 = seed.into_keypair().expect("should convert successfully").0;
+    let keypair2 = seed.into_keypair().expect("should convert successfully").0;
 
     // Same seed should produce same keypair
     assert_eq!(keypair1.public(), keypair2.public());
 
     // Different seeds should produce different keypairs
-    let keypair3 = 43u8.into_keypair().expect("should convert successfully");
+    let keypair3 = 43u8.into_keypair().expect("should convert successfully").0;
     assert_ne!(keypair1.public(), keypair3.public());
 }
 
@@ -48,10 +50,11 @@ fn test_vec_u8_into_keypair() {
     let keypair = bytes
         .clone()
         .into_keypair()
-        .expect("should convert successfully");
+        .expect("should convert successfully")
+        .0;
 
     // Same bytes should produce same keypair
-    let keypair2 = bytes.into_keypair().expect("should convert successfully");
+    let keypair2 = bytes.into_keypair().expect("should convert successfully").0;
     assert_eq!(keypair.public(), keypair2.public());
 }
 
@@ -73,14 +76,16 @@ fn test_slice_into_keypair() {
 
     let keypair = (&mut bytes[..])
         .into_keypair()
-        .expect("should convert successfully");
+        .expect("should convert successfully")
+        .0;
 
     // Create a fresh copy of the same bytes for comparison
     let mut bytes2 = [0u8; 32];
     bytes2[0] = 42;
     let keypair2 = (&mut bytes2[..])
         .into_keypair()
-        .expect("should convert successfully");
+        .expect("should convert successfully")
+        .0;
     assert_eq!(keypair.public(), keypair2.public());
 }
 
@@ -97,21 +102,30 @@ fn test_option_some_into_keypair() {
     let original_public = original.public();
 
     let option: Option<Keypair> = Some(original.clone());
-    let result = option.into_keypair().expect("should convert successfully");
+    let result = option
+        .into_keypair()
+        .expect("should convert successfully")
+        .0;
     assert_eq!(result.public(), original_public);
 }
 
 #[test]
 fn test_option_none_into_keypair() {
     let option: Option<Keypair> = None;
-    let result = option.into_keypair().expect("should generate new keypair");
+    let result = option
+        .into_keypair()
+        .expect("should generate new keypair")
+        .0;
 
     // Should have generated a new keypair
     let _public = result.public();
 
     // Each None should generate a different keypair
     let option2: Option<Keypair> = None;
-    let result2 = option2.into_keypair().expect("should generate new keypair");
+    let result2 = option2
+        .into_keypair()
+        .expect("should generate new keypair")
+        .0;
     assert_ne!(result.public(), result2.public());
 }
 
@@ -120,15 +134,21 @@ fn test_option_none_into_keypair() {
 fn test_option_u8_into_keypair() {
     // Test Option<u8> with Some
     let option: Option<u8> = Some(42);
-    let result = option.into_keypair().expect("should convert successfully");
+    let result = option
+        .into_keypair()
+        .expect("should convert successfully")
+        .0;
 
     // Should produce same keypair as direct u8 conversion
-    let direct = 42u8.into_keypair().expect("should convert successfully");
+    let direct = 42u8.into_keypair().expect("should convert successfully").0;
     assert_eq!(result.public(), direct.public());
 
     // Test Option<u8> with None
     let option: Option<u8> = None;
-    let result = option.into_keypair().expect("should generate new keypair");
+    let result = option
+        .into_keypair()
+        .expect("should generate new keypair")
+        .0;
     assert_ne!(result.public(), direct.public());
 }
 
@@ -137,15 +157,21 @@ fn test_option_vec_into_keypair() {
     // Test Option<Vec<u8>> with Some
     let bytes = vec![1u8; 32];
     let option: Option<Vec<u8>> = Some(bytes.clone());
-    let result = option.into_keypair().expect("should convert successfully");
+    let result = option
+        .into_keypair()
+        .expect("should convert successfully")
+        .0;
 
     // Should produce same keypair as direct Vec conversion
-    let direct = bytes.into_keypair().expect("should convert successfully");
+    let direct = bytes.into_keypair().expect("should convert successfully").0;
     assert_eq!(result.public(), direct.public());
 
     // Test Option<Vec<u8>> with None
     let option: Option<Vec<u8>> = None;
-    let result = option.into_keypair().expect("should generate new keypair");
+    let result = option
+        .into_keypair()
+        .expect("should generate new keypair")
+        .0;
     assert_ne!(result.public(), direct.public());
 }
 
@@ -158,8 +184,8 @@ fn test_deterministic_keypair_generation() {
 
     let mut bytes2 = bytes1;
 
-    let kp1 = (&mut bytes1[..]).into_keypair().expect("should convert");
-    let kp2 = (&mut bytes2[..]).into_keypair().expect("should convert");
+    let kp1 = (&mut bytes1[..]).into_keypair().expect("should convert").0;
+    let kp2 = (&mut bytes2[..]).into_keypair().expect("should convert").0;
 
     assert_eq!(kp1.public(), kp2.public());
 }
@@ -170,8 +196,8 @@ fn test_different_bytes_produce_different_keypairs() {
     let mut bytes2 = vec![1u8; 32];
     bytes2[0] = 2;
 
-    let kp1 = bytes1.into_keypair().expect("should convert");
-    let kp2 = bytes2.into_keypair().expect("should convert");
+    let kp1 = bytes1.into_keypair().expect("should convert").0;
+    let kp2 = bytes2.into_keypair().expect("should convert").0;
 
     assert_ne!(kp1.public(), kp2.public());
 }
@@ -180,7 +206,7 @@ fn test_different_bytes_produce_different_keypairs() {
 fn test_keypair_type_preservation() {
     // Ensure Ed25519 keypairs are created correctly
     let bytes = vec![42u8; 32];
-    let keypair = bytes.into_keypair().expect("should convert");
+    let keypair = bytes.into_keypair().expect("should convert").0;
 
     // The keypair should be Ed25519 (this is implicit in the implementation)
     // We can verify by checking the public key can be converted to PeerId
@@ -193,8 +219,8 @@ fn test_keypair_type_preservation() {
 fn test_u8_seed_consistency() {
     // Test that u8 seed creates consistent keypairs
     for seed in 0u8..10 {
-        let kp1 = seed.into_keypair().expect("should convert");
-        let kp2 = seed.into_keypair().expect("should convert");
+        let kp1 = seed.into_keypair().expect("should convert").0;
+        let kp2 = seed.into_keypair().expect("should convert").0;
         assert_eq!(
             kp1.public(),
             kp2.public(),

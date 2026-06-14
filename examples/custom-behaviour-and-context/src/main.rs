@@ -23,8 +23,8 @@ enum Command {
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     let connexa = ConnexaBuilder::<behaviour::Behaviour, Context, Command, ()>::new_identity()
-        .with_custom_behaviour(|_| Ok(behaviour::Behaviour::new()))?
-        .set_custom_event_callback(|_, context, event| {
+        .with_custom_behaviour(|_| Ok(behaviour::Behaviour::new()))
+        .set_custom_event_callback(|_, _, context, event| {
             let Event::StateChange { id, old, new } = event;
 
             assert_ne!(old, new);
@@ -33,7 +33,7 @@ async fn main() -> std::io::Result<()> {
                 let _ = ch.send(());
             }
         })
-        .set_custom_task_callback(|swarm, task, command| {
+        .set_custom_task_callback(|swarm, _, task, command| {
             let Some(custom_behaviour) = swarm.behaviour_mut().custom.as_mut() else {
                 return;
             };
@@ -49,7 +49,8 @@ async fn main() -> std::io::Result<()> {
                 }
             }
         })
-        .build()?;
+        .build()
+        .await?;
 
     {
         let (tx, rx) = oneshot::channel();

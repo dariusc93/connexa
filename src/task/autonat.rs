@@ -1,4 +1,5 @@
 use crate::behaviour::peer_store::store::Store;
+use crate::error::{Error, Protocol};
 use crate::task::ConnexaTask;
 use crate::types::AutonatCommand;
 use libp2p::autonat::v1::Event as AutonatV1Event;
@@ -6,9 +7,8 @@ use libp2p::autonat::v2::client::Event as AutonatV2ClientEvent;
 use libp2p::autonat::v2::server::Event as AutonatV2ServerEvent;
 use libp2p::swarm::NetworkBehaviour;
 use std::fmt::Debug;
-use std::io;
 
-impl<X, C: NetworkBehaviour, S, T> ConnexaTask<X, C, S, T>
+impl<X, C: NetworkBehaviour, S, T, K> ConnexaTask<X, C, S, T, K>
 where
     X: Default + Send + 'static,
     C: Send,
@@ -22,7 +22,9 @@ where
         match command {
             AutonatCommand::PublicAddress { resp } => {
                 let Some(autonat) = swarm.behaviour_mut().autonat_v1.as_mut() else {
-                    let _ = resp.send(Err(io::Error::other("autonat v1 not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Autonat,
+                    }));
                     return;
                 };
 
@@ -32,7 +34,9 @@ where
             }
             AutonatCommand::NatStatus { resp } => {
                 let Some(autonat) = swarm.behaviour_mut().autonat_v1.as_mut() else {
-                    let _ = resp.send(Err(io::Error::other("autonat v1 not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Autonat,
+                    }));
                     return;
                 };
 
@@ -46,7 +50,9 @@ where
                 resp,
             } => {
                 let Some(autonat) = swarm.behaviour_mut().autonat_v1.as_mut() else {
-                    let _ = resp.send(Err(io::Error::other("autonat v1 not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Autonat,
+                    }));
                     return;
                 };
 
@@ -55,7 +61,9 @@ where
             }
             AutonatCommand::RemoveServer { peer, resp } => {
                 let Some(autonat) = swarm.behaviour_mut().autonat_v1.as_mut() else {
-                    let _ = resp.send(Err(io::Error::other("autonat v1 not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Autonat,
+                    }));
                     return;
                 };
 
@@ -65,7 +73,9 @@ where
             }
             AutonatCommand::Probe { address, resp } => {
                 let Some(autonat) = swarm.behaviour_mut().autonat_v1.as_mut() else {
-                    let _ = resp.send(Err(io::Error::other("autonat v1 not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Autonat,
+                    }));
                     return;
                 };
 
