@@ -8,6 +8,7 @@ use futures::stream::FuturesUnordered;
 use libp2p::PeerId;
 use libp2p::identity::{Keypair, PublicKey};
 use rand::RngCore;
+use std::fmt::Display;
 use std::future::Future;
 use std::sync::Arc;
 use thiserror::Error;
@@ -31,7 +32,7 @@ pub enum Error {
     Key(#[from] libp2p::identity::DecodingError),
     #[error("keystore backend error: {0}")]
     Backend(String),
-    #[error("cannot generate a key of type {0:?}")]
+    #[error("cannot generate a key of type {0}")]
     UnsupportedKeyType(KeyType),
     #[error("key type mismatch: stored key is {has:?} but wanted {wanted:?}")]
     KeyTypeMismatch { has: KeyType, wanted: KeyType },
@@ -45,6 +46,17 @@ pub enum KeyType {
     Rsa,
     Secp256k1,
     Ecdsa,
+}
+
+impl Display for KeyType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            KeyType::Ed25519 => write!(f, "Ed25519"),
+            KeyType::Rsa => write!(f, "RSA"),
+            KeyType::Secp256k1 => write!(f, "Secp256k1"),
+            KeyType::Ecdsa => write!(f, "Ecdsa"),
+        }
+    }
 }
 
 impl From<libp2p::identity::KeyType> for KeyType {
