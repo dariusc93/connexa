@@ -150,7 +150,7 @@ where
 
     /// Returns a handle for relay functions
     #[cfg(feature = "relay")]
-    pub fn relay(&self) -> ConnexaRelay<'_, T> {
+    pub fn relay(&self) -> ConnexaRelay<'_, T, K> {
         ConnexaRelay::new(self)
     }
 

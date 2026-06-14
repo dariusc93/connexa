@@ -4,15 +4,15 @@ use crate::types::AutoRelayCommand;
 use futures::channel::oneshot;
 use std::io;
 
-pub struct ConnexaRelay<'a, T> {
-    connexa: &'a Connexa<T>,
+pub struct ConnexaRelay<'a, T, K> {
+    connexa: &'a Connexa<T, K>,
 }
 
-impl<'a, T> ConnexaRelay<'a, T>
+impl<'a, T, K> ConnexaRelay<'a, T, K>
 where
     T: Send + Sync + 'static,
 {
-    pub(crate) fn new(connexa: &'a Connexa<T>) -> Self {
+    pub(crate) fn new(connexa: &'a Connexa<T, K>) -> Self {
         Self { connexa }
     }
 
