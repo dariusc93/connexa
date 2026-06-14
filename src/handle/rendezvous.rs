@@ -7,16 +7,23 @@ use libp2p::rendezvous::{Cookie, Namespace};
 use libp2p::{Multiaddr, PeerId};
 use std::io;
 
-#[derive(Copy, Clone)]
-pub struct ConnexaRendezvous<'a, T> {
-    connexa: &'a Connexa<T>,
+pub struct ConnexaRendezvous<'a, T, K = crate::keystore::store::memory::MemoryKeystore> {
+    connexa: &'a Connexa<T, K>,
 }
 
-impl<'a, T> ConnexaRendezvous<'a, T>
+impl<'a, T, K> Copy for ConnexaRendezvous<'a, T, K> {}
+
+impl<'a, T, K> Clone for ConnexaRendezvous<'a, T, K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, T, K> ConnexaRendezvous<'a, T, K>
 where
     T: Send + Sync + 'static,
 {
-    pub(crate) fn new(connexa: &'a Connexa<T>) -> Self {
+    pub(crate) fn new(connexa: &'a Connexa<T, K>) -> Self {
         Self { connexa }
     }
 

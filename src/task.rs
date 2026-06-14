@@ -33,6 +33,7 @@ mod upnp;
 
 use crate::behaviour::BehaviourEvent;
 use crate::error::{ConnexaResult, Error, Protocol};
+use crate::keystore::{Keychain, store::memory::MemoryKeystore};
 use crate::types::{Command, ConnexaSwarmEvent, SwarmCommand};
 use crate::{TEventCallback, TPollableCallback, TSwarmEventCallback, TTaskCallback, behaviour};
 
@@ -78,7 +79,7 @@ use std::time::Duration;
 type RendezvousDiscoverResponse =
     ConnexaResult<(libp2p::rendezvous::Cookie, Vec<(PeerId, Vec<Multiaddr>)>)>;
 
-pub struct ConnexaTask<X, C: NetworkBehaviour, S, T = ()>
+pub struct ConnexaTask<X, C: NetworkBehaviour, S, T = (), K = MemoryKeystore>
 where
     C: Send,
     C::ToSwarm: Debug,
@@ -87,10 +88,11 @@ where
     pub swarm: Optional<Swarm<behaviour::Behaviour<C, S>>>,
     pub command_receiver: Optional<mpsc::Receiver<Command<T>>>,
     pub context: X,
-    pub custom_task_callback: TTaskCallback<C, X, T, S>,
-    pub custom_event_callback: TEventCallback<C, X, S>,
-    pub swarm_event_callback: TSwarmEventCallback<C, X, S>,
-    pub custom_pollable_callback: TPollableCallback<C, X, S>,
+    pub custom_task_callback: TTaskCallback<C, X, T, S, K>,
+    pub custom_event_callback: TEventCallback<C, X, S, K>,
+    pub swarm_event_callback: TSwarmEventCallback<C, X, S, K>,
+    pub custom_pollable_callback: TPollableCallback<C, X, S, K>,
+    pub keychain: Keychain<K>,
 
     pub connection_listeners: Vec<mpsc::Sender<ConnexaSwarmEvent>>,
 
@@ -162,23 +164,24 @@ where
     pub cleanup_interval: Duration,
 }
 
-impl<X, C: NetworkBehaviour, S, T> ConnexaTask<X, C, S, T>
+impl<X, C: NetworkBehaviour, S, T, K> ConnexaTask<X, C, S, T, K>
 where
     X: Default + Send + 'static,
     C: Send,
     C::ToSwarm: Debug,
     S: Store,
 {
-    pub fn new(swarm: Swarm<behaviour::Behaviour<C, S>>) -> Self {
+    pub fn new(swarm: Swarm<behaviour::Behaviour<C, S>>, keychain: Keychain<K>) -> Self {
         let duration = Duration::from_secs(10);
         Self {
             swarm: Optional::new(swarm),
             context: X::default(),
             command_receiver: Optional::default(),
-            custom_event_callback: Box::new(|_, _, _| ()),
-            custom_task_callback: Box::new(|_, _, _| ()),
-            custom_pollable_callback: Box::new(|_, _, _| Poll::Pending),
-            swarm_event_callback: Box::new(|_, _, _| ()),
+            custom_event_callback: Box::new(|_, _, _, _| ()),
+            custom_task_callback: Box::new(|_, _, _, _| ()),
+            custom_pollable_callback: Box::new(|_, _, _, _| Poll::Pending),
+            swarm_event_callback: Box::new(|_, _, _, _| ()),
+            keychain,
             connection_listeners: Vec::new(),
             listener_addresses: HashMap::new(),
             #[cfg(feature = "kad")]
@@ -238,21 +241,28 @@ where
 
     pub fn set_event_callback<F>(&mut self, callback: F)
     where
-        F: Fn(&mut Swarm<behaviour::Behaviour<C, S>>, &mut X, C::ToSwarm) + Send + 'static,
+        F: Fn(&mut Swarm<behaviour::Behaviour<C, S>>, &Keychain<K>, &mut X, C::ToSwarm)
+            + Send
+            + 'static,
     {
         self.custom_event_callback = Box::new(callback);
     }
 
     pub fn set_task_callback<F>(&mut self, callback: F)
     where
-        F: Fn(&mut Swarm<behaviour::Behaviour<C, S>>, &mut X, T) + Send + 'static,
+        F: Fn(&mut Swarm<behaviour::Behaviour<C, S>>, &Keychain<K>, &mut X, T) + Send + 'static,
     {
         self.custom_task_callback = Box::new(callback);
     }
 
     pub fn set_swarm_event_callback<F>(&mut self, callback: F)
     where
-        F: Fn(&mut Swarm<behaviour::Behaviour<C, S>>, &SwarmEvent<BehaviourEvent<C, S>>, &mut X)
+        F: Fn(
+                &mut Swarm<behaviour::Behaviour<C, S>>,
+                &Keychain<K>,
+                &SwarmEvent<BehaviourEvent<C, S>>,
+                &mut X,
+            )
             + 'static
             + Send,
     {
@@ -261,7 +271,12 @@ where
 
     pub fn set_pollable_callback<F>(&mut self, callback: F)
     where
-        F: Fn(&mut Context<'_>, &mut Swarm<behaviour::Behaviour<C, S>>, &mut X) -> Poll<()>
+        F: Fn(
+                &mut Context<'_>,
+                &mut Swarm<behaviour::Behaviour<C, S>>,
+                &Keychain<K>,
+                &mut X,
+            ) -> Poll<()>
             + Send
             + 'static,
     {
@@ -569,13 +584,18 @@ where
                 self.process_rendezvous_command(rendezvous_command)
             }
             Command::Custom(custom_command) => {
-                (self.custom_task_callback)(swarm, &mut self.context, custom_command);
+                (self.custom_task_callback)(
+                    swarm,
+                    &self.keychain,
+                    &mut self.context,
+                    custom_command,
+                );
             }
         }
     }
 }
 
-impl<X, C: NetworkBehaviour, S, T> Future for ConnexaTask<X, C, S, T>
+impl<X, C: NetworkBehaviour, S, T, K> Future for ConnexaTask<X, C, S, T, K>
 where
     X: Default + Unpin + Send + 'static,
     C: Send,
@@ -634,7 +654,8 @@ where
         {
             let this = &mut *self;
             if let Some(swarm) = this.swarm.as_mut() {
-                let _ = (this.custom_pollable_callback)(cx, swarm, &mut this.context);
+                let _ =
+                    (this.custom_pollable_callback)(cx, swarm, &this.keychain, &mut this.context);
             }
         }
 

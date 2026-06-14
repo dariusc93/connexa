@@ -50,18 +50,28 @@ async fn main() -> io::Result<()> {
         .try_init();
     let opt = Opt::parse();
     let connexa = match opt.mode {
-        Mode::Server => DefaultConnexaBuilder::with_existing_identity(opt.seed)?
-            .enable_tcp()
-            .enable_quic()
-            .with_rendezvous_server()
-            .set_swarm_config(|config| config.with_idle_connection_timeout(Duration::from_secs(60)))
-            .build()?,
-        Mode::Client => DefaultConnexaBuilder::with_existing_identity(opt.seed)?
-            .enable_tcp()
-            .enable_quic()
-            .with_rendezvous_client()
-            .set_swarm_config(|config| config.with_idle_connection_timeout(Duration::from_secs(60)))
-            .build()?,
+        Mode::Server => {
+            DefaultConnexaBuilder::with_existing_identity(opt.seed)?
+                .enable_tcp()
+                .enable_quic()
+                .with_rendezvous_server()
+                .set_swarm_config(|config| {
+                    config.with_idle_connection_timeout(Duration::from_secs(60))
+                })
+                .build()
+                .await?
+        }
+        Mode::Client => {
+            DefaultConnexaBuilder::with_existing_identity(opt.seed)?
+                .enable_tcp()
+                .enable_quic()
+                .with_rendezvous_client()
+                .set_swarm_config(|config| {
+                    config.with_idle_connection_timeout(Duration::from_secs(60))
+                })
+                .build()
+                .await?
+        }
     };
 
     let base_addr = Multiaddr::empty().with(Protocol::Ip4(Ipv4Addr::new(0, 0, 0, 0)));

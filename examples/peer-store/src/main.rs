@@ -6,7 +6,8 @@ async fn main() -> std::io::Result<()> {
     let connexa_a = DefaultConnexaBuilder::new_identity()
         .with_peer_store()
         .enable_memory_transport()
-        .build()?;
+        .build()
+        .await?;
 
     let id_a = connexa_a.swarm().listen_on("/memory/0").await?;
 
@@ -17,7 +18,8 @@ async fn main() -> std::io::Result<()> {
     let connexa_b = DefaultConnexaBuilder::new_identity()
         .with_peer_store()
         .enable_memory_transport()
-        .build()?;
+        .build()
+        .await?;
 
     let id_b = connexa_b.swarm().listen_on("/memory/0").await?;
 

@@ -8,16 +8,23 @@ use futures::stream::BoxStream;
 use libp2p::PeerId;
 use libp2p::gossipsub::{Hasher, IdentTopic, MessageAcceptance, MessageId, Topic, TopicHash};
 
-#[derive(Copy, Clone)]
-pub struct ConnexaGossipsub<'a, T> {
-    connexa: &'a Connexa<T>,
+pub struct ConnexaGossipsub<'a, T, K = crate::keystore::store::memory::MemoryKeystore> {
+    connexa: &'a Connexa<T, K>,
 }
 
-impl<'a, T> ConnexaGossipsub<'a, T>
+impl<'a, T, K> Copy for ConnexaGossipsub<'a, T, K> {}
+
+impl<'a, T, K> Clone for ConnexaGossipsub<'a, T, K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, T, K> ConnexaGossipsub<'a, T, K>
 where
     T: Send + Sync + 'static,
 {
-    pub(crate) fn new(connexa: &'a Connexa<T>) -> Self {
+    pub(crate) fn new(connexa: &'a Connexa<T, K>) -> Self {
         Self { connexa }
     }
 

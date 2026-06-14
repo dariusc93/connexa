@@ -27,7 +27,8 @@ pub async fn run(address: String) -> Result<(), JsError> {
                     .expect("failed to append <p>");
             }
         })
-        .build()?;
+        .build()
+        .await?;
 
     body.append_p(&format!("Dialing {addr}"))?;
 

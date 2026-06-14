@@ -4,7 +4,7 @@ use libp2p::swarm::NetworkBehaviour;
 use libp2p::upnp::Event as UpnpEvent;
 use std::fmt::Debug;
 
-impl<X, C: NetworkBehaviour, S, T> ConnexaTask<X, C, S, T>
+impl<X, C: NetworkBehaviour, S, T, K> ConnexaTask<X, C, S, T, K>
 where
     X: Default + Send + 'static,
     C: Send,

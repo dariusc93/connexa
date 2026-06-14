@@ -50,7 +50,16 @@ yamux = ["libp2p/yamux"]
 
 testing = []
 
-webrtc = ["dep:libp2p-webrtc", "dep:libp2p-webrtc-websys"]
+aes-gcm = ["dep:aes-gcm"]
+plaintext = []
+
+serde = ["dep:serde", "dep:serde_bytes", "web-time/serde"]
+fs = ["dep:cbor4ii", "serde"]
+indexeddb = ["dep:idb", "serde"]
+redb = ["dep:redb", "dep:cbor4ii", "serde"]
+sqlite = ["dep:sqlx", "dep:cbor4ii", "serde"]
+
+webrtc =["dep:libp2p-webrtc", "dep:libp2p-webrtc-websys"]
 websocket = ["libp2p/websocket", "rcgen", "dep:pem", "libp2p/websocket-websys"]
 webtransport = ["libp2p/webtransport-websys"]
 
@@ -59,9 +68,11 @@ members = ["examples/browser-webrtc", "examples/custom-behaviour-and-context", "
 
 [workspace.dependencies]
 async-rt = "0.1.8"
+aes-gcm = "0.10.1"
 async-trait = { version = "0.1.89" }
 base64 = "0.22.1"
 bytes = "1.10.1"
+chacha20poly1305 = "0.10.1"
 cid = "0.11.1"
 either = "1.15.0"
 futures = { version = "0.3.31" }
@@ -70,6 +81,7 @@ futures-timeout = "0.1.3"
 getrandom = { version = "0.2.15" }
 getrandom_03 = { version = "0.3.3", package = "getrandom" }
 hickory-resolver = "0.25.2"
+idb = "0.6.5"
 indexmap = "2.10.0"
 libp2p = { version = "0.56.0" }
 libp2p-allow-block-list = "0.6.0"
@@ -80,25 +92,34 @@ libp2p-webrtc-websys = "0.4.0"
 other-error = "0.1.1"
 pollable-map = "0.1.7"
 pem = { version = "3.0.5" }
+cbor4ii = { version = "1.2.2", features = ["serde1"] }
 rand = "0.8.5"
 rand_09 = { version = "0.9.2", package = "rand" }
 rcgen = { version = "0.14.3", features = ["pem", "x509-parser"] }
+redb = "2"
 rlimit = "0.10.2"
 send_wrapper = "0.6.0"
 serde = { version = "1.0.219" }
 serde-wasm-bindgen = "0.6.5"
+serde_bytes = "0.11.19"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite"] }
 thiserror = "2.0.18"
 tracing = { version = "0.1.41" }
+zeroize = "1.8.1"
 
 tokio = { default-features = false, version = "1.47.1" }
+wasm-bindgen = "0.2"
 wasm-bindgen-futures = { version = "0.4.50" }
+web-time = "1.1.0"
 
 
 [dependencies]
 async-rt.workspace = true
 async-trait.workspace = true
+aes-gcm = { workspace = true, optional = true }
 base64 = { workspace = true, optional = true }
 bytes = { workspace = true }
+chacha20poly1305 = { workspace = true }
 cid = { workspace = true, optional = true }
 either.workspace = true
 futures.workspace = true
@@ -110,10 +131,14 @@ libp2p-stream = { workspace = true, optional = true }
 other-error.workspace = true
 pem = { workspace = true, optional = true }
 pollable-map.workspace = true
+cbor4ii = { workspace = true, optional = true }
 rand.workspace = true
-serde = { features = ["derive"], workspace = true }
+serde = { features = ["derive"], workspace = true, optional = true }
+serde_bytes = { workspace = true, optional = true }
 thiserror.workspace = true
 tracing = { workspace = true }
+web-time = { workspace = true }
+zeroize = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 futures-timer.workspace = true
@@ -121,16 +146,20 @@ libp2p = { features = ["macros", "tokio", "serde"], workspace = true }
 libp2p-webrtc = { workspace = true, features = ["tokio"], optional = true }
 hickory-resolver.workspace = true
 rcgen = { workspace = true, optional = true }
+redb = { workspace = true, optional = true }
 rlimit.workspace = true
+sqlx = { workspace = true, optional = true }
 tokio = { features = ["full"], workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 futures-timer = { workspace = true, features = ["wasm-bindgen"] }
 getrandom = { workspace = true, features = ["js"] }
 getrandom_03 = { workspace = true, features = ["wasm_js"] }
+idb = { workspace = true, optional = true }
 libp2p = { features = ["macros", "serde", "wasm-bindgen"], workspace = true }
 libp2p-webrtc-websys = { workspace = true, optional = true }
-send_wrapper.workspace = true
+send_wrapper = { workspace = true, features = ["futures"] }
 serde-wasm-bindgen.workspace = true
 tokio = { default-features = false, features = ["sync", "macros"], workspace = true }
+wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true

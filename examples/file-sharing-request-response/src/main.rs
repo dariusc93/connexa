@@ -43,7 +43,8 @@ async fn main() -> std::io::Result<()> {
             protocol: FILE_SHARING_PROTOCOL.to_string(),
             ..Default::default()
         }])
-        .build()?;
+        .build()
+        .await?;
 
     let addrs = match opt.listener.is_empty() {
         true => vec![

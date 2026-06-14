@@ -25,7 +25,8 @@ async fn main() -> std::io::Result<()> {
         .enable_tcp()
         .enable_quic()
         .with_gossipsub()
-        .build()?;
+        .build()
+        .await?;
 
     let addrs = match opt.listener.is_empty() {
         true => vec![

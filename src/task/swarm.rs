@@ -11,7 +11,7 @@ use other_error::ArcError;
 use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 
-impl<X, C: NetworkBehaviour, S, T> ConnexaTask<X, C, S, T>
+impl<X, C: NetworkBehaviour, S, T, K> ConnexaTask<X, C, S, T, K>
 where
     X: Default + Send + 'static,
     C: Send,
@@ -22,7 +22,7 @@ where
         let Some(swarm) = self.swarm.as_mut() else {
             return;
         };
-        (self.swarm_event_callback)(swarm, &event, &mut self.context);
+        (self.swarm_event_callback)(swarm, &self.keychain, &event, &mut self.context);
         match event {
             SwarmEvent::Behaviour(event) => self.process_swarm_behaviour_event(event),
             SwarmEvent::ConnectionEstablished {
@@ -328,7 +328,7 @@ where
                 tracing::debug!(?event, "peer store event");
             }
             BehaviourEvent::Custom(custom_event) => {
-                (self.custom_event_callback)(swarm, &mut self.context, custom_event)
+                (self.custom_event_callback)(swarm, &self.keychain, &mut self.context, custom_event)
             }
             #[allow(unreachable_patterns)]
             _ => {}

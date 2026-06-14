@@ -9,16 +9,23 @@ use libp2p::kad::{Mode, PeerInfo, PeerRecord, Quorum, RecordKey};
 use libp2p::{Multiaddr, PeerId};
 use std::collections::HashSet;
 
-#[derive(Copy, Clone)]
-pub struct ConnexaDht<'a, T> {
-    connexa: &'a Connexa<T>,
+pub struct ConnexaDht<'a, T, K = crate::keystore::store::memory::MemoryKeystore> {
+    connexa: &'a Connexa<T, K>,
 }
 
-impl<'a, T> ConnexaDht<'a, T>
+impl<'a, T, K> Copy for ConnexaDht<'a, T, K> {}
+
+impl<'a, T, K> Clone for ConnexaDht<'a, T, K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, T, K> ConnexaDht<'a, T, K>
 where
     T: Send + Sync + 'static,
 {
-    pub(crate) fn new(connexa: &'a Connexa<T>) -> Self {
+    pub(crate) fn new(connexa: &'a Connexa<T, K>) -> Self {
         Self { connexa }
     }
 

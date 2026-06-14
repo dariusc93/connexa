@@ -8,16 +8,23 @@ use futures::stream::BoxStream;
 use libp2p::PeerId;
 use libp2p::floodsub::Topic;
 
-#[derive(Copy, Clone)]
-pub struct ConnexaFloodsub<'a, T = ()> {
-    connexa: &'a Connexa<T>,
+pub struct ConnexaFloodsub<'a, T = (), K = crate::keystore::store::memory::MemoryKeystore> {
+    connexa: &'a Connexa<T, K>,
 }
 
-impl<'a, T> ConnexaFloodsub<'a, T>
+impl<'a, T, K> Copy for ConnexaFloodsub<'a, T, K> {}
+
+impl<'a, T, K> Clone for ConnexaFloodsub<'a, T, K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, T, K> ConnexaFloodsub<'a, T, K>
 where
     T: Send + Sync + 'static,
 {
-    pub(crate) fn new(connexa: &'a Connexa<T>) -> Self {
+    pub(crate) fn new(connexa: &'a Connexa<T, K>) -> Self {
         Self { connexa }
     }
 

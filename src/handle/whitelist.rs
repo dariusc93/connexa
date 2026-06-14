@@ -4,16 +4,23 @@ use crate::prelude::PeerId;
 use crate::types::WhitelistCommand;
 use futures::channel::oneshot;
 
-#[derive(Copy, Clone)]
-pub struct ConnexaWhitelist<'a, T = ()> {
-    connexa: &'a Connexa<T>,
+pub struct ConnexaWhitelist<'a, T = (), K = crate::keystore::store::memory::MemoryKeystore> {
+    connexa: &'a Connexa<T, K>,
 }
 
-impl<'a, T> ConnexaWhitelist<'a, T>
+impl<'a, T, K> Copy for ConnexaWhitelist<'a, T, K> {}
+
+impl<'a, T, K> Clone for ConnexaWhitelist<'a, T, K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, T, K> ConnexaWhitelist<'a, T, K>
 where
     T: Send + Sync + 'static,
 {
-    pub(crate) fn new(connexa: &'a Connexa<T>) -> Self {
+    pub(crate) fn new(connexa: &'a Connexa<T, K>) -> Self {
         Self { connexa }
     }
 
