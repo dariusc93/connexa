@@ -16,11 +16,7 @@ impl FilesystemKeystore {
     }
 
     fn entry_path(&self, label: &str) -> Result<PathBuf> {
-        if label.is_empty() || label == "." || label == ".." || label.contains(['/', '\\', '\0']) {
-            return Err(Error::Backend(format!(
-                "invalid key label for filesystem keystore: {label:?}"
-            )));
-        }
+        crate::keystore::validate_label(label)?;
         Ok(self.dir.join(label))
     }
 }
@@ -173,9 +169,12 @@ mod tests {
         let store = FilesystemKeystore::new(std::env::temp_dir());
         assert!(matches!(
             store.get("../escape").await,
-            Err(Error::Backend(_))
+            Err(Error::InvalidLabel(_))
         ));
-        assert!(matches!(store.remove("a/b").await, Err(Error::Backend(_))));
+        assert!(matches!(
+            store.remove("a/b").await,
+            Err(Error::InvalidLabel(_))
+        ));
     }
 
     #[cfg(all(unix, feature = "ed25519"))]

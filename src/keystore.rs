@@ -36,6 +36,8 @@ pub enum Error {
     UnsupportedKeyType(KeyType),
     #[error("key type mismatch: stored key is {has:?} but wanted {wanted:?}")]
     KeyTypeMismatch { has: KeyType, wanted: KeyType },
+    #[error("invalid key label: {0:?}")]
+    InvalidLabel(String),
 }
 
 /// The cryptographic family of a stored key, mirroring [`libp2p::identity::KeyType`].
@@ -190,6 +192,13 @@ fn generate_keypair(key_type: KeyType) -> Result<Keypair> {
     }
 }
 
+pub(crate) fn validate_label(label: &str) -> Result<()> {
+    if label.is_empty() || label == "." || label == ".." || label.contains(['/', '\\', '\0']) {
+        return Err(Error::InvalidLabel(label.to_owned()));
+    }
+    Ok(())
+}
+
 /// Backend responsible for persisting encrypted key entries.
 pub trait Keystore: Send + Sync + 'static {
     /// Store (or replace) an entry, keyed by its `label`.
@@ -305,6 +314,7 @@ impl<S: Keystore> Keychain<S> {
         key: impl Into<RotateKey>,
         expiry: Expiry,
     ) -> Result<()> {
+        validate_label(label)?;
         let current = self
             .backend
             .get(label)
@@ -325,6 +335,7 @@ impl<S: Keystore> Keychain<S> {
         expiry: Expiry,
         version: u32,
     ) -> Result<()> {
+        validate_label(label)?;
         let plaintext = Zeroizing::new(keypair.to_protobuf_encoding()?);
         let ciphertext = self
             .cipher
@@ -347,6 +358,7 @@ impl<S: Keystore> Keychain<S> {
     /// Fetch and decrypt the keypair stored under `label`. Returns with [`Error::Expired`] if the
     /// key is past its expiration (the entry is left in place. See [`Keychain::purge_expired`]).
     pub async fn get(&self, label: &str) -> Result<Keypair> {
+        validate_label(label)?;
         let entry = self
             .backend
             .get(label)
@@ -364,6 +376,7 @@ impl<S: Keystore> Keychain<S> {
 
     /// The public key stored under `label`.
     pub async fn public_key(&self, label: &str) -> Result<PublicKey> {
+        validate_label(label)?;
         let entry = self
             .backend
             .get(label)
@@ -402,11 +415,13 @@ impl<S: Keystore> Keychain<S> {
 
     /// Fetch the metadata for `label` without decrypting the key.
     pub async fn metadata(&self, label: &str) -> Result<Option<KeyMetadata>> {
+        validate_label(label)?;
         Ok(self.backend.get(label).await?.map(|entry| entry.metadata))
     }
 
     /// Remove the key stored under `label`, returning whether one existed.
     pub async fn remove(&self, label: &str) -> Result<bool> {
+        validate_label(label)?;
         self.backend.remove(label).await
     }
 
