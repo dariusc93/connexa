@@ -587,10 +587,6 @@ where
             Command::Rendezvous(rendezvous_command) => {
                 self.process_rendezvous_command(rendezvous_command)
             }
-            #[cfg(feature = "relay")]
-            Command::RelayServer(relay_server_command) => {
-                self.process_relay_server_command(relay_server_command)
-            }
             Command::Custom(custom_command) => {
                 (self.custom_task_callback)(
                     swarm,

@@ -1,11 +1,4 @@
 // TODO: Replace with builtin autorelay behaviour from libp2p. See https://github.com/libp2p/rust-libp2p/pull/6156
-use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    num::NonZeroU8,
-    task::{Context, Poll, Waker},
-    time::Duration,
-};
-
 use crate::behaviour::autorelay::handler::Out;
 use crate::multiaddr_ext::MultiaddrExt;
 use crate::prelude::swarm::derive_prelude::{ListenerId, PortUse};
@@ -22,6 +15,13 @@ use crate::prelude::swarm::{
 use crate::prelude::transport::Endpoint;
 use crate::prelude::{PeerId, Protocol};
 use either::Either;
+use std::collections::BTreeMap;
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    num::NonZeroU8,
+    task::{Context, Poll, Waker},
+    time::Duration,
+};
 use web_time::{Instant, SystemTime};
 
 mod handler;
@@ -220,10 +220,10 @@ impl Behaviour {
     /// This will dial and establish a connection to the peer if it doesn't already have a direct
     /// connection.
     /// Note that peers that are through a relay cannot be used as a static peer
-    pub fn add_static_relay(&mut self, peer_id: PeerId, address: Multiaddr) {
+    pub fn add_static_relay(&mut self, peer_id: PeerId, address: Multiaddr) -> bool {
         if address.is_relayed() {
             tracing::warn!(%peer_id, %address, "static relay address is relayed. ignoring.");
-            return;
+            return false;
         }
 
         let entry = self.static_relays.entry(peer_id).or_default();
@@ -245,6 +245,8 @@ impl Behaviour {
         if let Some(waker) = self.waker.take() {
             waker.wake();
         }
+
+        true
     }
 
     /// Remove peer as a static relay.
@@ -410,7 +412,7 @@ impl Behaviour {
     }
 
     /// Removes all existing reservations.
-    fn remove_all_reservations(&mut self) {
+    pub fn remove_all_reservations(&mut self) {
         let relay_listeners = self
             .reservations
             .iter()

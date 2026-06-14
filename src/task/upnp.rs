@@ -13,21 +13,11 @@ where
 {
     pub fn process_upnp_event(&mut self, event: UpnpEvent) {
         match event {
-            UpnpEvent::NewExternalAddr {
-                external_addr,
-                local_addr,
-            } => {
-                tracing::info!(
-                    ?external_addr,
-                    ?local_addr,
-                    "upnp external address discovered"
-                );
+            UpnpEvent::NewExternalAddr(addr) => {
+                tracing::info!(?addr, "upnp external address discovered");
             }
-            UpnpEvent::ExpiredExternalAddr {
-                external_addr,
-                local_addr,
-            } => {
-                tracing::info!(?external_addr, ?local_addr, "upnp external address expired");
+            UpnpEvent::ExpiredExternalAddr(addr) => {
+                tracing::info!(?addr, "upnp external address expired");
             }
             UpnpEvent::GatewayNotFound => {
                 tracing::warn!("upnp gateway not found");

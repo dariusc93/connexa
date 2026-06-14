@@ -13,15 +13,14 @@ async fn main() -> std::io::Result<()> {
                 println!("New listen address: {addr}")
             }
             SwarmEvent::Behaviour(BehaviourEvent::Upnp(event)) => match event {
-                UpnpEvent::NewExternalAddr { external_addr, .. } => {
-                    println!("New external address: {external_addr}")
-                }
-                UpnpEvent::ExpiredExternalAddr { external_addr, .. } => {
-                    println!("Expired external address: {external_addr}")
+                UpnpEvent::NewExternalAddr(addr) => println!("New external address: {addr}"),
+                UpnpEvent::ExpiredExternalAddr(addr) => {
+                    println!("Expired external address: {addr}")
                 }
                 UpnpEvent::GatewayNotFound => println!("Gateway not found"),
                 UpnpEvent::NonRoutableGateway => println!("Gateway is not routable"),
             },
+            _ => {}
             _ => {}
         })
         .build()
