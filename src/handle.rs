@@ -141,6 +141,7 @@ where
     }
 
     /// Returns a handle for relay server functions
+    #[cfg(not(target_arch = "wasm32"))]
     #[cfg(feature = "relay")]
     pub fn relay_server(&self) -> ConnexaRelayServer<'_, T> {
         ConnexaRelayServer::new(self)
