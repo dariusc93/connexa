@@ -2,31 +2,47 @@ pub mod behaviour;
 pub mod builder;
 pub mod error;
 pub mod handle;
+pub mod keystore;
 mod multiaddr_ext;
 pub mod task;
 pub(crate) mod types;
 
 use crate::behaviour::BehaviourEvent;
+use crate::keystore::Keychain;
 use libp2p::identity::Keypair;
 use libp2p::swarm::NetworkBehaviour;
 use libp2p::swarm::{Swarm, SwarmEvent};
 use std::task::{Context, Poll};
 
-pub(crate) type TTaskCallback<B, Ctx, Cmd, Store> =
-    Box<dyn Fn(&mut Swarm<behaviour::Behaviour<B, Store>>, &mut Ctx, Cmd) + 'static + Send>;
-pub(crate) type TEventCallback<B, Ctx, Store> = Box<
-    dyn Fn(&mut Swarm<behaviour::Behaviour<B, Store>>, &mut Ctx, <B as NetworkBehaviour>::ToSwarm)
+pub(crate) type TTaskCallback<B, Ctx, Cmd, Store, K> = Box<
+    dyn Fn(&mut Swarm<behaviour::Behaviour<B, Store>>, &Keychain<K>, &mut Ctx, Cmd)
         + 'static
         + Send,
 >;
-pub(crate) type TPollableCallback<B, Ctx, Store> = Box<
-    dyn Fn(&mut Context, &mut Swarm<behaviour::Behaviour<B, Store>>, &mut Ctx) -> Poll<()>
-        + 'static
-        + Send,
->;
-pub(crate) type TSwarmEventCallback<B, Ctx, Store> = Box<
+pub(crate) type TEventCallback<B, Ctx, Store, K> = Box<
     dyn Fn(
             &mut Swarm<behaviour::Behaviour<B, Store>>,
+            &Keychain<K>,
+            &mut Ctx,
+            <B as NetworkBehaviour>::ToSwarm,
+        )
+        + 'static
+        + Send,
+>;
+pub(crate) type TPollableCallback<B, Ctx, Store, K> = Box<
+    dyn Fn(
+            &mut Context,
+            &mut Swarm<behaviour::Behaviour<B, Store>>,
+            &Keychain<K>,
+            &mut Ctx,
+        ) -> Poll<()>
+        + 'static
+        + Send,
+>;
+pub(crate) type TSwarmEventCallback<B, Ctx, Store, K> = Box<
+    dyn Fn(
+            &mut Swarm<behaviour::Behaviour<B, Store>>,
+            &Keychain<K>,
             &SwarmEvent<BehaviourEvent<B, Store>>,
             &mut Ctx,
         )
@@ -34,8 +50,10 @@ pub(crate) type TSwarmEventCallback<B, Ctx, Store> = Box<
         + Send,
 >;
 
-pub(crate) type TPreloadCallback<B, Ctx, Store> = Box<
-    dyn FnOnce(&Keypair, &mut Swarm<behaviour::Behaviour<B, Store>>, &mut Ctx) + 'static + Send,
+pub(crate) type TPreloadCallback<B, Ctx, Store, K> = Box<
+    dyn FnOnce(&Keypair, &mut Swarm<behaviour::Behaviour<B, Store>>, &Keychain<K>, &mut Ctx)
+        + 'static
+        + Send,
 >;
 
 pub mod dummy {
@@ -195,5 +213,11 @@ pub mod prelude {
         pub use libp2p::yamux;
     }
 
-    pub type DefaultConnexaBuilder = ConnexaBuilder<super::dummy::Behaviour, (), (), MemoryStore>;
+    pub type DefaultConnexaBuilder = ConnexaBuilder<
+        super::dummy::Behaviour,
+        (),
+        (),
+        MemoryStore,
+        crate::keystore::store::memory::MemoryKeystore,
+    >;
 }

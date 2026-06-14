@@ -25,7 +25,8 @@ async fn main() -> std::io::Result<()> {
         .enable_tcp()
         .enable_quic()
         .with_gossipsub()
-        .build()?;
+        .build()
+        .await?;
 
     let addrs = match opt.listener.is_empty() {
         true => vec![
@@ -63,7 +64,7 @@ async fn main() -> std::io::Result<()> {
 
     let peer_id = connexa.keypair().public().to_peer_id();
 
-    let listen_addr = connexa.swarm().listening_addresses().await?;
+    let _listen_addr = connexa.swarm().listening_addresses().await?;
 
     let (mut rl, mut stdout) =
         Readline::new(format!("{peer_id} >")).map_err(std::io::Error::other)?;

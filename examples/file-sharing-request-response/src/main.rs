@@ -1,8 +1,8 @@
 use clap::Parser;
 use connexa::behaviour::request_response::RequestResponseConfig;
 use connexa::prelude::{DefaultConnexaBuilder, Multiaddr, Protocol};
+use futures::StreamExt;
 use futures::stream::FuturesUnordered;
-use futures::{StreamExt, TryStreamExt};
 use std::path::PathBuf;
 use tokio::io::AsyncWriteExt;
 
@@ -43,7 +43,8 @@ async fn main() -> std::io::Result<()> {
             protocol: FILE_SHARING_PROTOCOL.to_string(),
             ..Default::default()
         }])
-        .build()?;
+        .build()
+        .await?;
 
     let addrs = match opt.listener.is_empty() {
         true => vec![
@@ -57,8 +58,7 @@ async fn main() -> std::io::Result<()> {
 
     let ids = FuturesUnordered::from_iter(
         addrs
-            .iter()
-            .cloned()
+            .into_iter()
             .map(|addr| async { (addr.clone(), connexa.swarm().listen_on(addr).await) }),
     )
     .filter_map(|(addr, result)| async move {

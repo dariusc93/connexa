@@ -13,6 +13,8 @@ use futures::FutureExt;
 use futures::future::BoxFuture;
 use std::task::{Context, Poll, Waker};
 
+type ListAllFuture = BoxFuture<'static, std::io::Result<Vec<(PeerId, Vec<Multiaddr>)>>>;
+
 pub struct Behaviour<S = MemoryStore>
 where
     S: 'static,
@@ -62,7 +64,7 @@ where
         self.store.address(peer_id).boxed()
     }
 
-    pub fn list_all(&self) -> BoxFuture<'static, std::io::Result<Vec<(PeerId, Vec<Multiaddr>)>>> {
+    pub fn list_all(&self) -> ListAllFuture {
         self.store.list_all().boxed()
     }
 }

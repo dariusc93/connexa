@@ -21,6 +21,9 @@ use libp2p::pnet::{PnetConfig, PreSharedKey};
 use libp2p::relay::client::Transport as ClientTransport;
 #[cfg(not(feature = "relay"))]
 type ClientTransport = ();
+use crate::error::ConnexaResult;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::error::Error;
 
 use libp2p::identity::Keypair;
 use std::io;
@@ -33,6 +36,22 @@ use {
 
 /// Transport type.
 pub(crate) type TTransport = Boxed<(PeerId, StreamMuxerBox)>;
+
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    feature = "yamux",
+    not(any(feature = "noise", feature = "tls"))
+))]
+compile_error!(
+    "the `yamux` feature requires at least one of `noise` or `tls` to be enabled on native targets"
+);
+
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    feature = "websocket",
+    not(feature = "tcp")
+))]
+compile_error!("the `websocket` feature requires the `tcp` feature on native targets");
 
 pub struct TransportConfig {
     #[cfg(feature = "tcp")]
@@ -57,6 +76,7 @@ pub struct TransportConfig {
     pub enable_dns: bool,
     pub enable_memory_transport: bool,
     #[cfg(feature = "webtransport")]
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub enable_webtransport: bool,
     #[cfg(feature = "websocket")]
     #[cfg(not(target_arch = "wasm32"))]
@@ -250,7 +270,7 @@ pub(crate) fn build_transport(
         #[cfg(feature = "quic")]
         quic_config_callback,
     }: TransportConfig,
-) -> io::Result<TTransport> {
+) -> ConnexaResult<TTransport> {
     #[cfg(all(feature = "noise", feature = "tls"))]
     use dual_transport::SelectSecurityUpgrade;
     #[cfg(feature = "dns")]
@@ -263,6 +283,30 @@ pub(crate) fn build_transport(
     use libp2p::tcp::{Config as GenTcpConfig, tokio::Transport as TokioTcpTransport};
     #[cfg(feature = "tls")]
     use libp2p::tls;
+
+    #[allow(unused_mut)]
+    let mut has_transport = enable_memory_transport;
+    #[cfg(feature = "tcp")]
+    {
+        has_transport |= enable_tcp;
+    }
+    #[cfg(feature = "quic")]
+    {
+        has_transport |= enable_quic;
+    }
+    #[cfg(all(feature = "websocket", feature = "tcp"))]
+    {
+        has_transport |= enable_websocket;
+    }
+    #[cfg(feature = "webrtc")]
+    {
+        has_transport |= enable_webrtc;
+    }
+    if !has_transport {
+        return Err(Error::InvalidConfig(
+            "no transport was enabled; enable at least one of tcp, quic, websocket, webrtc, or the memory transport".into(),
+        ));
+    }
 
     let transport = match enable_memory_transport {
         true => Either::Left(MemoryTransport::new()),
@@ -416,7 +460,7 @@ pub(crate) fn build_transport(
     #[cfg(feature = "webrtc")]
     let transport = match enable_webrtc {
         true => {
-            let wrtc_tp = generate_webrtc_transport(&keypair, &webrtc_pem)?;
+            let wrtc_tp = generate_webrtc_transport(keypair, &webrtc_pem)?;
 
             wrtc_tp
                 .or_transport(transport)
@@ -432,7 +476,7 @@ pub(crate) fn build_transport(
     #[cfg(feature = "quic")]
     let transport = match enable_quic {
         true => {
-            let quic_config = quic_config_callback(QuicConfig::new(&keypair));
+            let quic_config = quic_config_callback(QuicConfig::new(keypair));
             let quic_transport = TokioQuicTransport::new(quic_config);
 
             OrTransport::new(quic_transport, transport)
@@ -466,7 +510,7 @@ pub(crate) fn build_transport(
         enable_memory_transport,
         ..
     }: TransportConfig,
-) -> io::Result<TTransport> {
+) -> ConnexaResult<TTransport> {
     #[cfg(feature = "websocket")]
     use libp2p::websocket_websys;
     #[cfg(feature = "webtransport")]
@@ -489,7 +533,7 @@ pub(crate) fn build_transport(
     #[cfg(not(feature = "relay"))]
     let _ = relay;
 
-    let noise_config = libp2p::noise::Config::new(&keypair).map_err(io::Error::other)?;
+    let noise_config = libp2p::noise::Config::new(keypair).map_err(io::Error::other)?;
     let yamux_config = libp2p::yamux::Config::default();
 
     #[cfg(feature = "websocket")]

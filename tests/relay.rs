@@ -120,7 +120,7 @@ async fn relay_connection_to_peer_exceed_data_restriction() -> std::io::Result<(
         .await
         .unwrap_err();
 
-    assert_eq!(err.kind(), std::io::ErrorKind::BrokenPipe);
+    assert!(matches!(err, connexa::error::Error::RequestResponse(_)));
 
     // test to make sure nothing was received
     let received_any_request =

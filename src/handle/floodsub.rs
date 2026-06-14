@@ -1,3 +1,4 @@
+use crate::error::{ConnexaResult, Error};
 use crate::handle::Connexa;
 use crate::types::{FloodsubCommand, FloodsubEvent, PubsubFloodsubPublish};
 use bytes::Bytes;
@@ -7,21 +8,28 @@ use futures::stream::BoxStream;
 use libp2p::PeerId;
 use libp2p::floodsub::Topic;
 
-#[derive(Copy, Clone)]
-pub struct ConnexaFloodsub<'a, T = ()> {
-    connexa: &'a Connexa<T>,
+pub struct ConnexaFloodsub<'a, T = (), K = crate::keystore::store::memory::MemoryKeystore> {
+    connexa: &'a Connexa<T, K>,
 }
 
-impl<'a, T> ConnexaFloodsub<'a, T>
+impl<'a, T, K> Copy for ConnexaFloodsub<'a, T, K> {}
+
+impl<'a, T, K> Clone for ConnexaFloodsub<'a, T, K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, T, K> ConnexaFloodsub<'a, T, K>
 where
     T: Send + Sync + 'static,
 {
-    pub(crate) fn new(connexa: &'a Connexa<T>) -> Self {
+    pub(crate) fn new(connexa: &'a Connexa<T, K>) -> Self {
         Self { connexa }
     }
 
     /// Subscribes to a topic in the floodsub network
-    pub async fn subscribe(&self, topic: impl IntoTopic) -> std::io::Result<()> {
+    pub async fn subscribe(&self, topic: impl IntoTopic) -> ConnexaResult<()> {
         let topic = topic.into_topic();
         let (tx, rx) = oneshot::channel();
 
@@ -29,42 +37,45 @@ where
             .to_task
             .clone()
             .send(FloodsubCommand::Subscribe { topic, resp: tx }.into())
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Adds a new node to the partial view of the floodsub network.
-    pub async fn add_node_to_partial_view(&self, peer_id: PeerId) -> std::io::Result<()> {
+    pub async fn add_node_to_partial_view(&self, peer_id: PeerId) -> ConnexaResult<()> {
         let (tx, rx) = oneshot::channel();
 
         self.connexa
             .to_task
             .clone()
             .send(FloodsubCommand::AddNodeToPartialView { peer_id, resp: tx }.into())
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Removes a node from the partial view of the floodsub network.
-    pub async fn remove_node_from_partial_view(&self, peer_id: PeerId) -> std::io::Result<()> {
+    pub async fn remove_node_from_partial_view(&self, peer_id: PeerId) -> ConnexaResult<()> {
         let (tx, rx) = oneshot::channel();
 
         self.connexa
             .to_task
             .clone()
             .send(FloodsubCommand::RemoveNodeFromPartialView { peer_id, resp: tx }.into())
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Creates a listener for a specific topic that returns a stream of pubsub events
     pub async fn listener(
         &self,
         topic: impl IntoTopic,
-    ) -> std::io::Result<BoxStream<'static, FloodsubEvent>> {
+    ) -> ConnexaResult<BoxStream<'static, FloodsubEvent>> {
         let topic = topic.into_topic();
         let (tx, rx) = oneshot::channel();
 
@@ -72,15 +83,16 @@ where
             .to_task
             .clone()
             .send(FloodsubCommand::FloodsubListener { topic, resp: tx }.into())
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
         rx.await
-            .map_err(std::io::Error::other)?
+            .map_err(|_| Error::ChannelClosed)?
             .map(|rx| rx.boxed())
     }
 
     /// Unsubscribes from a topic in the floodsub network
-    pub async fn unsubscribe(&self, topic: impl IntoTopic) -> std::io::Result<()> {
+    pub async fn unsubscribe(&self, topic: impl IntoTopic) -> ConnexaResult<()> {
         let topic = topic.into_topic();
         let (tx, rx) = oneshot::channel();
 
@@ -88,9 +100,10 @@ where
             .to_task
             .clone()
             .send(FloodsubCommand::Unsubscribe { topic, resp: tx }.into())
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Publishes a message to a single topic in the floodsub network
@@ -98,7 +111,7 @@ where
         &self,
         topic: impl IntoTopic,
         message: impl Into<Bytes>,
-    ) -> std::io::Result<()> {
+    ) -> ConnexaResult<()> {
         let topic = topic.into_topic();
         let data = message.into();
         let (tx, rx) = oneshot::channel();
@@ -109,9 +122,10 @@ where
             .send(
                 FloodsubCommand::Publish(PubsubFloodsubPublish::Publish { topic, data }, tx).into(),
             )
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Publishes a message to any peers in a single topic, regardless if they're subscribed
@@ -119,7 +133,7 @@ where
         &self,
         topic: impl IntoTopic,
         message: impl Into<Bytes>,
-    ) -> std::io::Result<()> {
+    ) -> ConnexaResult<()> {
         let topic = topic.into_topic();
         let data = message.into();
         let (tx, rx) = oneshot::channel();
@@ -131,9 +145,10 @@ where
                 FloodsubCommand::Publish(PubsubFloodsubPublish::PublishAny { topic, data }, tx)
                     .into(),
             )
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Publishes the same message to multiple topics in the floodsub network
@@ -141,7 +156,7 @@ where
         &self,
         topics: impl IntoIterator<Item = impl IntoTopic>,
         message: impl Into<Bytes>,
-    ) -> std::io::Result<()> {
+    ) -> ConnexaResult<()> {
         let topics = topics
             .into_iter()
             .map(|t| t.into_topic())
@@ -156,9 +171,10 @@ where
                 FloodsubCommand::Publish(PubsubFloodsubPublish::PublishMany { topics, data }, tx)
                     .into(),
             )
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 
     /// Publishes the same message to any peers in multiple topics, regardless if they're subscribed
@@ -166,7 +182,7 @@ where
         &self,
         topics: impl IntoIterator<Item = impl IntoTopic>,
         message: impl Into<Bytes>,
-    ) -> std::io::Result<()> {
+    ) -> ConnexaResult<()> {
         let topics = topics
             .into_iter()
             .map(|t| t.into_topic())
@@ -184,9 +200,10 @@ where
                 )
                 .into(),
             )
-            .await?;
+            .await
+            .map_err(|_| Error::ChannelClosed)?;
 
-        rx.await.map_err(std::io::Error::other)?
+        rx.await.map_err(|_| Error::ChannelClosed)?
     }
 }
 

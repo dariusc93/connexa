@@ -34,7 +34,8 @@ async fn main() -> std::io::Result<()> {
             config.set_query_timeout(Duration::from_secs(5 * 60));
             config
         })
-        .build()?;
+        .build()
+        .await?;
 
     for (addr, peer_id) in BOOTSTRAP_NODES {
         let peer_id: PeerId = peer_id.parse().expect("valid peer id");
