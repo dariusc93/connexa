@@ -59,7 +59,7 @@ indexeddb = ["dep:idb", "serde"]
 redb = ["dep:redb", "dep:cbor4ii", "serde"]
 sqlite = ["dep:sqlx", "dep:cbor4ii", "serde"]
 
-webrtc =["dep:libp2p-webrtc", "dep:libp2p-webrtc-websys"]
+webrtc = ["dep:libp2p-webrtc", "dep:libp2p-webrtc-websys"]
 websocket = ["libp2p/websocket", "rcgen", "dep:pem", "libp2p/websocket-websys"]
 webtransport = ["libp2p/webtransport-websys"]
 
@@ -156,7 +156,7 @@ futures-timer = { workspace = true, features = ["wasm-bindgen"] }
 getrandom = { workspace = true, features = ["js"] }
 getrandom_03 = { workspace = true, features = ["wasm_js"] }
 idb = { workspace = true, optional = true }
-libp2p = { features = ["macros", "serde", "wasm-bindgen"], workspace = true }
+libp2p = { features = ["macros", "serde"], workspace = true }
 libp2p-webrtc-websys = { workspace = true, optional = true }
 send_wrapper = { workspace = true, features = ["futures"] }
 serde-wasm-bindgen.workspace = true
