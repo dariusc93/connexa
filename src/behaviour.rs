@@ -1,3 +1,5 @@
+#[cfg(feature = "relay")]
+pub mod autorelay;
 pub mod dummy;
 pub mod peer_store;
 #[cfg(feature = "request-response")]
@@ -55,6 +57,9 @@ where
     pub relay: Toggle<RelayServer>,
     #[cfg(feature = "relay")]
     pub relay_client: Toggle<RelayClient>,
+
+    #[cfg(feature = "relay")]
+    pub autorelay: Toggle<autorelay::Behaviour>,
 
     #[cfg(not(target_arch = "wasm32"))]
     #[cfg(feature = "upnp")]
@@ -270,6 +275,15 @@ where
             }
             false => (None, None.into()),
         };
+        #[cfg(feature = "relay")]
+        let autorelay = protocols
+            .autorelay
+            .then(|| {
+                let config_fn = config.autorelay_config;
+                let config = config_fn(autorelay::Config::default());
+                autorelay::Behaviour::new_with_config(config)
+            })
+            .into();
 
         #[cfg(not(feature = "relay"))]
         let transport = None::<()>;
@@ -361,6 +375,8 @@ where
             relay,
             #[cfg(feature = "relay")]
             relay_client,
+            #[cfg(feature = "relay")]
+            autorelay,
             #[cfg(feature = "stream")]
             stream,
             #[cfg(not(target_arch = "wasm32"))]

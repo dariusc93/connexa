@@ -21,6 +21,7 @@ async fn main() -> std::io::Result<()> {
                 UpnpEvent::NonRoutableGateway => println!("Gateway is not routable"),
             },
             _ => {}
+            _ => {}
         })
         .build()
         .await?;

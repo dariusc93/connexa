@@ -59,12 +59,12 @@ indexeddb = ["dep:idb", "serde"]
 redb = ["dep:redb", "dep:cbor4ii", "serde"]
 sqlite = ["dep:sqlx", "dep:cbor4ii", "serde"]
 
-webrtc =["dep:libp2p-webrtc", "dep:libp2p-webrtc-websys"]
+webrtc = ["dep:libp2p-webrtc", "dep:libp2p-webrtc-websys"]
 websocket = ["libp2p/websocket", "rcgen", "dep:pem", "libp2p/websocket-websys"]
 webtransport = ["libp2p/webtransport-websys"]
 
 [workspace]
-members = ["examples/browser-webrtc", "examples/custom-behaviour-and-context", "examples/custom-transport", "examples/distributed-key-value-store", "examples/file-sharing-request-response", "examples/file-sharing-stream", "examples/floodsub", "examples/gossipsub", "examples/ipfs-kad", "examples/peer-store", "examples/relay", "examples/rendezvous", "examples/stream", "examples/upnp"]
+members = ["examples/autorelay", "examples/browser-webrtc", "examples/custom-behaviour-and-context", "examples/custom-transport", "examples/distributed-key-value-store", "examples/file-sharing-request-response", "examples/file-sharing-stream", "examples/floodsub", "examples/gossipsub", "examples/ipfs-kad", "examples/peer-store", "examples/relay", "examples/rendezvous", "examples/stream", "examples/upnp"]
 
 [workspace.dependencies]
 async-rt = "0.1.8"
@@ -170,7 +170,7 @@ getrandom = { workspace = true, features = ["js"] }
 getrandom_03 = { workspace = true, features = ["wasm_js"] }
 idb = { workspace = true, optional = true }
 js-sys = { workspace = true, optional = true }
-libp2p = { features = ["macros", "serde", "wasm-bindgen"], workspace = true }
+libp2p = { features = ["macros", "serde"], workspace = true }
 libp2p-webrtc-websys = { workspace = true, optional = true }
 parking_lot = { workspace = true, optional = true }
 send_wrapper = { workspace = true, features = ["futures"] }

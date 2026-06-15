@@ -1,0 +1,11 @@
+[package]
+name = "autorelay"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio.workspace = true
+futures.workspace = true
+connexa = { path = "../../", default-features = false, features = ["ed25519", "rsa", "tcp", "quic", "yamux", "noise", "relay", "ping", "identify", "testing", "kad", "dns"] }
+clap = { version = "4.5.39", features = ["derive"] }
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }

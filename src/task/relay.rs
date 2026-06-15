@@ -1,8 +1,13 @@
+use crate::behaviour::autorelay;
 use crate::behaviour::peer_store::store::Store;
 use crate::task::ConnexaTask;
+use crate::types::AutoRelayCommand;
 use libp2p::relay::{Event as RelayServerEvent, client::Event as RelayClientEvent};
 use libp2p::swarm::NetworkBehaviour;
 use std::fmt::Debug;
+
+#[allow(dead_code)]
+pub const RELAY_NAMESPACE: &[u8] = b"/libp2p/relay";
 
 impl<X, C: NetworkBehaviour, S, T, K> ConnexaTask<X, C, S, T, K>
 where
@@ -11,6 +16,89 @@ where
     C::ToSwarm: Debug,
     S: Store,
 {
+    pub fn process_autorelay_commands(&mut self, command: AutoRelayCommand) {
+        let swarm = self.swarm.as_mut().expect("swarm is still valid");
+        match command {
+            AutoRelayCommand::AddStaticRelay {
+                peer_id,
+                relay_addr,
+                resp,
+            } => {
+                let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    return;
+                };
+
+                let _ = resp.send(Ok(autorelay.add_static_relay(peer_id, relay_addr)));
+            }
+            AutoRelayCommand::RemoveStaticRelay { peer_id, resp } => {
+                let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    return;
+                };
+
+                let _ = resp.send(Ok(autorelay.remove_static_relay(&peer_id)));
+            }
+            AutoRelayCommand::ListStaticRelays { resp } => {
+                let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    return;
+                };
+
+                let list = autorelay
+                    .static_relays()
+                    .map(|(peer_id, addr)| (*peer_id, addr.to_vec()))
+                    .collect::<Vec<_>>();
+                let _ = resp.send(Ok(list));
+            }
+            AutoRelayCommand::GetStaticRelay { peer_id, resp } => {
+                let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    return;
+                };
+
+                let addr = autorelay
+                    .static_relays()
+                    .find(|(p, _)| **p == peer_id)
+                    .map(|(_, addr)| addr.to_vec())
+                    .ok_or_else(|| {
+                        std::io::Error::new(std::io::ErrorKind::NotFound, "static relay not found")
+                    });
+                let _ = resp.send(addr);
+            }
+            AutoRelayCommand::EnableAutoRelay { resp } => {
+                let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    return;
+                };
+
+                autorelay.set_status(Some(autorelay::Status::Enable));
+
+                let _ = resp.send(Ok(()));
+            }
+            AutoRelayCommand::DisableAutoRelay { resp } => {
+                let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    return;
+                };
+
+                autorelay.set_status(Some(autorelay::Status::Disable));
+
+                let _ = resp.send(Ok(()));
+            }
+            AutoRelayCommand::DisableRelays { resp } => {
+                let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
+                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    return;
+                };
+
+                autorelay.remove_all_reservations();
+
+                let _ = resp.send(Ok(()));
+            }
+        }
+    }
+
     pub fn process_relay_client_event(&mut self, event: RelayClientEvent) {
         match event {
             RelayClientEvent::ReservationReqAccepted {
