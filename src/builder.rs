@@ -13,7 +13,7 @@ use crate::builder::transport::{
 };
 use crate::error::{ConnexaResult, Error};
 use crate::handle::Connexa;
-use crate::keystore::{Keychain, Keystore, generate_key, store::memory::MemoryKeystore};
+use crate::keystore::{Keychain, Keystore, store::memory::MemoryKeystore};
 use crate::prelude::PeerId;
 use crate::task::ConnexaTask;
 use crate::{
@@ -239,16 +239,17 @@ where
                 label: "identity".to_string(),
                 create: true,
             },
-            default_keychain(),
+            Keychain::disabled(),
         )
     }
 
-    /// Create an instance with an existing keypair.
-    pub fn with_existing_identity(
-        keypair: impl IntoKeypair<MemoryKeystore>,
-    ) -> ConnexaResult<Self> {
-        let (keypair, keychain) = keypair.into_keypair()?;
-        Ok(Self::from_identity(Identity::Explicit(keypair), keychain))
+    /// Create an instance with an existing keypair, backed by a default in-memory keychain.
+    pub fn with_existing_identity(keypair: impl IntoKeypair) -> ConnexaResult<Self> {
+        let keypair = keypair.into_keypair()?;
+        Ok(Self::from_identity(
+            Identity::Explicit(keypair),
+            Keychain::disabled(),
+        ))
     }
 }
 
@@ -262,6 +263,15 @@ where
     S: Store,
     K: Keystore,
 {
+    /// Create an instance with an existing keypair and a caller-supplied keychain.
+    pub fn with_identity_and_keychain(
+        keypair: impl IntoKeypair,
+        keychain: Keychain<K>,
+    ) -> ConnexaResult<Self> {
+        let keypair = keypair.into_keypair()?;
+        Ok(Self::from_identity(Identity::Explicit(keypair), keychain))
+    }
+
     /// Create an instance that resolves its identity from `keychain` under `label`
     /// loading it, or generating and storing a new identity if none exists yet.
     pub fn with_keychain_identity(keychain: Keychain<K>, label: impl Into<String>) -> Self {
@@ -401,6 +411,12 @@ where
     /// Set the context that will be used for a custom state
     pub fn set_context(mut self, context: Ctx) -> Self {
         self.context = context;
+        self
+    }
+
+    /// Set a keychain
+    pub fn set_keychain(mut self, keychain: Keychain<K>) -> Self {
+        self.keychain = keychain;
         self
     }
 
@@ -942,7 +958,13 @@ where
         let keypair = match identity {
             Identity::Explicit(keypair) => keypair,
             Identity::FromKeychain { label, create } => {
-                if create {
+                if keychain.is_disabled() {
+                    if create {
+                        Keypair::generate_ed25519()
+                    } else {
+                        return Err(Error::KeychainNotProvided);
+                    }
+                } else if create {
                     keychain.get_or_create(&label).await?
                 } else {
                     keychain.get(&label).await?
@@ -1040,60 +1062,48 @@ where
     }
 }
 
-fn default_keychain() -> Keychain<MemoryKeystore> {
-    Keychain::new(generate_key())
+/// Converts a value into a [`Keypair`]. The keychain that holds runtime keys is configured
+/// separately on the builder, so this is solely responsible for producing the identity.
+pub trait IntoKeypair {
+    fn into_keypair(self) -> std::io::Result<Keypair>;
 }
 
-/// Resolves an identity (and the keychain that will hold runtime keys) for the builder. The
-/// built-in impls pair the identity with a fresh in-memory keychain; implement it for your own
-/// type to supply a different backend.
-pub trait IntoKeypair<S> {
-    fn into_keypair(self) -> std::io::Result<(Keypair, Keychain<S>)>;
-}
-
-impl IntoKeypair<MemoryKeystore> for Keypair {
-    fn into_keypair(self) -> std::io::Result<(Keypair, Keychain<MemoryKeystore>)> {
-        Ok((self, default_keychain()))
+impl IntoKeypair for Keypair {
+    fn into_keypair(self) -> std::io::Result<Keypair> {
+        Ok(self)
     }
 }
 
-impl IntoKeypair<MemoryKeystore> for &Keypair {
-    fn into_keypair(self) -> std::io::Result<(Keypair, Keychain<MemoryKeystore>)> {
-        Ok((self.clone(), default_keychain()))
+impl IntoKeypair for &Keypair {
+    fn into_keypair(self) -> std::io::Result<Keypair> {
+        Ok(self.clone())
     }
 }
 
 // should only be used in testing environments and not in productions
 #[cfg(feature = "testing")]
-impl IntoKeypair<MemoryKeystore> for u8 {
-    fn into_keypair(self) -> std::io::Result<(Keypair, Keychain<MemoryKeystore>)> {
+impl IntoKeypair for u8 {
+    fn into_keypair(self) -> std::io::Result<Keypair> {
         let mut bytes = [0u8; 32];
         bytes[0] = self;
-        let kp = Keypair::ed25519_from_bytes(bytes).expect("only errors on wrong length");
-        Ok((kp, default_keychain()))
+        Ok(Keypair::ed25519_from_bytes(bytes).expect("only errors on wrong length"))
     }
 }
 
-impl IntoKeypair<MemoryKeystore> for &mut [u8] {
-    fn into_keypair(self) -> std::io::Result<(Keypair, Keychain<MemoryKeystore>)> {
-        Ok((
-            Keypair::ed25519_from_bytes(self).map_err(std::io::Error::other)?,
-            default_keychain(),
-        ))
+impl IntoKeypair for &mut [u8] {
+    fn into_keypair(self) -> std::io::Result<Keypair> {
+        Keypair::ed25519_from_bytes(self).map_err(std::io::Error::other)
     }
 }
 
-impl IntoKeypair<MemoryKeystore> for Vec<u8> {
-    fn into_keypair(self) -> std::io::Result<(Keypair, Keychain<MemoryKeystore>)> {
-        Ok((
-            Keypair::ed25519_from_bytes(self).map_err(std::io::Error::other)?,
-            default_keychain(),
-        ))
+impl IntoKeypair for Vec<u8> {
+    fn into_keypair(self) -> std::io::Result<Keypair> {
+        Keypair::ed25519_from_bytes(self).map_err(std::io::Error::other)
     }
 }
 
-impl<R: std::io::Read> IntoKeypair<MemoryKeystore> for std::io::BufReader<R> {
-    fn into_keypair(mut self) -> std::io::Result<(Keypair, Keychain<MemoryKeystore>)> {
+impl<R: std::io::Read> IntoKeypair for std::io::BufReader<R> {
+    fn into_keypair(mut self) -> std::io::Result<Keypair> {
         use std::io::Read;
         let mut kp_bytes = Vec::new();
         match self.read_to_end(&mut kp_bytes) {
@@ -1112,15 +1122,15 @@ impl<R: std::io::Read> IntoKeypair<MemoryKeystore> for std::io::BufReader<R> {
 }
 
 #[cfg(feature = "keypair_base64_encoding")]
-impl IntoKeypair<MemoryKeystore> for String {
-    fn into_keypair(self) -> std::io::Result<(Keypair, Keychain<MemoryKeystore>)> {
+impl IntoKeypair for String {
+    fn into_keypair(self) -> std::io::Result<Keypair> {
         self.as_str().into_keypair()
     }
 }
 
 #[cfg(feature = "keypair_base64_encoding")]
-impl IntoKeypair<MemoryKeystore> for &str {
-    fn into_keypair(self) -> std::io::Result<(Keypair, Keychain<MemoryKeystore>)> {
+impl IntoKeypair for &str {
+    fn into_keypair(self) -> std::io::Result<Keypair> {
         use base64::{
             Engine,
             alphabet::STANDARD,
@@ -1129,17 +1139,15 @@ impl IntoKeypair<MemoryKeystore> for &str {
 
         let engine = GeneralPurpose::new(&STANDARD, PAD);
         let keypair_bytes = engine.decode(self).map_err(std::io::Error::other)?;
-        let keypair =
-            Keypair::from_protobuf_encoding(&keypair_bytes).map_err(std::io::Error::other)?;
-        Ok((keypair, default_keychain()))
+        Keypair::from_protobuf_encoding(&keypair_bytes).map_err(std::io::Error::other)
     }
 }
 
-impl<T: IntoKeypair<MemoryKeystore>> IntoKeypair<MemoryKeystore> for Option<T> {
-    fn into_keypair(self) -> std::io::Result<(Keypair, Keychain<MemoryKeystore>)> {
+impl<T: IntoKeypair> IntoKeypair for Option<T> {
+    fn into_keypair(self) -> std::io::Result<Keypair> {
         match self {
-            Some(kp) => kp.into_keypair(),
-            None => Ok((Keypair::generate_ed25519(), default_keychain())),
+            Some(source) => source.into_keypair(),
+            None => Ok(Keypair::generate_ed25519()),
         }
     }
 }

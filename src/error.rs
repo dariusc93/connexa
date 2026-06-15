@@ -72,6 +72,9 @@ pub enum Error<C = Infallible> {
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    #[error("keychain not provided")]
+    KeychainNotProvided,
 }
 
 #[non_exhaustive]
@@ -146,6 +149,7 @@ where
                     Error::Floodsub(_) => ErrorKind::Other,
                     Error::Keystore(_) => ErrorKind::Other,
                     Error::Disabled { .. } | Error::Custom(_) => ErrorKind::Other,
+                    Error::KeychainNotProvided => ErrorKind::Other,
                     Error::Io(_) => unreachable!("handled above"),
                 };
                 std::io::Error::new(kind, other)

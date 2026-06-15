@@ -38,6 +38,8 @@ pub enum Error {
     KeyTypeMismatch { has: KeyType, wanted: KeyType },
     #[error("invalid key label: {0:?}")]
     InvalidLabel(String),
+    #[error("keychain is disabled")]
+    Disabled,
 }
 
 /// The cryptographic family of a stored key, mirroring [`libp2p::identity::KeyType`].
@@ -231,6 +233,7 @@ pub trait Cipher: Send + Sync + 'static {
 pub struct Keychain<S = MemoryKeystore> {
     cipher: Arc<dyn Cipher>,
     backend: Arc<S>,
+    disabled: bool,
 }
 
 impl<S> Clone for Keychain<S> {
@@ -238,6 +241,7 @@ impl<S> Clone for Keychain<S> {
         Self {
             cipher: self.cipher.clone(),
             backend: self.backend.clone(),
+            disabled: self.disabled,
         }
     }
 }
@@ -246,6 +250,15 @@ impl<S: Keystore + Default> Keychain<S> {
     /// Create a keychain.
     pub fn new(key: [u8; 32]) -> Self {
         Self::with_cipher(XChaCha20Poly1305Cipher::new(key), S::default())
+    }
+
+    /// Disabled keychain
+    pub(crate) fn disabled() -> Self {
+        Self {
+            cipher: Arc::new(XChaCha20Poly1305Cipher::new([0u8; 32])),
+            backend: Arc::new(S::default()),
+            disabled: true,
+        }
     }
 
     /// Create a new keychain with a custom cipher.
@@ -265,7 +278,19 @@ impl<S: Keystore> Keychain<S> {
         Self {
             cipher: Arc::new(cipher),
             backend: Arc::new(backend),
+            disabled: false,
         }
+    }
+
+    pub fn is_disabled(&self) -> bool {
+        self.disabled
+    }
+
+    fn disable_check(&self) -> Result<()> {
+        if self.disabled {
+            return Err(Error::Disabled);
+        }
+        Ok(())
     }
 
     /// Encrypt `keypair` and store it under `label` with no expiry, replacing any existing entry.
@@ -337,6 +362,7 @@ impl<S: Keystore> Keychain<S> {
         expiry: Expiry,
         version: u32,
     ) -> Result<()> {
+        self.disable_check()?;
         validate_label(label)?;
         let plaintext = Zeroizing::new(keypair.to_protobuf_encoding()?);
         let ciphertext = self
@@ -360,6 +386,7 @@ impl<S: Keystore> Keychain<S> {
     /// Fetch and decrypt the keypair stored under `label`. Returns with [`Error::Expired`] if the
     /// key is past its expiration (the entry is left in place. See [`Keychain::purge_expired`]).
     pub async fn get(&self, label: &str) -> Result<Keypair> {
+        self.disable_check()?;
         validate_label(label)?;
         let entry = self
             .backend
@@ -378,6 +405,7 @@ impl<S: Keystore> Keychain<S> {
 
     /// The public key stored under `label`.
     pub async fn public_key(&self, label: &str) -> Result<PublicKey> {
+        self.disable_check()?;
         validate_label(label)?;
         let entry = self
             .backend
@@ -448,6 +476,7 @@ impl<S: Keystore> Keychain<S> {
     /// Re-encrypt every entry under a new cipher, returning a keychain that shares this backend but
     /// uses the new cipher (the old cipher can no longer read the store).
     pub async fn migrate_cipher(&self, new_cipher: impl Cipher) -> Result<Keychain<S>> {
+        self.disable_check()?;
         let new_cipher: Arc<dyn Cipher> = Arc::new(new_cipher);
 
         let prev_entries = self.backend.list().await?;
@@ -481,6 +510,7 @@ impl<S: Keystore> Keychain<S> {
         Ok(Keychain {
             cipher: new_cipher,
             backend: self.backend.clone(),
+            disabled: self.disabled,
         })
     }
 }
@@ -573,6 +603,7 @@ mod tests {
         let other = Keychain {
             cipher: Arc::new(XChaCha20Poly1305Cipher::new(generate_key())),
             backend: first.backend.clone(),
+            disabled: first.disabled,
         };
         assert!(matches!(other.get("k").await, Err(Error::DecryptFailed)));
     }

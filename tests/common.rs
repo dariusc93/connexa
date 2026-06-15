@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use connexa::builder::IntoKeypair;
 use connexa::handle::Connexa;
-use connexa::keystore::store::memory::MemoryKeystore;
 use connexa::prelude::identity::Keypair;
 use connexa::prelude::{DefaultConnexaBuilder, Multiaddr};
 use futures::stream::FuturesUnordered;
@@ -12,7 +11,7 @@ use libp2p::PeerId;
 #[allow(dead_code)]
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 
-pub async fn spawn_connexa(keypair: impl IntoKeypair<MemoryKeystore>) -> std::io::Result<Connexa> {
+pub async fn spawn_connexa(keypair: impl IntoKeypair) -> std::io::Result<Connexa> {
     let connexa = DefaultConnexaBuilder::with_existing_identity(keypair)?
         .enable_memory_transport()
         .with_gossipsub()
@@ -49,7 +48,7 @@ pub async fn spawn_connexa_with_default_key() -> Connexa {
 }
 
 pub async fn spawn_connexa_nodes<const N: usize>(
-    keypairs: impl IntoIterator<Item = impl IntoKeypair<MemoryKeystore>>,
+    keypairs: impl IntoIterator<Item = impl IntoKeypair>,
 ) -> std::io::Result<[(Connexa, PeerId, Multiaddr); N]> {
     let nodes = FuturesUnordered::from_iter(keypairs.into_iter().map(|kp| spawn_connexa(kp)))
         .try_filter_map(|connexa| async move {
