@@ -792,6 +792,7 @@ impl NetworkBehaviour for Behaviour {
                 if let Some(relay_peer_id) = addr.relay_peer_id() {
                     self.external_reservations
                         .insert(listener_id, relay_peer_id);
+                    self.reconcile_reservation_addrs();
                 }
             }
             FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, .. }) => {
@@ -926,31 +927,44 @@ mod tests {
         client.dial(relay_a_addr).unwrap();
         client.dial(relay_b_addr).unwrap();
 
-        let mut accepted = 0usize;
-        let mut timeout = futures_timer::Delay::new(Duration::from_secs(20));
+        let first = wait_until_some(&mut client, Duration::from_secs(20), |event| {
+            if let SwarmEvent::Behaviour(ClientEvent::RelayClient(
+                relay::client::Event::ReservationReqAccepted {
+                    relay_peer_id,
+                    renewal: false,
+                    ..
+                },
+            )) = event
+            {
+                Some(*relay_peer_id)
+            } else {
+                None
+            }
+        })
+        .await;
+        assert!(first == relay_a_peer_id || first == relay_b_peer_id);
+
+        let mut extra = 0usize;
+        let mut settle = futures_timer::Delay::new(Duration::from_secs(5));
         loop {
             tokio::select! {
-                _ = &mut timeout => break,
+                _ = &mut settle => break,
                 ev = client.select_next_some() => {
-                    if let SwarmEvent::Behaviour(ClientEvent::RelayClient(
-                        relay::client::Event::ReservationReqAccepted { relay_peer_id, .. },
-                    )) = ev
-                    {
-                        assert!(relay_peer_id == relay_a_peer_id || relay_peer_id == relay_b_peer_id);
-                        accepted += 1;
-                        if accepted > 1 {
-                            panic!("autorelay opened more reservations than max_reservations=1");
-                        }
-                        futures_timer::Delay::new(Duration::from_secs(2)).await;
-                        break;
+                    if matches!(
+                        ev,
+                        SwarmEvent::Behaviour(ClientEvent::RelayClient(
+                            relay::client::Event::ReservationReqAccepted { renewal: false, .. }
+                        ))
+                    ) {
+                        extra += 1;
                     }
                 }
             }
         }
 
         assert_eq!(
-            accepted, 1,
-            "expected exactly one reservation, observed {accepted}"
+            extra, 0,
+            "autorelay opened {extra} reservation(s) beyond max_reservations=1"
         );
     }
 
@@ -1099,6 +1113,107 @@ mod tests {
                 break;
             }
         }
+    }
+
+    #[tokio::test]
+    async fn autorelay_expires_circuit_address_once_on_connection_close() {
+        init_tracing();
+
+        let (relay_peer, relay_addr) = spawn_relay();
+
+        let mut client = build_client(autorelay::Config::default());
+        client.dial(relay_addr).unwrap();
+
+        let (conn, circuit) = wait_until_some(&mut client, Duration::from_secs(15), {
+            let mut direct: Option<ConnectionId> = None;
+            move |event| match event {
+                SwarmEvent::ConnectionEstablished {
+                    peer_id,
+                    connection_id,
+                    endpoint,
+                    ..
+                } if *peer_id == relay_peer && !endpoint.is_relayed() => {
+                    direct = Some(*connection_id);
+                    None
+                }
+                SwarmEvent::ExternalAddrConfirmed { address }
+                    if address.iter().any(|p| p == Protocol::P2pCircuit) =>
+                {
+                    direct.map(|c| (c, address.clone()))
+                }
+                _ => None,
+            }
+        })
+        .await;
+
+        assert!(client.close_connection(conn));
+
+        let mut expired = 0usize;
+        let mut settle = futures_timer::Delay::new(Duration::from_secs(5));
+        loop {
+            tokio::select! {
+                _ = &mut settle => break,
+                ev = client.select_next_some() => {
+                    if let SwarmEvent::ExternalAddrExpired { address } = &ev
+                        && *address == circuit
+                    {
+                        expired += 1;
+                    }
+                }
+            }
+        }
+
+        assert_eq!(
+            expired, 1,
+            "expected exactly one expiry of the circuit address, got {expired}"
+        );
+    }
+
+    #[tokio::test]
+    async fn autorelay_expires_user_circuit_listen_on_removal() {
+        init_tracing();
+
+        let (relay_peer, relay_addr) = spawn_relay();
+
+        let mut client = build_client(autorelay::Config::default());
+        client
+            .behaviour_mut()
+            .autorelay
+            .set_status(Some(autorelay::Status::Disable));
+
+        let circuit_listen = relay_addr
+            .with(Protocol::P2p(relay_peer))
+            .with(Protocol::P2pCircuit);
+        let listener_id = client.listen_on(circuit_listen).unwrap();
+
+        let circuit = wait_until_some(&mut client, Duration::from_secs(15), |event| {
+            if let SwarmEvent::ExternalAddrConfirmed { address } = event
+                && address.iter().any(|p| p == Protocol::P2pCircuit)
+            {
+                Some(address.clone())
+            } else {
+                None
+            }
+        })
+        .await;
+
+        wait_until(&mut client, Duration::from_secs(10), |event| {
+            matches!(
+                event,
+                SwarmEvent::NewListenAddr { address, .. } if *address == circuit
+            )
+        })
+        .await;
+
+        assert!(client.remove_listener(listener_id));
+
+        wait_until(&mut client, Duration::from_secs(10), |event| {
+            matches!(
+                event,
+                SwarmEvent::ExternalAddrExpired { address } if *address == circuit
+            )
+        })
+        .await;
     }
 
     #[tokio::test]
