@@ -8,7 +8,7 @@ exclude = [".gitignore"]
 description = "High level abtraction of rust-libp2p"
 readme = "README.md"
 repository = "https://github.com/dariusc93/connexa"
-rust-version = "1.85"
+rust-version = "1.93.0"
 categories = ["network-programming", "asynchronous"]
 keywords = ["libp2p", "p2p", "networking", "peer-to-peer"]
 
