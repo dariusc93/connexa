@@ -223,7 +223,7 @@ pub(crate) struct Protocols {
     pub(crate) peer_store: bool,
 }
 
-impl<B, Ctx, Cmd, S> ConnexaBuilder<B, Ctx, Cmd, S, MemoryKeystore>
+impl<B, Ctx, Cmd, S, K> ConnexaBuilder<B, Ctx, Cmd, S, K>
 where
     B: NetworkBehaviour,
     B: Send,
@@ -231,6 +231,7 @@ where
     Ctx: Default + Unpin + Send + Sync + 'static,
     Cmd: Send + Sync + 'static,
     S: Store,
+    K: Keystore + Default,
 {
     /// Create a new instance.
     pub fn new_identity() -> Self {
