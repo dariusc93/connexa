@@ -22,8 +22,6 @@ use libp2p::relay::client::Transport as ClientTransport;
 #[cfg(not(feature = "relay"))]
 type ClientTransport = ();
 use crate::error::ConnexaResult;
-#[cfg(not(target_arch = "wasm32"))]
-use crate::error::Error;
 
 #[cfg(all(feature = "dns", target_arch = "wasm32"))]
 use crate::builder::dns_websys;
@@ -278,30 +276,6 @@ pub(crate) fn build_transport(
     use libp2p::tcp::{Config as GenTcpConfig, tokio::Transport as TokioTcpTransport};
     #[cfg(feature = "tls")]
     use libp2p::tls;
-
-    #[allow(unused_mut)]
-    let mut has_transport = enable_memory_transport;
-    #[cfg(feature = "tcp")]
-    {
-        has_transport |= enable_tcp;
-    }
-    #[cfg(feature = "quic")]
-    {
-        has_transport |= enable_quic;
-    }
-    #[cfg(all(feature = "websocket", feature = "tcp"))]
-    {
-        has_transport |= enable_websocket;
-    }
-    #[cfg(feature = "webrtc")]
-    {
-        has_transport |= enable_webrtc;
-    }
-    if !has_transport {
-        return Err(Error::InvalidConfig(
-            "no transport was enabled; enable at least one of tcp, quic, websocket, webrtc, or the memory transport".into(),
-        ));
-    }
 
     let transport = match enable_memory_transport {
         true => Either::Left(MemoryTransport::new()),
