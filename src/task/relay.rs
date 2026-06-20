@@ -1,5 +1,6 @@
 use crate::behaviour::autorelay;
 use crate::behaviour::peer_store::store::Store;
+use crate::error::{Error, Protocol};
 use crate::task::ConnexaTask;
 use crate::types::AutoRelayCommand;
 use libp2p::relay::{Event as RelayServerEvent, client::Event as RelayClientEvent};
@@ -25,7 +26,9 @@ where
                 resp,
             } => {
                 let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Autorelay,
+                    }));
                     return;
                 };
 
@@ -33,7 +36,9 @@ where
             }
             AutoRelayCommand::RemoveStaticRelay { peer_id, resp } => {
                 let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Autorelay,
+                    }));
                     return;
                 };
 
@@ -41,7 +46,9 @@ where
             }
             AutoRelayCommand::ListStaticRelays { resp } => {
                 let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Autorelay,
+                    }));
                     return;
                 };
 
@@ -53,7 +60,9 @@ where
             }
             AutoRelayCommand::GetStaticRelay { peer_id, resp } => {
                 let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Autorelay,
+                    }));
                     return;
                 };
 
@@ -61,14 +70,14 @@ where
                     .static_relays()
                     .find(|(p, _)| **p == peer_id)
                     .map(|(_, addr)| addr.to_vec())
-                    .ok_or_else(|| {
-                        std::io::Error::new(std::io::ErrorKind::NotFound, "static relay not found")
-                    });
+                    .ok_or_else(|| Error::NotFound("static relay not found".into()));
                 let _ = resp.send(addr);
             }
             AutoRelayCommand::EnableAutoRelay { resp } => {
                 let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Autorelay,
+                    }));
                     return;
                 };
 
@@ -78,7 +87,9 @@ where
             }
             AutoRelayCommand::DisableAutoRelay { resp } => {
                 let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Autorelay,
+                    }));
                     return;
                 };
 
@@ -88,7 +99,9 @@ where
             }
             AutoRelayCommand::DisableRelays { resp } => {
                 let Some(autorelay) = swarm.behaviour_mut().autorelay.as_mut() else {
-                    let _ = resp.send(Err(std::io::Error::other("autorelay is not enabled")));
+                    let _ = resp.send(Err(Error::Disabled {
+                        protocol: Protocol::Autorelay,
+                    }));
                     return;
                 };
 

@@ -447,27 +447,27 @@ pub enum AutoRelayCommand {
     AddStaticRelay {
         peer_id: PeerId,
         relay_addr: Multiaddr,
-        resp: oneshot::Sender<Result<bool>>,
+        resp: oneshot::Sender<ConnexaResult<bool>>,
     },
     RemoveStaticRelay {
         peer_id: PeerId,
-        resp: oneshot::Sender<Result<bool>>,
+        resp: oneshot::Sender<ConnexaResult<bool>>,
     },
     DisableRelays {
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     ListStaticRelays {
-        resp: oneshot::Sender<Result<Vec<(PeerId, Vec<Multiaddr>)>>>,
+        resp: oneshot::Sender<ConnexaResult<Vec<(PeerId, Vec<Multiaddr>)>>>,
     },
     GetStaticRelay {
         peer_id: PeerId,
-        resp: oneshot::Sender<Result<Vec<Multiaddr>>>,
+        resp: oneshot::Sender<ConnexaResult<Vec<Multiaddr>>>,
     },
     EnableAutoRelay {
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
     DisableAutoRelay {
-        resp: oneshot::Sender<Result<()>>,
+        resp: oneshot::Sender<ConnexaResult<()>>,
     },
 }
 

@@ -92,6 +92,10 @@ pub enum Protocol {
     RequestResponse,
     #[cfg(feature = "autonat")]
     Autonat,
+    #[cfg(feature = "relay")]
+    Relay,
+    #[cfg(feature = "relay")]
+    Autorelay,
     #[cfg(feature = "stream")]
     Stream,
     Other(&'static str),
@@ -114,6 +118,10 @@ impl Display for Protocol {
             Protocol::Autonat => write!(f, "autonat"),
             #[cfg(feature = "stream")]
             Protocol::Stream => write!(f, "stream"),
+            #[cfg(feature = "relay")]
+            Protocol::Relay => write!(f, "relay"),
+            #[cfg(feature = "relay")]
+            Protocol::Autorelay => write!(f, "autorelay"),
             Protocol::Other(s) => write!(f, "{s}"),
         }
     }
