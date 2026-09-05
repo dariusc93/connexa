@@ -208,13 +208,7 @@ pub trait Keystore: Send + Sync + 'static {
     /// Store (or replace) an entry, keyed by its `label`.
     fn put(&self, entry: EncryptedEntry) -> impl Future<Output = Result<()>> + Send;
     /// Store (or replace) many entries.
-    fn put_many(&self, entries: Vec<EncryptedEntry>) -> impl Future<Output = Result<()>> + Send {
-        async move {
-            FuturesUnordered::from_iter(entries.into_iter().map(|entry| self.put(entry)))
-                .try_collect::<()>()
-                .await
-        }
-    }
+    fn put_many(&self, entries: Vec<EncryptedEntry>) -> impl Future<Output = Result<()>> + Send;
     /// Fetch the entry for `label`, if present.
     fn get(&self, label: &str) -> impl Future<Output = Result<Option<EncryptedEntry>>> + Send;
     /// List metadata for all stored entries.

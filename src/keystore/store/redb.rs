@@ -1,4 +1,5 @@
 use crate::keystore::{EncryptedEntry, Error, KeyMetadata, Keystore, Result};
+use redb::WriteTransaction;
 use redb::{Database, ReadableTable, TableDefinition, TableError, backends::InMemoryBackend};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -62,8 +63,9 @@ impl Keystore for RedbKeystore {
     async fn put_many(&self, entries: Vec<EncryptedEntry>) -> Result<()> {
         let db = self.db().await?;
         tokio::task::spawn_blocking(move || -> Result<()> {
-            let tx = db.begin_write().map_err(backend)?;
-            {
+            let mut tx = db.begin_write().map_err(backend)?;
+            let snapshot = tx.ephemeral_savepoint().map_err(backend)?;
+            let tx_fn = |tx: &WriteTransaction, entries: Vec<EncryptedEntry>| -> Result<()> {
                 let mut table = tx.open_table(TABLE).map_err(backend)?;
                 for entry in entries {
                     let bytes = cbor4ii::serde::to_vec(Vec::new(), &entry).map_err(backend)?;
@@ -71,7 +73,14 @@ impl Keystore for RedbKeystore {
                         .insert(entry.metadata.label.as_str(), bytes.as_slice())
                         .map_err(backend)?;
                 }
+                Ok(())
+            };
+
+            if let Err(e) = tx_fn(&tx, entries) {
+                tx.abort().map_err(backend)?;
+                return Err(e);
             }
+
             tx.commit().map_err(backend)?;
             Ok(())
         })
