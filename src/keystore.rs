@@ -233,6 +233,7 @@ pub trait Cipher: Send + Sync + 'static {
 pub struct Keychain<S = MemoryKeystore> {
     cipher: Arc<dyn Cipher>,
     backend: Arc<S>,
+    _guard: Arc<tokio::sync::Mutex<()>>,
     disabled: bool,
 }
 
@@ -241,6 +242,7 @@ impl<S> Clone for Keychain<S> {
         Self {
             cipher: self.cipher.clone(),
             backend: self.backend.clone(),
+            _guard: self._guard.clone(),
             disabled: self.disabled,
         }
     }
@@ -257,6 +259,7 @@ impl<S: Keystore + Default> Keychain<S> {
         Self {
             cipher: Arc::new(XChaCha20Poly1305Cipher::new([0u8; 32])),
             backend: Arc::new(S::default()),
+            _guard: Arc::new(tokio::sync::Mutex::new(())),
             disabled: true,
         }
     }
@@ -278,6 +281,7 @@ impl<S: Keystore> Keychain<S> {
         Self {
             cipher: Arc::new(cipher),
             backend: Arc::new(backend),
+            _guard: Arc::new(tokio::sync::Mutex::new(())),
             disabled: false,
         }
     }
@@ -295,6 +299,7 @@ impl<S: Keystore> Keychain<S> {
 
     /// Encrypt `keypair` and store it under `label` with no expiry, replacing any existing entry.
     pub async fn insert(&self, label: &str, keypair: &Keypair) -> Result<()> {
+        let _guard = self._guard.lock().await;
         self.store(label, keypair, Expiry::Never, 1).await
     }
 
@@ -305,6 +310,7 @@ impl<S: Keystore> Keychain<S> {
         keypair: &Keypair,
         expiry: Expiry,
     ) -> Result<()> {
+        let _guard = self._guard.lock().await;
         self.store(label, keypair, expiry, 1).await
     }
 
@@ -341,6 +347,7 @@ impl<S: Keystore> Keychain<S> {
         key: impl Into<RotateKey>,
         expiry: Expiry,
     ) -> Result<()> {
+        let _guard = self._guard.lock().await;
         validate_label(label)?;
         let current = self
             .backend
@@ -427,11 +434,12 @@ impl<S: Keystore> Keychain<S> {
     /// exists yet. An existing-but-expired key surfaces as [`Error::Expired`] rather than being
     /// regenerated.
     pub async fn get_or_create(&self, label: &str) -> Result<Keypair> {
+        let _guard = self._guard.lock().await;
         match self.get(label).await {
             Ok(keypair) => Ok(keypair),
             Err(Error::NotFound(_)) => {
                 let keypair = Keypair::generate_ed25519();
-                self.insert(label, &keypair).await?;
+                self.store(label, &keypair, Expiry::Never, 1).await?;
                 Ok(keypair)
             }
             Err(err) => Err(err),
@@ -451,12 +459,14 @@ impl<S: Keystore> Keychain<S> {
 
     /// Remove the key stored under `label`, returning whether one existed.
     pub async fn remove(&self, label: &str) -> Result<bool> {
+        let _guard = self._guard.lock().await;
         validate_label(label)?;
         self.backend.remove(label).await
     }
 
     /// Remove every expired key, returning how many were removed.
     pub async fn purge_expired(&self) -> Result<usize> {
+        let _guard = self._guard.lock().await;
         let expired = self
             .backend
             .list()
@@ -476,6 +486,7 @@ impl<S: Keystore> Keychain<S> {
     /// Re-encrypt every entry under a new cipher, returning a keychain that shares this backend but
     /// uses the new cipher (the old cipher can no longer read the store).
     pub async fn migrate_cipher(&self, new_cipher: impl Cipher) -> Result<Keychain<S>> {
+        let _guard = self._guard.lock().await;
         self.disable_check()?;
         let new_cipher: Arc<dyn Cipher> = Arc::new(new_cipher);
 
@@ -510,6 +521,7 @@ impl<S: Keystore> Keychain<S> {
         Ok(Keychain {
             cipher: new_cipher,
             backend: self.backend.clone(),
+            _guard: self._guard.clone(),
             disabled: self.disabled,
         })
     }
@@ -603,6 +615,7 @@ mod tests {
         let other = Keychain {
             cipher: Arc::new(XChaCha20Poly1305Cipher::new(generate_key())),
             backend: first.backend.clone(),
+            _guard: first._guard.clone(),
             disabled: first.disabled,
         };
         assert!(matches!(other.get("k").await, Err(Error::DecryptFailed)));
