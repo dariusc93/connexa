@@ -63,8 +63,7 @@ impl Keystore for RedbKeystore {
     async fn put_many(&self, entries: Vec<EncryptedEntry>) -> Result<()> {
         let db = self.db().await?;
         tokio::task::spawn_blocking(move || -> Result<()> {
-            let mut tx = db.begin_write().map_err(backend)?;
-            let snapshot = tx.ephemeral_savepoint().map_err(backend)?;
+            let tx = db.begin_write().map_err(backend)?;
             let tx_fn = |tx: &WriteTransaction, entries: Vec<EncryptedEntry>| -> Result<()> {
                 let mut table = tx.open_table(TABLE).map_err(backend)?;
                 for entry in entries {
@@ -77,7 +76,11 @@ impl Keystore for RedbKeystore {
             };
 
             if let Err(e) = tx_fn(&tx, entries) {
-                tx.abort().map_err(backend)?;
+                if let Err(abort) = tx.abort() {
+                    return Err(backend(std::io::Error::other(format!(
+                        "{e}. Abort also failed with {abort}",
+                    ))));
+                }
                 return Err(e);
             }
 

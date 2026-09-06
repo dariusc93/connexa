@@ -51,41 +51,43 @@ impl IndexedDbKeystore {
 
 impl Keystore for IndexedDbKeystore {
     fn put(&self, entry: EncryptedEntry) -> impl Future<Output = Result<()>> + Send {
-        SendWrapper::new(async move {
-            let db = self.db().await?;
-            let value = serde_wasm_bindgen::to_value(&entry).map_err(backend)?;
-            let key = JsValue::from_str(&entry.metadata.label);
-            let tx = db
-                .transaction(&[OBJECT_STORE], TransactionMode::ReadWrite)
-                .map_err(backend)?;
-            let store = tx.object_store(OBJECT_STORE).map_err(backend)?;
-            store
-                .put(&value, Some(&key))
-                .map_err(backend)?
-                .await
-                .map_err(backend)?;
-            tx.commit().map_err(backend)?.await.map_err(backend)?;
-            Ok(())
-        })
+        self.put_many(vec![entry])
     }
 
     fn put_many(&self, entries: Vec<EncryptedEntry>) -> impl Future<Output = Result<()>> + Send {
         SendWrapper::new(async move {
+            let mut prepared = Vec::with_capacity(entries.len());
+            for entry in entries {
+                let value = serde_wasm_bindgen::to_value(&entry).map_err(backend)?;
+                prepared.push((JsValue::from_str(&entry.metadata.label), value));
+            }
             let db = self.db().await?;
             let tx = db
                 .transaction(&[OBJECT_STORE], TransactionMode::ReadWrite)
                 .map_err(backend)?;
-            let store = tx.object_store(OBJECT_STORE).map_err(backend)?;
-            for entry in entries {
-                let value = serde_wasm_bindgen::to_value(&entry).map_err(backend)?;
-                let key = JsValue::from_str(&entry.metadata.label);
-                store
-                    .put(&value, Some(&key))
-                    .map_err(backend)?
-                    .await
-                    .map_err(backend)?;
+            let queued = (|| -> Result<()> {
+                let store = tx.object_store(OBJECT_STORE).map_err(backend)?;
+                // Queue all writes before awaiting so the browser cannot commit early.
+                for (key, value) in prepared {
+                    store.put(&value, Some(&key)).map_err(backend)?;
+                }
+                Ok(())
+            })();
+            if let Err(error) = queued {
+                match tx.abort() {
+                    Ok(aborting) => {
+                        let _ = aborting.await;
+                    }
+                    Err(abort) => {
+                        return Err(backend(format!("{error}. Abort also failed with {abort}")));
+                    }
+                }
+                return Err(error);
             }
-            tx.commit().map_err(backend)?.await.map_err(backend)?;
+            let outcome = tx.commit().map_err(backend)?.await.map_err(backend)?;
+            if !outcome.is_committed() {
+                return Err(backend("IndexedDB batch transaction aborted"));
+            }
             Ok(())
         })
     }

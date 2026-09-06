@@ -12,6 +12,7 @@ use std::fmt::Display;
 use std::future::Future;
 use std::sync::Arc;
 use thiserror::Error;
+use tokio::sync::{OwnedRwLockWriteGuard, RwLock, RwLockReadGuard};
 use web_time::Duration;
 use web_time::SystemTime;
 use zeroize::Zeroizing;
@@ -30,13 +31,13 @@ pub enum Error {
     DecryptFailed,
     #[error(transparent)]
     Key(#[from] libp2p::identity::DecodingError),
-    #[error("keystore backend error: {0}")]
+    #[error("keystore backend failed with {0}")]
     Backend(std::io::Error),
     #[error("cannot generate a key of type {0}")]
     UnsupportedKeyType(KeyType),
-    #[error("key type mismatch: stored key is {has:?} but wanted {wanted:?}")]
+    #[error("stored key type is {has:?} but {wanted:?} was requested")]
     KeyTypeMismatch { has: KeyType, wanted: KeyType },
-    #[error("invalid key label: {0:?}")]
+    #[error("invalid key label {0:?}")]
     InvalidLabel(String),
     #[error("keychain is disabled")]
     Disabled,
@@ -75,8 +76,7 @@ impl From<libp2p::identity::KeyType> for KeyType {
     }
 }
 
-/// What [`Keychain::rotate`] installs as the new key: a supplied keypair, or a freshly generated
-/// one of the given [`KeyType`].
+/// A replacement keypair or the key type to generate when rotating a key.
 #[allow(clippy::large_enum_variant)]
 pub enum RotateKey {
     Keypair(Keypair),
@@ -128,7 +128,6 @@ impl Expiry {
 pub struct KeyMetadata {
     pub label: String,
     pub key_type: KeyType,
-    /// How many times this label has been written; starts at 1, bumped by [`Keychain::rotate`].
     pub version: u32,
     pub created_at: SystemTime,
     pub expires_at: Option<SystemTime>,
@@ -223,11 +222,12 @@ pub trait Cipher: Send + Sync + 'static {
     fn decrypt(&self, aad: Option<&[u8]>, ciphertext: &[u8]) -> Result<Vec<u8>>;
 }
 
+type CipherGuard = OwnedRwLockWriteGuard<Option<Box<dyn Cipher>>>;
+
 /// An encrypted keychain
 pub struct Keychain<S = MemoryKeystore> {
-    cipher: Arc<dyn Cipher>,
+    cipher: Arc<RwLock<Option<Box<dyn Cipher>>>>,
     backend: Arc<S>,
-    _guard: Arc<tokio::sync::Mutex<()>>,
     disabled: bool,
 }
 
@@ -236,7 +236,6 @@ impl<S> Clone for Keychain<S> {
         Self {
             cipher: self.cipher.clone(),
             backend: self.backend.clone(),
-            _guard: self._guard.clone(),
             disabled: self.disabled,
         }
     }
@@ -250,12 +249,9 @@ impl<S: Keystore + Default> Keychain<S> {
 
     /// Disabled keychain
     pub(crate) fn disabled() -> Self {
-        Self {
-            cipher: Arc::new(XChaCha20Poly1305Cipher::new([0u8; 32])),
-            backend: Arc::new(S::default()),
-            _guard: Arc::new(tokio::sync::Mutex::new(())),
-            disabled: true,
-        }
+        let mut chain = Self::new([0u8; 32]);
+        chain.disabled = true;
+        chain
     }
 
     /// Create a new keychain with a custom cipher.
@@ -273,11 +269,30 @@ impl<S: Keystore> Keychain<S> {
     /// Create a keychain over `backend` using a custom [`Cipher`] backend (e.g. AES-GCM).
     pub fn with_cipher(cipher: impl Cipher, backend: S) -> Self {
         Self {
-            cipher: Arc::new(cipher),
+            cipher: Arc::new(RwLock::new(Some(Box::new(cipher)))),
             backend: Arc::new(backend),
-            _guard: Arc::new(tokio::sync::Mutex::new(())),
             disabled: false,
         }
+    }
+
+    async fn read_lock(&self) -> Result<RwLockReadGuard<'_, Option<Box<dyn Cipher>>>> {
+        let guard = self.cipher.read().await;
+        if guard.is_none() {
+            return Err(Error::Backend(std::io::Error::other(
+                "keychain write result is unknown. Recover and reopen the backend",
+            )));
+        }
+        Ok(guard)
+    }
+
+    async fn write_lock(&self) -> Result<CipherGuard> {
+        let guard = self.cipher.clone().write_owned().await;
+        if guard.is_none() {
+            return Err(Error::Backend(std::io::Error::other(
+                "keychain write result is unknown. Recover and reopen the backend",
+            )));
+        }
+        Ok(guard)
     }
 
     pub fn is_disabled(&self) -> bool {
@@ -293,8 +308,8 @@ impl<S: Keystore> Keychain<S> {
 
     /// Encrypt `keypair` and store it under `label` with no expiry, replacing any existing entry.
     pub async fn insert(&self, label: &str, keypair: &Keypair) -> Result<()> {
-        let _guard = self._guard.lock().await;
-        self.store(label, keypair, Expiry::Never, 1).await
+        let guard = self.write_lock().await?;
+        self.store(label, keypair, Expiry::Never, 1, guard).await
     }
 
     /// Like [`Keychain::insert`], but applying an expiration policy.
@@ -304,8 +319,8 @@ impl<S: Keystore> Keychain<S> {
         keypair: &Keypair,
         expiry: Expiry,
     ) -> Result<()> {
-        let _guard = self._guard.lock().await;
-        self.store(label, keypair, expiry, 1).await
+        let guard = self.write_lock().await?;
+        self.store(label, keypair, expiry, 1, guard).await
     }
 
     /// Generate a fresh Ed25519 keypair, store it under `label`
@@ -341,7 +356,7 @@ impl<S: Keystore> Keychain<S> {
         key: impl Into<RotateKey>,
         expiry: Expiry,
     ) -> Result<()> {
-        let _guard = self._guard.lock().await;
+        let guard = self.write_lock().await?;
         validate_label(label)?;
         let current = self
             .backend
@@ -353,7 +368,7 @@ impl<S: Keystore> Keychain<S> {
             RotateKey::Keypair(keypair) => keypair,
             RotateKey::Generate(key_type) => generate_keypair(key_type)?,
         };
-        self.store(label, &keypair, expiry, version).await
+        self.store(label, &keypair, expiry, version, guard).await
     }
 
     async fn store(
@@ -362,12 +377,14 @@ impl<S: Keystore> Keychain<S> {
         keypair: &Keypair,
         expiry: Expiry,
         version: u32,
+        guard: CipherGuard,
     ) -> Result<()> {
         self.disable_check()?;
         validate_label(label)?;
         let plaintext = Zeroizing::new(keypair.to_protobuf_encoding()?);
-        let ciphertext = self
-            .cipher
+        let ciphertext = guard
+            .as_ref()
+            .expect("cipher was checked when locking")
             .encrypt(Some(label.as_bytes()), plaintext.as_slice())?;
         let created_at = SystemTime::now();
         let entry = EncryptedEntry {
@@ -381,31 +398,39 @@ impl<S: Keystore> Keychain<S> {
             },
             ciphertext,
         };
-        self.backend.put(entry).await
+        let backend = self.backend.clone();
+        finish_mutation(guard, async move { backend.put(entry).await }).await
     }
 
     /// Fetch and decrypt the keypair stored under `label`. Returns with [`Error::Expired`] if the
     /// key is past its expiration (the entry is left in place. See [`Keychain::purge_expired`]).
     pub async fn get(&self, label: &str) -> Result<Keypair> {
+        let guard = self.read_lock().await?;
         self.disable_check()?;
         validate_label(label)?;
-        let entry = self
-            .backend
-            .get(label)
-            .await?
-            .ok_or_else(|| Error::NotFound(label.to_owned()))?;
+        Self::decode_entry(
+            guard.as_deref().expect("cipher was checked when locking"),
+            label,
+            self.backend.get(label).await?,
+        )
+    }
+
+    fn decode_entry(
+        cipher: &dyn Cipher,
+        label: &str,
+        entry: Option<EncryptedEntry>,
+    ) -> Result<Keypair> {
+        let entry = entry.ok_or_else(|| Error::NotFound(label.to_owned()))?;
         if entry.metadata.is_expired() {
             return Err(Error::Expired(label.to_owned()));
         }
-        let plaintext = Zeroizing::new(
-            self.cipher
-                .decrypt(Some(label.as_bytes()), &entry.ciphertext)?,
-        );
+        let plaintext = Zeroizing::new(cipher.decrypt(Some(label.as_bytes()), &entry.ciphertext)?);
         Keypair::from_protobuf_encoding(plaintext.as_slice()).map_err(Error::from)
     }
 
     /// The public key stored under `label`.
     pub async fn public_key(&self, label: &str) -> Result<PublicKey> {
+        let _guard = self.read_lock().await?;
         self.disable_check()?;
         validate_label(label)?;
         let entry = self
@@ -428,12 +453,18 @@ impl<S: Keystore> Keychain<S> {
     /// exists yet. An existing-but-expired key surfaces as [`Error::Expired`] rather than being
     /// regenerated.
     pub async fn get_or_create(&self, label: &str) -> Result<Keypair> {
-        let _guard = self._guard.lock().await;
-        match self.get(label).await {
+        let guard = self.write_lock().await?;
+        self.disable_check()?;
+        validate_label(label)?;
+        match Self::decode_entry(
+            guard.as_deref().expect("cipher was checked when locking"),
+            label,
+            self.backend.get(label).await?,
+        ) {
             Ok(keypair) => Ok(keypair),
             Err(Error::NotFound(_)) => {
                 let keypair = Keypair::generate_ed25519();
-                self.store(label, &keypair, Expiry::Never, 1).await?;
+                self.store(label, &keypair, Expiry::Never, 1, guard).await?;
                 Ok(keypair)
             }
             Err(err) => Err(err),
@@ -442,83 +473,124 @@ impl<S: Keystore> Keychain<S> {
 
     /// List metadata for all stored keys.
     pub async fn list(&self) -> Result<Vec<KeyMetadata>> {
+        let _guard = self.read_lock().await?;
         self.backend.list().await
     }
 
     /// Fetch the metadata for `label` without decrypting the key.
     pub async fn metadata(&self, label: &str) -> Result<Option<KeyMetadata>> {
+        let _guard = self.read_lock().await?;
         validate_label(label)?;
         Ok(self.backend.get(label).await?.map(|entry| entry.metadata))
     }
 
     /// Remove the key stored under `label`, returning whether one existed.
     pub async fn remove(&self, label: &str) -> Result<bool> {
-        let _guard = self._guard.lock().await;
+        let guard = self.write_lock().await?;
         validate_label(label)?;
-        self.backend.remove(label).await
+        let backend = self.backend.clone();
+        let label = label.to_owned();
+        finish_mutation(guard, async move { backend.remove(&label).await }).await
     }
 
     /// Remove every expired key, returning how many were removed.
     pub async fn purge_expired(&self) -> Result<usize> {
-        let _guard = self._guard.lock().await;
-        let expired = self
-            .backend
-            .list()
-            .await?
-            .into_iter()
-            .filter(KeyMetadata::is_expired)
-            .map(|metadata| metadata.label);
-        let mut removed = 0;
-        for label in expired {
-            if self.backend.remove(&label).await? {
-                removed += 1;
+        let guard = self.write_lock().await?;
+        let backend = self.backend.clone();
+        finish_mutation(guard, async move {
+            let expired = backend
+                .list()
+                .await?
+                .into_iter()
+                .filter(KeyMetadata::is_expired)
+                .map(|metadata| metadata.label);
+            let mut removed = 0;
+            for label in expired {
+                if backend.remove(&label).await? {
+                    removed += 1;
+                }
             }
-        }
-        Ok(removed)
+            Ok(removed)
+        })
+        .await
     }
 
-    /// Re-encrypt every entry under a new cipher, returning a keychain that shares this backend but
+    /// Re-encrypt every entry with a new cipher, returning a keychain that shares this backend but
     /// uses the new cipher (the old cipher can no longer read the store).
     pub async fn migrate_cipher(&self, new_cipher: impl Cipher) -> Result<Keychain<S>> {
-        let _guard = self._guard.lock().await;
+        let mut guard = self.write_lock().await?;
         self.disable_check()?;
-        let new_cipher: Arc<dyn Cipher> = Arc::new(new_cipher);
-
-        let prev_entries = self.backend.list().await?;
-
-        let entries = FuturesUnordered::from_iter(prev_entries.into_iter().map(|metadata| {
-            let new_cipher = new_cipher.clone();
-            async move {
-                let label = &metadata.label;
-                let entry = self
-                    .backend
-                    .get(label)
+        let metadata = self.backend.list().await?;
+        let originals =
+            FuturesUnordered::from_iter(metadata.into_iter().map(|metadata| async move {
+                self.backend
+                    .get(&metadata.label)
                     .await?
-                    .ok_or_else(|| Error::NotFound(label.clone()))?;
-                let plaintext = Zeroizing::new(
-                    self.cipher
-                        .decrypt(Some(label.as_bytes()), &entry.ciphertext)?,
-                );
-                let ciphertext =
-                    new_cipher.encrypt(Some(label.as_bytes()), plaintext.as_slice())?;
-                Ok::<_, Error>(EncryptedEntry {
-                    metadata,
-                    ciphertext,
-                })
+                    .ok_or(Error::NotFound(metadata.label))
+            }))
+            .try_collect::<Vec<_>>()
+            .await?;
+        let mut entries = Vec::with_capacity(originals.len());
+        let cipher = guard.as_ref().expect("cipher was checked when locking");
+        for entry in &originals {
+            let aad = Some(entry.metadata.label.as_bytes());
+            let plaintext = Zeroizing::new(cipher.decrypt(aad, &entry.ciphertext)?);
+            entries.push(EncryptedEntry {
+                metadata: entry.metadata.clone(),
+                ciphertext: new_cipher.encrypt(aad, &plaintext)?,
+            });
+        }
+
+        let next = self.clone();
+        let previous = guard.take();
+        async_rt::task::spawn(async move {
+            if let Err(error) = next.backend.put_many(entries).await {
+                let mut intact = true;
+                for original in &originals {
+                    match next.backend.get(&original.metadata.label).await {
+                        Ok(Some(entry)) if same_entry(&entry, original) => {}
+                        _ => {
+                            intact = false;
+                            break;
+                        }
+                    }
+                }
+                if intact {
+                    *guard = previous;
+                }
+                return Err(error);
             }
-        }))
-        .try_collect::<Vec<_>>()
-        .await?;
-
-        self.backend.put_many(entries).await?;
-
-        Ok(Keychain {
-            cipher: new_cipher,
-            backend: self.backend.clone(),
-            _guard: self._guard.clone(),
-            disabled: self.disabled,
+            *guard = Some(Box::new(new_cipher));
+            Ok(next)
         })
+        .await
+        .map_err(Error::Backend)?
     }
+}
+
+async fn finish_mutation<T: Send + 'static>(
+    mut guard: CipherGuard,
+    work: impl Future<Output = Result<T>> + Send + 'static,
+) -> Result<T> {
+    // Leave the cipher unavailable if the task stops before the write finishes.
+    let cipher = guard.take();
+    async_rt::task::spawn(async move {
+        let result = work.await;
+        *guard = cipher;
+        result
+    })
+    .await
+    .map_err(Error::Backend)?
+}
+
+fn same_entry(a: &EncryptedEntry, b: &EncryptedEntry) -> bool {
+    a.ciphertext == b.ciphertext
+        && a.metadata.label == b.metadata.label
+        && a.metadata.key_type == b.metadata.key_type
+        && a.metadata.version == b.metadata.version
+        && a.metadata.created_at == b.metadata.created_at
+        && a.metadata.expires_at == b.metadata.expires_at
+        && a.metadata.public_key == b.metadata.public_key
 }
 
 #[cfg(test)]
@@ -607,9 +679,10 @@ mod tests {
         first.insert("k", &keypair).await.unwrap();
 
         let other = Keychain {
-            cipher: Arc::new(XChaCha20Poly1305Cipher::new(generate_key())),
+            cipher: Arc::new(RwLock::new(Some(Box::new(XChaCha20Poly1305Cipher::new(
+                generate_key(),
+            ))))),
             backend: first.backend.clone(),
-            _guard: first._guard.clone(),
             disabled: first.disabled,
         };
         assert!(matches!(other.get("k").await, Err(Error::DecryptFailed)));
