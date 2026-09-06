@@ -27,8 +27,7 @@ impl SqliteKeystore {
     }
 
     pub fn in_memory() -> Result<Self> {
-        let options =
-            SqliteConnectOptions::from_str("sqlite:file::memory:?cache=shared").map_err(backend)?;
+        let options = SqliteConnectOptions::from_str("sqlite::memory:").map_err(backend)?;
         let pool_options = SqlitePoolOptions::new()
             .min_connections(1)
             .idle_timeout(None)
