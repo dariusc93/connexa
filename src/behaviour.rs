@@ -189,8 +189,7 @@ where
             .then(|| {
                 let config_fn = config.autonat_v2_client_config;
                 let config = config_fn(Default::default());
-
-                autonat::v2::client::Behaviour::new(rand::rngs::OsRng, config)
+                autonat::v2::client::Behaviour::new(rand::make_rng(), config)
             })
             .into();
 

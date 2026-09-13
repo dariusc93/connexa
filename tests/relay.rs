@@ -1,7 +1,7 @@
 use connexa::prelude::Protocol;
 use futures::StreamExt;
 use futures::future::poll_fn;
-use rand::Rng;
+use rand::RngExt;
 use std::task::Poll;
 
 mod common;
@@ -113,7 +113,7 @@ async fn relay_connection_to_peer_exceed_data_restriction() -> std::io::Result<(
     let mut request_listener_2 = node2.request_response().listen_for_requests(()).await?;
 
     let mut data = vec![0; 128 * 1024];
-    rand::thread_rng().fill(&mut data[..]);
+    rand::rng().fill(&mut data[..]);
     let err = node3
         .request_response()
         .send_request(node2_peer_id, data)
