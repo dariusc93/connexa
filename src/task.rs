@@ -20,6 +20,7 @@ mod mdns;
 mod ping;
 #[cfg(feature = "relay")]
 mod relay;
+
 #[cfg(feature = "rendezvous")]
 mod rendezvous;
 #[cfg(feature = "request-response")]
@@ -577,6 +578,12 @@ where
             Command::AutoRelay(autorelay_command) => {
                 self.process_autorelay_commands(autorelay_command)
             }
+            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(feature = "relay")]
+            Command::RelayServer(relay_server_command) => {
+                self.process_relay_server_command(relay_server_command)
+            }
+            
             #[cfg(feature = "stream")]
             Command::Stream(stream_command) => self.process_stream_command(stream_command),
             #[cfg(feature = "request-response")]
