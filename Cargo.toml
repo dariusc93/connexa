@@ -72,7 +72,7 @@ aes-gcm = "0.11.1"
 async-trait = { version = "0.1.89" }
 base64 = "0.22.1"
 bytes = "1.10.1"
-chacha20poly1305 = "0.11.0"
+chacha20poly1305 = { version = "0.11.0", features = ["zeroize"] }
 cid = "0.11.1"
 either = "1.15.0"
 futures = { version = "0.3.31" }
