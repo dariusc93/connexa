@@ -161,6 +161,8 @@ pub enum DnsResolver {
     /// Cloudflare DNS Resolver
     #[default]
     Cloudflare,
+    /// Quad9 DNS Resolver
+    Quad9,
     /// Local DNS Resolver
     Local,
     /// No DNS Resolver
@@ -172,12 +174,22 @@ pub enum DnsResolver {
 impl From<DnsResolver> for (ResolverConfig, ResolverOpts) {
     fn from(value: DnsResolver) -> Self {
         match value {
-            DnsResolver::Google => (ResolverConfig::google(), Default::default()),
-            DnsResolver::Cloudflare => (ResolverConfig::cloudflare(), Default::default()),
+            DnsResolver::Google => (
+                ResolverConfig::udp_and_tcp(&hickory_resolver::config::GOOGLE),
+                Default::default(),
+            ),
+            DnsResolver::Cloudflare => (
+                ResolverConfig::udp_and_tcp(&hickory_resolver::config::CLOUDFLARE),
+                Default::default(),
+            ),
+            DnsResolver::Quad9 => (
+                ResolverConfig::udp_and_tcp(&hickory_resolver::config::QUAD9),
+                Default::default(),
+            ),
             DnsResolver::Local => {
                 hickory_resolver::system_conf::read_system_conf().unwrap_or_default()
             }
-            DnsResolver::None => (ResolverConfig::new(), Default::default()),
+            DnsResolver::None => (ResolverConfig::default(), Default::default()),
         }
     }
 }
@@ -416,7 +428,7 @@ pub(crate) fn build_transport(
                 libp2p_webrtc::tokio::Certificate::from_pem(pem).map_err(io::Error::other)?
             }
             None => {
-                let mut rng = rand::thread_rng();
+                let mut rng = rand::rng();
                 libp2p_webrtc::tokio::Certificate::generate(&mut rng).map_err(io::Error::other)?
             }
         };

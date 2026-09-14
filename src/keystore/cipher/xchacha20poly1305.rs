@@ -1,7 +1,7 @@
 use crate::keystore::{Cipher, Error, Result};
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{XChaCha20Poly1305, XNonce};
-use rand::RngCore;
+use rand::Rng;
 use zeroize::Zeroizing;
 
 const NONCE_LEN: usize = 24;
@@ -19,10 +19,11 @@ impl XChaCha20Poly1305Cipher {
     }
 }
 
+#[allow(deprecated)]
 impl Cipher for XChaCha20Poly1305Cipher {
     fn encrypt(&self, aad: Option<&[u8]>, plaintext: &[u8]) -> Result<Vec<u8>> {
         let mut nonce = [0u8; NONCE_LEN];
-        rand::thread_rng().fill_bytes(&mut nonce);
+        rand::rng().fill_bytes(&mut nonce);
         let ciphertext = self
             .cipher
             .encrypt(

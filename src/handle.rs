@@ -10,6 +10,9 @@ pub(crate) mod gossipsub;
 mod peer_store;
 #[cfg(feature = "relay")]
 mod relay;
+#[cfg(feature = "relay")]
+#[cfg(not(target_arch = "wasm32"))]
+mod relay_server;
 #[cfg(feature = "rendezvous")]
 pub(crate) mod rendezvous;
 #[cfg(feature = "request-response")]
@@ -32,6 +35,9 @@ use crate::handle::gossipsub::ConnexaGossipsub;
 use crate::handle::peer_store::ConnexaPeerstore;
 #[cfg(feature = "relay")]
 use crate::handle::relay::ConnexaRelay;
+#[cfg(feature = "relay")]
+#[cfg(not(target_arch = "wasm32"))]
+use crate::handle::relay_server::ConnexaRelayServer;
 #[cfg(feature = "rendezvous")]
 use crate::handle::rendezvous::ConnexaRendezvous;
 #[cfg(feature = "request-response")]
@@ -111,13 +117,13 @@ where
         ConnexaFloodsub::new(self)
     }
 
-    /// Returns a handle for gossipsub functions   
+    /// Returns a handle for gossipsub functions
     #[cfg(feature = "gossipsub")]
     pub fn gossipsub(&self) -> ConnexaGossipsub<'_, T, K> {
         ConnexaGossipsub::new(self)
     }
 
-    /// Returns a handle for dht functions  
+    /// Returns a handle for dht functions
     #[cfg(feature = "kad")]
     pub fn dht(&self) -> ConnexaDht<'_, T, K> {
         ConnexaDht::new(self)
@@ -147,12 +153,19 @@ where
         ConnexaRelay::new(self)
     }
 
+    /// Returns a handle for relay server functions
+    #[cfg(feature = "relay")]
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn relay_server(&self) -> ConnexaRelayServer<'_, T, K> {
+        ConnexaRelayServer::new(self)
+    }
+
     /// Returns a handle to manage peer whitelist functionality
     pub fn whitelist(&self) -> ConnexaWhitelist<'_, T, K> {
         ConnexaWhitelist::new(self)
     }
 
-    /// Returns a handle to manage peer blacklist functionality  
+    /// Returns a handle to manage peer blacklist functionality
     pub fn blacklist(&self) -> ConnexaBlacklist<'_, T, K> {
         ConnexaBlacklist::new(self)
     }

@@ -7,7 +7,7 @@ use futures::TryStreamExt;
 use futures::stream::FuturesUnordered;
 use libp2p::PeerId;
 use libp2p::identity::{Keypair, PublicKey};
-use rand::RngCore;
+use rand::Rng;
 use std::fmt::Display;
 use std::future::Future;
 use std::sync::Arc;
@@ -179,7 +179,7 @@ impl EncryptedEntry {
 /// Generate a random 32-byte master key for a [`Keychain`].
 pub fn generate_key() -> [u8; 32] {
     let mut key = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut key);
+    rand::rng().fill_bytes(&mut key);
     key
 }
 
