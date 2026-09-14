@@ -19,6 +19,7 @@ impl XChaCha20Poly1305Cipher {
     }
 }
 
+#[allow(deprecated)]
 impl Cipher for XChaCha20Poly1305Cipher {
     fn encrypt(&self, aad: Option<&[u8]>, plaintext: &[u8]) -> Result<Vec<u8>> {
         let mut nonce = [0u8; NONCE_LEN];
