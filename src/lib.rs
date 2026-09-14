@@ -103,9 +103,10 @@ pub mod prelude {
 
     #[cfg(feature = "relay")]
     pub mod relay {
+        #[cfg(not(target_arch = "wasm32"))]
         pub mod server {
             // TODO: Determine if CircuitId is needed
-            pub use libp2p::relay::{Config, Event, RateLimiter, StatusCode};
+            pub use libp2p::relay::{Config, Event, RateLimiter, StatusCode, Status};
         }
 
         pub mod client {
