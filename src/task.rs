@@ -583,7 +583,7 @@ where
             Command::RelayServer(relay_server_command) => {
                 self.process_relay_server_command(relay_server_command)
             }
-            
+
             #[cfg(feature = "stream")]
             Command::Stream(stream_command) => self.process_stream_command(stream_command),
             #[cfg(feature = "request-response")]
