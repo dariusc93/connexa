@@ -3,7 +3,7 @@ use crate::behaviour::autorelay::handler::Out;
 use crate::multiaddr_ext::MultiaddrExt;
 use crate::prelude::swarm::derive_prelude::{ListenerId, PortUse};
 use crate::prelude::swarm::{
-    ExternalAddresses, ListenOpts, NewListenAddr, NotifyHandler,
+    ExternalAddresses, ListenOpts, NewListenAddr,
     derive_prelude::{
         AddressChange, ConnectionClosed, ConnectionDenied, ConnectionEstablished, ConnectionId,
         DialFailure, ExpiredListenAddr, FromSwarm, ListenerClosed, ListenerError, Multiaddr,
@@ -15,6 +15,8 @@ use crate::prelude::swarm::{
 use crate::prelude::transport::Endpoint;
 use crate::prelude::{PeerId, Protocol};
 use either::Either;
+use futures::FutureExt;
+use futures_timer::Delay;
 use std::collections::BTreeMap;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -38,21 +40,25 @@ pub struct Behaviour {
 
     reservations: HashMap<ListenerId, (PeerId, ConnectionId)>,
 
+    pending_eviction: Option<ListenerId>,
+
     external_reservations: HashMap<ListenerId, PeerId>,
 
-    // placeholder for reservations.
-    // TODO: Removed once https://github.com/libp2p/rust-libp2p/pull/3222 is published or backported.
-    reservation_addrs: HashMap<ListenerId, HashSet<Multiaddr>>,
-
     static_relays: HashMap<PeerId, Vec<Multiaddr>>,
+
+    pending_static_dials: HashMap<PeerId, ConnectionId>,
 
     static_dial_cooldowns: HashMap<PeerId, Instant>,
 
     failure_counts: HashMap<PeerId, u32>,
 
+    reservation_cooldowns: HashMap<PeerId, Instant>,
+
     previous_relays: VecDeque<(PeerId, Multiaddr, SystemTime)>,
 
     relays_available: bool,
+
+    cooldown_wakeup: Option<(Instant, Delay)>,
 
     waker: Option<Waker>,
 }
@@ -67,13 +73,16 @@ impl Default for Behaviour {
             events: VecDeque::new(),
             connections: HashMap::new(),
             reservations: HashMap::new(),
+            pending_eviction: None,
             external_reservations: HashMap::new(),
-            reservation_addrs: HashMap::new(),
             static_relays: HashMap::new(),
+            pending_static_dials: HashMap::new(),
             static_dial_cooldowns: HashMap::new(),
             failure_counts: HashMap::new(),
+            reservation_cooldowns: HashMap::new(),
             previous_relays: VecDeque::new(),
             relays_available: false,
+            cooldown_wakeup: None,
             waker: None,
         }
     }
@@ -113,7 +122,6 @@ enum ReservationStatus {
     Idle,
     Pending { id: ListenerId },
     Active { id: ListenerId },
-    Blacklisted,
 }
 
 #[derive(Debug)]
@@ -239,10 +247,6 @@ impl Behaviour {
         }
         let combined = entry.clone();
 
-        if self.is_peer_idle(&peer_id) {
-            self.evict_for_static_peer(peer_id);
-        }
-
         if !self.queue_static_dial(peer_id, combined) {
             self.meet_reservation_target();
         }
@@ -250,7 +254,6 @@ impl Behaviour {
         if let Some(waker) = self.waker.take() {
             waker.wake();
         }
-
         true
     }
 
@@ -280,13 +283,17 @@ impl Behaviour {
     }
 
     fn queue_static_dial(&mut self, peer_id: PeerId, addresses: Vec<Multiaddr>) -> bool {
-        if addresses.is_empty()
+        if !self.static_relays.contains_key(&peer_id)
+            || addresses.is_empty()
             || self.has_direct_connection(&peer_id)
             || self.static_dial_in_cooldown(&peer_id)
+            || self.pending_static_dials.contains_key(&peer_id)
         {
             return false;
         }
         let opts = DialOpts::peer_id(peer_id).addresses(addresses).build();
+        self.pending_static_dials
+            .insert(peer_id, opts.connection_id());
         self.events.push_back(ToSwarm::Dial { opts });
         true
     }
@@ -321,6 +328,71 @@ impl Behaviour {
 
     fn clear_failure(&mut self, peer_id: &PeerId) {
         self.failure_counts.remove(peer_id);
+        self.reservation_cooldowns.remove(peer_id);
+    }
+
+    fn reservation_in_cooldown(&self, peer_id: &PeerId) -> bool {
+        self.reservation_cooldowns
+            .get(peer_id)
+            .is_some_and(|deadline| *deadline > Instant::now())
+    }
+
+    fn poll_cooldowns(&mut self, cx: &mut Context<'_>) -> bool {
+        let now = Instant::now();
+
+        let reservations_expired = self
+            .reservation_cooldowns
+            .values()
+            .any(|deadline| *deadline <= now);
+
+        let due_dials: Vec<_> = self
+            .static_dial_cooldowns
+            .iter()
+            .filter_map(|(peer, deadline)| (*deadline <= now).then_some(*peer))
+            .collect();
+
+        if reservations_expired || !due_dials.is_empty() {
+            self.reservation_cooldowns
+                .retain(|_, deadline| *deadline > now);
+            self.cooldown_wakeup = None;
+
+            for peer_id in due_dials {
+                self.static_dial_cooldowns.remove(&peer_id);
+
+                if let Some(addresses) = self.static_relays.get(&peer_id).cloned() {
+                    self.queue_static_dial(peer_id, addresses);
+                }
+            }
+
+            if reservations_expired {
+                self.meet_reservation_target();
+            }
+
+            return true;
+        }
+
+        let deadline = self
+            .reservation_cooldowns
+            .values()
+            .chain(self.static_dial_cooldowns.values())
+            .copied()
+            .min();
+
+        let Some(deadline) = deadline else {
+            self.cooldown_wakeup = None;
+            return false;
+        };
+
+        if self.cooldown_wakeup.as_ref().map(|(at, _)| *at) != Some(deadline) {
+            self.cooldown_wakeup = Some((
+                deadline,
+                Delay::new(deadline.saturating_duration_since(now)),
+            ));
+        }
+
+        self.cooldown_wakeup
+            .as_mut()
+            .is_some_and(|(_, timer)| timer.poll_unpin(cx).is_ready())
     }
 
     fn determine_status_from_external_addresses(&mut self) {
@@ -346,41 +418,38 @@ impl Behaviour {
         }
     }
 
-    fn is_peer_idle(&self, peer_id: &PeerId) -> bool {
-        self.connections.iter().any(|((pid, _), info)| {
-            pid == peer_id
-                && info.relay_status
-                    == RelayStatus::Supported {
-                        status: ReservationStatus::Idle,
-                    }
-        })
-    }
-
     fn has_direct_connection(&self, peer_id: &PeerId) -> bool {
         self.connections
             .iter()
             .any(|((pid, _), info)| pid == peer_id && !info.address.is_relayed())
     }
 
-    fn evict_for_static_peer(&mut self, new_static: PeerId) {
-        let covered = self.covered_peers();
-        if covered.contains(&new_static) {
-            return;
-        }
-        let max = self.config.max_reservations.get() as usize;
-        if covered.len() < max {
+    fn make_room_for_static_relays(&mut self, needed: usize) {
+        if needed == 0 || self.pending_eviction.is_some() {
             return;
         }
 
-        if let Some(listener_id) = self
-            .reservations
-            .iter()
-            .find(|(_, (peer_id, _))| !self.static_relays.contains_key(peer_id))
-            .map(|(listener_id, _)| *listener_id)
-        {
-            self.events
-                .push_back(ToSwarm::RemoveListener { id: listener_id });
+        let listener_id = self.reservations.iter().find_map(|(id, (peer, _))| {
+            let externally_reserved = self
+                .external_reservations
+                .values()
+                .any(|other| other == peer);
+
+            (!self.static_relays.contains_key(peer) && !externally_reserved).then_some(*id)
+        });
+
+        if let Some(id) = listener_id {
+            self.pending_eviction = Some(id);
+            self.events.push_back(ToSwarm::RemoveListener { id });
         }
+    }
+
+    fn remove_reservation(&mut self, id: ListenerId) -> Option<(PeerId, ConnectionId)> {
+        if self.pending_eviction == Some(id) {
+            self.pending_eviction = None;
+        }
+
+        self.reservations.remove(&id)
     }
 
     fn select_connection_for_reservation(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
@@ -448,14 +517,12 @@ impl Behaviour {
     }
 
     fn disable_reservation(&mut self, id: ListenerId, failed: bool) {
-        self.expire_reservation_addrs(id);
-
         if self.external_reservations.remove(&id).is_some() {
             self.meet_reservation_target();
             return;
         }
 
-        let Some((peer_id, connection_id)) = self.reservations.remove(&id) else {
+        let Some((peer_id, connection_id)) = self.remove_reservation(id) else {
             return;
         };
 
@@ -477,88 +544,23 @@ impl Behaviour {
             return;
         };
 
-        let blacklist_duration = failed.then(|| self.record_failure(peer_id));
+        let cooldown_duration = failed.then(|| self.record_failure(peer_id));
 
         let connection = self
             .connections
             .get_mut(&(peer_id, connection_id))
             .expect("connection is tracked");
-        match blacklist_duration {
-            Some(duration) => {
-                connection.relay_status = RelayStatus::Supported {
-                    status: ReservationStatus::Blacklisted,
-                };
-                self.events.push_back(ToSwarm::NotifyHandler {
-                    peer_id,
-                    handler: NotifyHandler::One(connection_id),
-                    event: Either::Left(handler::In::Blacklist { duration }),
-                });
-            }
-            None => {
-                connection.relay_status = RelayStatus::Supported {
-                    status: ReservationStatus::Idle,
-                };
-            }
+        connection.relay_status = RelayStatus::Supported {
+            status: ReservationStatus::Idle,
+        };
+
+        if let Some(duration) = cooldown_duration {
+            self.reservation_cooldowns
+                .insert(peer_id, Instant::now() + duration);
         }
 
         self.record_previous_relay(peer_id, address);
         self.meet_reservation_target();
-    }
-
-    fn reconcile_reservation_addrs(&mut self) {
-        let confirmed: HashSet<Multiaddr> = self
-            .external_addresses
-            .iter()
-            .filter(|addr| addr.is_relayed())
-            .cloned()
-            .collect();
-
-        for addrs in self.reservation_addrs.values_mut() {
-            addrs.retain(|addr| confirmed.contains(addr));
-        }
-        self.reservation_addrs.retain(|_, addrs| !addrs.is_empty());
-
-        for addr in confirmed {
-            let Some(relay_peer) = addr.relay_peer_id() else {
-                continue;
-            };
-
-            let listeners = self
-                .reservations
-                .iter()
-                .filter(|(_, (peer_id, _))| *peer_id == relay_peer)
-                .map(|(id, _)| *id)
-                .chain(
-                    self.external_reservations
-                        .iter()
-                        .filter(|(_, peer_id)| **peer_id == relay_peer)
-                        .map(|(id, _)| *id),
-                )
-                .collect::<Vec<_>>();
-
-            for id in listeners {
-                self.reservation_addrs
-                    .entry(id)
-                    .or_default()
-                    .insert(addr.clone());
-            }
-        }
-    }
-
-    fn expire_reservation_addrs(&mut self, id: ListenerId) {
-        let Some(addrs) = self.reservation_addrs.remove(&id) else {
-            return;
-        };
-
-        for addr in addrs {
-            let still_backed = self
-                .reservation_addrs
-                .values()
-                .any(|other| other.contains(&addr));
-            if !still_backed {
-                self.events.push_back(ToSwarm::ExternalAddrExpired(addr));
-            }
-        }
     }
 
     fn covered_peers(&self) -> HashSet<PeerId> {
@@ -578,14 +580,14 @@ impl Behaviour {
         let max = self.config.max_reservations.get() as usize;
         let covered = self.covered_peers();
         let budget = max.saturating_sub(covered.len());
-        if budget == 0 {
-            return;
-        }
 
         let mut static_candidates = BTreeMap::new();
         let mut candidates: BTreeMap<_, ConnectionId> = BTreeMap::new();
         for ((peer_id, connection_id), info) in self.connections.iter() {
             if covered.contains(peer_id) {
+                continue;
+            }
+            if self.reservation_in_cooldown(peer_id) {
                 continue;
             }
             if info.relay_status
@@ -604,6 +606,12 @@ impl Behaviour {
                 .entry(*peer_id)
                 .and_modify(|existing| *existing = (*existing).min(*connection_id))
                 .or_insert(*connection_id);
+        }
+
+        self.make_room_for_static_relays(static_candidates.len().saturating_sub(budget));
+
+        if budget == 0 {
+            return;
         }
 
         let selected_candidates: Vec<(PeerId, ConnectionId)> = static_candidates
@@ -681,10 +689,6 @@ impl NetworkBehaviour for Behaviour {
             self.determine_status_from_external_addresses();
         }
 
-        if change {
-            self.reconcile_reservation_addrs();
-        }
-
         match event {
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
@@ -704,7 +708,11 @@ impl NetworkBehaviour for Behaviour {
                 self.connections
                     .insert((peer_id, connection_id), connection);
 
-                if self.static_relays.contains_key(&peer_id) {
+                if self.pending_static_dials.get(&peer_id) == Some(&connection_id) {
+                    self.pending_static_dials.remove(&peer_id);
+                }
+
+                if self.has_direct_connection(&peer_id) {
                     self.static_dial_cooldowns.remove(&peer_id);
                 }
             }
@@ -726,7 +734,6 @@ impl NetworkBehaviour for Behaviour {
                     RelayStatus::Supported {
                         status: ReservationStatus::Active { .. }
                             | ReservationStatus::Pending { .. }
-                            | ReservationStatus::Blacklisted
                     }
                 );
 
@@ -734,7 +741,7 @@ impl NetworkBehaviour for Behaviour {
                     status: ReservationStatus::Active { id } | ReservationStatus::Pending { id },
                 } = connection.relay_status
                 {
-                    self.reservations.remove(&id);
+                    self.remove_reservation(id);
                     self.meet_reservation_target();
                 }
 
@@ -792,11 +799,7 @@ impl NetworkBehaviour for Behaviour {
                 if let Some(relay_peer_id) = addr.relay_peer_id() {
                     self.external_reservations
                         .insert(listener_id, relay_peer_id);
-                    self.reconcile_reservation_addrs();
                 }
-            }
-            FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, .. }) => {
-                self.disable_reservation(listener_id, false);
             }
             FromSwarm::ListenerError(ListenerError { listener_id, .. }) => {
                 self.disable_reservation(listener_id, true);
@@ -810,12 +813,19 @@ impl NetworkBehaviour for Behaviour {
             }
             FromSwarm::DialFailure(DialFailure {
                 peer_id: Some(peer_id),
+                connection_id,
                 error,
                 ..
-            }) if self.static_relays.contains_key(&peer_id) => {
-                tracing::warn!(%peer_id, %error, "dial to static relay failed");
-                self.static_dial_cooldowns
-                    .insert(peer_id, Instant::now() + self.config.failure_cooldown);
+            }) if self.pending_static_dials.get(&peer_id) == Some(&connection_id) => {
+                self.pending_static_dials.remove(&peer_id);
+
+                if self.static_relays.contains_key(&peer_id)
+                    && !self.has_direct_connection(&peer_id)
+                {
+                    tracing::warn!(%peer_id, %error, "dial to static relay failed");
+                    self.static_dial_cooldowns
+                        .insert(peer_id, Instant::now() + self.config.failure_cooldown);
+                }
             }
             _ => {}
         }
@@ -842,9 +852,6 @@ impl NetworkBehaviour for Behaviour {
                     connection.relay_status = RelayStatus::Supported {
                         status: ReservationStatus::Idle,
                     };
-                    if self.static_relays.contains_key(&peer_id) {
-                        self.evict_for_static_peer(peer_id);
-                    }
                     self.meet_reservation_target();
                     self.update_relay_availability();
                 }
@@ -859,8 +866,7 @@ impl NetworkBehaviour for Behaviour {
                 let lost_address = drop_listener.map(|_| connection.address.clone());
                 connection.relay_status = RelayStatus::NotSupported;
                 if let Some(id) = drop_listener {
-                    self.expire_reservation_addrs(id);
-                    self.reservations.remove(&id);
+                    self.remove_reservation(id);
                     self.events.push_back(ToSwarm::RemoveListener { id });
                     self.meet_reservation_target();
                 }
@@ -869,19 +875,6 @@ impl NetworkBehaviour for Behaviour {
                 }
                 self.update_relay_availability();
             }
-            Out::BlacklistExpired => {
-                if matches!(
-                    connection.relay_status,
-                    RelayStatus::Supported {
-                        status: ReservationStatus::Blacklisted
-                    }
-                ) {
-                    connection.relay_status = RelayStatus::Supported {
-                        status: ReservationStatus::Idle,
-                    };
-                    self.meet_reservation_target();
-                }
-            }
         }
     }
 
@@ -889,13 +882,19 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        if let Some(event) = self.events.pop_front() {
-            return Poll::Ready(event);
+        loop {
+            if let Some(event) = self.events.pop_front() {
+                return Poll::Ready(event);
+            }
+
+            if self.poll_cooldowns(cx) {
+                continue;
+            }
+
+            self.waker = Some(cx.waker().clone());
+
+            return Poll::Pending;
         }
-
-        self.waker = Some(cx.waker().clone());
-
-        Poll::Pending
     }
 }
 
