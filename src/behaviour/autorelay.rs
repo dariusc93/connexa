@@ -6,8 +6,8 @@ use crate::prelude::swarm::{
     ExternalAddresses, ListenOpts, NewListenAddr,
     derive_prelude::{
         AddressChange, ConnectionClosed, ConnectionDenied, ConnectionEstablished, ConnectionId,
-        DialFailure, ExpiredListenAddr, FromSwarm, ListenerClosed, ListenerError, Multiaddr,
-        NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+        DialFailure, FromSwarm, ListenerClosed, ListenerError, Multiaddr, NetworkBehaviour,
+        THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
     },
     dial_opts::DialOpts,
     dummy,
@@ -17,6 +17,7 @@ use crate::prelude::{PeerId, Protocol};
 use either::Either;
 use futures::FutureExt;
 use futures_timer::Delay;
+use libp2p::core::ConnectedPoint;
 use libp2p::swarm::dial_opts::PeerCondition;
 use std::collections::BTreeMap;
 use std::{
@@ -98,16 +99,24 @@ pub enum Status {
 
 #[derive(Debug)]
 struct Connection {
-    address: Multiaddr,
+    endpoint: ConnectedPoint,
     relay_status: RelayStatus,
 }
 
 impl Connection {
     /// Mark relayed connection as not supported
     pub(crate) fn disqualify_connection_if_relayed(&mut self) {
-        if self.address.is_relayed() {
+        if self.endpoint.is_relayed() {
             self.relay_status = RelayStatus::NotSupported;
         }
+    }
+
+    pub(crate) fn is_relayed(&self) -> bool {
+        self.endpoint.is_relayed()
+    }
+
+    pub(crate) fn addr(&self) -> &Multiaddr {
+        self.endpoint.get_remote_address()
     }
 }
 
@@ -426,7 +435,7 @@ impl Behaviour {
     fn has_direct_connection(&self, peer_id: &PeerId) -> bool {
         self.connections
             .iter()
-            .any(|((pid, _), info)| pid == peer_id && !info.address.is_relayed())
+            .any(|((pid, _), info)| pid == peer_id && !info.is_relayed())
     }
 
     fn make_room_for_static_relays(&mut self, needed: usize) {
@@ -471,7 +480,7 @@ impl Behaviour {
             return;
         }
 
-        let addr_with_peer_id = match info.address.clone().with_p2p(peer_id) {
+        let addr_with_peer_id = match info.addr().clone().with_p2p(peer_id) {
             Ok(addr) => addr,
             Err(addr) => {
                 tracing::warn!(%addr, "address unexpectedly contains a different peer id than the connection; marking relay connection ineligible");
@@ -543,7 +552,7 @@ impl Behaviour {
                     }
                 )
             })
-            .map(|info| info.address.clone())
+            .map(|info| info.addr().clone())
         else {
             self.meet_reservation_target();
             return;
@@ -701,10 +710,8 @@ impl NetworkBehaviour for Behaviour {
                 connection_id,
                 ..
             }) => {
-                let remote_addr = endpoint.get_remote_address().clone();
-
                 let mut connection = Connection {
-                    address: remote_addr,
+                    endpoint: endpoint.clone(),
                     relay_status: RelayStatus::Pending,
                 };
 
@@ -751,7 +758,7 @@ impl NetworkBehaviour for Behaviour {
                 }
 
                 if had_reservation {
-                    self.record_previous_relay(peer_id, connection.address);
+                    self.record_previous_relay(peer_id, connection.addr().clone());
                 }
 
                 if let Some(addresses) = self.static_relays.get(&peer_id).cloned() {
@@ -770,9 +777,7 @@ impl NetworkBehaviour for Behaviour {
                     return;
                 };
 
-                let new_addr = new.get_remote_address();
-
-                connection.address = new_addr.clone();
+                connection.endpoint = new.clone();
             }
             FromSwarm::NewListenAddr(NewListenAddr { listener_id, addr }) => {
                 if !addr.is_relayed() {
@@ -868,7 +873,7 @@ impl NetworkBehaviour for Behaviour {
                     } => Some(id),
                     _ => None,
                 };
-                let lost_address = drop_listener.map(|_| connection.address.clone());
+                let lost_address = drop_listener.map(|_| connection.addr().clone());
                 connection.relay_status = RelayStatus::NotSupported;
                 if let Some(id) = drop_listener {
                     self.remove_reservation(id);
