@@ -17,6 +17,7 @@ use crate::prelude::{PeerId, Protocol};
 use either::Either;
 use futures::FutureExt;
 use futures_timer::Delay;
+use libp2p::swarm::dial_opts::PeerCondition;
 use std::collections::BTreeMap;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -291,7 +292,11 @@ impl Behaviour {
         {
             return false;
         }
-        let opts = DialOpts::peer_id(peer_id).addresses(addresses).build();
+        let opts = DialOpts::peer_id(peer_id)
+            .condition(PeerCondition::NotDialing)
+            .addresses(addresses)
+            .build();
+
         self.pending_static_dials
             .insert(peer_id, opts.connection_id());
         self.events.push_back(ToSwarm::Dial { opts });
