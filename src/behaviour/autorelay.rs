@@ -368,6 +368,10 @@ impl Behaviour {
         if reservations_expired || !due_dials.is_empty() {
             self.reservation_cooldowns
                 .retain(|_, deadline| *deadline > now);
+            self.failure_counts.retain(|peer_id, _| {
+                self.reservation_cooldowns.contains_key(peer_id)
+                    || self.connections.keys().any(|(pid, _)| pid == peer_id)
+            });
             self.cooldown_wakeup = None;
 
             for peer_id in due_dials {
@@ -737,7 +741,9 @@ impl NetworkBehaviour for Behaviour {
                     return;
                 };
 
-                if !self.connections.keys().any(|(pid, _)| *pid == peer_id) {
+                if !self.connections.keys().any(|(pid, _)| *pid == peer_id)
+                    && !self.reservation_in_cooldown(&peer_id)
+                {
                     self.clear_failure(&peer_id);
                 }
 
