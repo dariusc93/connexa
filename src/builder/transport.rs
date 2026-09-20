@@ -294,16 +294,6 @@ pub(crate) fn build_transport(
         false => Either::Right(DummyTransport::<DummyStream>::new()),
     };
 
-    #[cfg(feature = "dns")]
-    let transport = match enable_dns {
-        true => {
-            let (cfg, opts) = dns_resolver.unwrap_or_default().into();
-            let dns_transport = TokioDnsConfig::custom(transport, cfg, opts);
-            Either::Left(dns_transport)
-        }
-        false => Either::Right(transport),
-    };
-
     #[cfg(feature = "relay")]
     let transport = match relay {
         Some(relay) => Either::Left(OrTransport::new(relay, transport)),
@@ -466,6 +456,15 @@ pub(crate) fn build_transport(
                     FutureEither::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
                 })
                 .boxed()
+        }
+        false => transport,
+    };
+
+    #[cfg(feature = "dns")]
+    let transport = match enable_dns {
+        true => {
+            let (cfg, opts) = dns_resolver.unwrap_or_default().into();
+            TokioDnsConfig::custom(transport, cfg, opts).boxed()
         }
         false => transport,
     };
