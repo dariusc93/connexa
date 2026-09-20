@@ -33,7 +33,12 @@ where
                 //       or as needed using the callback to check this event.
                 #[cfg(feature = "kad")]
                 if let Some(kad) = swarm.behaviour_mut().kademlia.as_mut() {
-                    if protocols.iter().any(|p| libp2p::kad::PROTOCOL_NAME.eq(p)) {
+                    let supports_kademlia = kad
+                        .protocol_names()
+                        .iter()
+                        .any(|protocol| protocols.contains(protocol));
+
+                    if supports_kademlia {
                         for addr in listen_addrs {
                             kad.add_address(&peer_id, addr.clone());
                         }
