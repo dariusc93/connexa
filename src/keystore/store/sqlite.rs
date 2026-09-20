@@ -108,15 +108,20 @@ impl Keystore for SqliteKeystore {
 
     async fn list(&self) -> Result<Vec<KeyMetadata>> {
         let pool = self.pool().await?;
-        let rows: Vec<(Vec<u8>,)> = sqlx::query_as("SELECT data FROM keys")
+        let rows: Vec<(String, Vec<u8>)> = sqlx::query_as("SELECT label, data FROM keys")
             .fetch_all(pool)
             .await
             .map_err(backend)?;
         let mut metadata = Vec::with_capacity(rows.len());
-        for (bytes,) in rows {
-            if let Ok(entry) = cbor4ii::serde::from_slice::<EncryptedEntry>(&bytes) {
-                metadata.push(entry.metadata);
+        for (label, bytes) in rows {
+            let entry = cbor4ii::serde::from_slice::<EncryptedEntry>(&bytes).map_err(backend)?;
+            if entry.metadata.label != label {
+                return Err(backend(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "key entry label does not match its database key",
+                )));
             }
+            metadata.push(entry.metadata);
         }
         Ok(metadata)
     }

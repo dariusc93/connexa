@@ -256,14 +256,26 @@ impl Keystore for FilesystemKeystore {
             let mut metadata = Vec::new();
             for entry in fs::read_dir(&store.dir).map_err(Error::Backend)? {
                 let entry = entry.map_err(Error::Backend)?;
-                if !entry.file_type().map_err(Error::Backend)?.is_file() {
-                    continue;
+                let file_type = entry.file_type().map_err(Error::Backend)?;
+                if !file_type.is_file() {
+                    if file_type.is_dir() && entry.file_name() == ".tmp" {
+                        continue;
+                    }
+                    return Err(Error::Backend(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "keystore contains an unexpected entry",
+                    )));
                 }
-                if let Ok(bytes) = fs::read(entry.path())
-                    && let Ok(decoded) = cbor4ii::serde::from_slice::<EncryptedEntry>(&bytes)
-                {
-                    metadata.push(decoded.metadata);
+                let bytes = fs::read(entry.path()).map_err(Error::Backend)?;
+                let decoded =
+                    cbor4ii::serde::from_slice::<EncryptedEntry>(&bytes).map_err(backend)?;
+                if entry.file_name() != std::ffi::OsStr::new(&decoded.metadata.label) {
+                    return Err(Error::Backend(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "key entry label does not match its file name",
+                    )));
                 }
+                metadata.push(decoded.metadata);
             }
             Ok(metadata)
         })
@@ -775,6 +787,19 @@ mod tests {
         ));
 
         let _ = tokio::fs::remove_dir_all(&dir).await;
+    }
+
+    #[tokio::test]
+    async fn list_rejects_a_mismatched_file_name() {
+        let dir = TestDir::new();
+        let store = dir.store();
+        store.put(entry("stored", 1)).await.unwrap();
+        fs::rename(dir.0.join("stored"), dir.0.join("other")).unwrap();
+
+        assert!(matches!(
+            store.list().await,
+            Err(Error::Backend(error)) if error.kind() == io::ErrorKind::InvalidData
+        ));
     }
 
     #[tokio::test]

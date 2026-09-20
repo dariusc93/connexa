@@ -123,10 +123,16 @@ impl Keystore for RedbKeystore {
             };
             let mut metadata = Vec::new();
             for entry in table.iter().map_err(backend)? {
-                let (_label, value) = entry.map_err(backend)?;
-                if let Ok(decoded) = cbor4ii::serde::from_slice::<EncryptedEntry>(value.value()) {
-                    metadata.push(decoded.metadata);
+                let (label, value) = entry.map_err(backend)?;
+                let decoded =
+                    cbor4ii::serde::from_slice::<EncryptedEntry>(value.value()).map_err(backend)?;
+                if decoded.metadata.label != label.value() {
+                    return Err(backend(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "key entry label does not match its database key",
+                    )));
                 }
+                metadata.push(decoded.metadata);
             }
             Ok(metadata)
         })

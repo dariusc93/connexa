@@ -116,16 +116,24 @@ impl Keystore for IndexedDbKeystore {
                 .transaction(&[OBJECT_STORE], TransactionMode::ReadOnly)
                 .map_err(backend)?;
             let store = tx.object_store(OBJECT_STORE).map_err(backend)?;
-            let values = store
-                .get_all(None, None)
-                .map_err(backend)?
-                .await
-                .map_err(backend)?;
+            let values = store.get_all(None, None).map_err(backend)?;
+            let keys = store.get_all_keys(None, None).map_err(backend)?;
+            let values = values.await.map_err(backend)?;
+            let keys = keys.await.map_err(backend)?;
+            if keys.len() != values.len() {
+                return Err(backend("key entry count does not match its key count"));
+            }
             let mut metadata = Vec::with_capacity(values.len());
-            for value in values {
-                if let Ok(entry) = serde_wasm_bindgen::from_value::<EncryptedEntry>(value) {
-                    metadata.push(entry.metadata);
+            for (key, value) in keys.into_iter().zip(values) {
+                let label = key
+                    .as_string()
+                    .ok_or_else(|| backend("key entry has a non-string database key"))?;
+                let entry =
+                    serde_wasm_bindgen::from_value::<EncryptedEntry>(value).map_err(backend)?;
+                if entry.metadata.label != label {
+                    return Err(backend("key entry label does not match its database key"));
                 }
+                metadata.push(entry.metadata);
             }
             Ok(metadata)
         })

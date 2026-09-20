@@ -3,21 +3,22 @@ pub mod store;
 
 use crate::keystore::store::memory::MemoryKeystore;
 use cipher::xchacha20poly1305::XChaCha20Poly1305Cipher;
-use futures::TryStreamExt;
-use futures::stream::FuturesUnordered;
 use libp2p::PeerId;
 use libp2p::identity::{Keypair, PublicKey};
 use rand::Rng;
+use std::collections::HashSet;
 use std::fmt::Display;
 use std::future::Future;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::{OwnedRwLockWriteGuard, RwLock, RwLockReadGuard};
 use web_time::Duration;
-use web_time::SystemTime;
+use web_time::{SystemTime, UNIX_EPOCH};
 use zeroize::Zeroizing;
 
 type Result<T> = std::result::Result<T, Error>;
+
+const METADATA_AAD_DOMAIN: &[u8] = b"connexa-keystore-metadata-v1";
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -176,6 +177,11 @@ impl EncryptedEntry {
     }
 }
 
+struct OpenedEntry {
+    keypair: Keypair,
+    metadata: KeyMetadata,
+}
+
 /// Generate a random 32-byte master key for a [`Keychain`].
 pub fn generate_key() -> [u8; 32] {
     let mut key = [0u8; 32];
@@ -202,6 +208,46 @@ pub(crate) fn validate_label(label: &str) -> Result<()> {
     Ok(())
 }
 
+fn metadata_aad(metadata: &KeyMetadata) -> Vec<u8> {
+    let mut aad = Vec::with_capacity(
+        METADATA_AAD_DOMAIN.len() + metadata.label.len() + metadata.public_key.len() + 64,
+    );
+    aad.extend_from_slice(METADATA_AAD_DOMAIN);
+    extend_bytes(&mut aad, metadata.label.as_bytes());
+    aad.push(match metadata.key_type {
+        KeyType::Ed25519 => 0,
+        KeyType::Rsa => 1,
+        KeyType::Secp256k1 => 2,
+        KeyType::Ecdsa => 3,
+    });
+    aad.extend_from_slice(&metadata.version.to_be_bytes());
+    extend_time(&mut aad, metadata.created_at);
+    match metadata.expires_at {
+        Some(expires_at) => {
+            aad.push(1);
+            extend_time(&mut aad, expires_at);
+        }
+        None => aad.push(0),
+    }
+    extend_bytes(&mut aad, &metadata.public_key);
+    aad
+}
+
+fn extend_bytes(aad: &mut Vec<u8>, bytes: &[u8]) {
+    aad.extend_from_slice(&(bytes.len() as u64).to_be_bytes());
+    aad.extend_from_slice(bytes);
+}
+
+fn extend_time(aad: &mut Vec<u8>, time: SystemTime) {
+    let (before_epoch, duration) = match time.duration_since(UNIX_EPOCH) {
+        Ok(duration) => (false, duration),
+        Err(error) => (true, error.duration()),
+    };
+    aad.push(u8::from(before_epoch));
+    aad.extend_from_slice(&duration.as_secs().to_be_bytes());
+    aad.extend_from_slice(&duration.subsec_nanos().to_be_bytes());
+}
+
 /// Backend responsible for persisting encrypted key entries.
 pub trait Keystore: Send + Sync + 'static {
     /// Store (or replace) an entry, keyed by its `label`.
@@ -211,12 +257,15 @@ pub trait Keystore: Send + Sync + 'static {
     /// Fetch the entry for `label`, if present.
     fn get(&self, label: &str) -> impl Future<Output = Result<Option<EncryptedEntry>>> + Send;
     /// List metadata for all stored entries.
+    ///
+    /// Each returned label must identify the same entry when passed to [`Keystore::get`].
+    /// The result must include every stored entry and malformed entries must return an error.
     fn list(&self) -> impl Future<Output = Result<Vec<KeyMetadata>>> + Send;
     /// Remove the entry for `label`, returning whether one existed.
     fn remove(&self, label: &str) -> impl Future<Output = Result<bool>> + Send;
 }
 
-/// Pluggable authenticated-encryption backend for a [`Keychain`].
+/// Pluggable authenticated encryption backend for a [`Keychain`].
 pub trait Cipher: Send + Sync + 'static {
     fn encrypt(&self, aad: Option<&[u8]>, plaintext: &[u8]) -> Result<Vec<u8>>;
     fn decrypt(&self, aad: Option<&[u8]>, ciphertext: &[u8]) -> Result<Vec<u8>>;
@@ -363,6 +412,11 @@ impl<S: Keystore> Keychain<S> {
             .get(label)
             .await?
             .ok_or_else(|| Error::NotFound(label.to_owned()))?;
+        let current = Self::open_entry(
+            guard.as_deref().expect("cipher was checked when locking"),
+            label,
+            current,
+        )?;
         let version = current.metadata.version.saturating_add(1);
         let keypair = match key.into() {
             RotateKey::Keypair(keypair) => keypair,
@@ -381,23 +435,20 @@ impl<S: Keystore> Keychain<S> {
     ) -> Result<()> {
         self.disable_check()?;
         validate_label(label)?;
-        let plaintext = Zeroizing::new(keypair.to_protobuf_encoding()?);
-        let ciphertext = guard
-            .as_ref()
-            .expect("cipher was checked when locking")
-            .encrypt(Some(label.as_bytes()), plaintext.as_slice())?;
         let created_at = SystemTime::now();
-        let entry = EncryptedEntry {
-            metadata: KeyMetadata {
-                label: label.to_owned(),
-                key_type: keypair.key_type().into(),
-                version,
-                created_at,
-                expires_at: expiry.resolve(created_at),
-                public_key: keypair.public().encode_protobuf(),
-            },
-            ciphertext,
+        let metadata = KeyMetadata {
+            label: label.to_owned(),
+            key_type: keypair.key_type().into(),
+            version,
+            created_at,
+            expires_at: expiry.resolve(created_at),
+            public_key: keypair.public().encode_protobuf(),
         };
+        let entry = Self::seal_entry(
+            guard.as_deref().expect("cipher was checked when locking"),
+            metadata,
+            keypair,
+        )?;
         let backend = self.backend.clone();
         finish_mutation(guard, async move { backend.put(entry).await }).await
     }
@@ -405,43 +456,66 @@ impl<S: Keystore> Keychain<S> {
     /// Fetch and decrypt the keypair stored under `label`. Returns with [`Error::Expired`] if the
     /// key is past its expiration (the entry is left in place. See [`Keychain::purge_expired`]).
     pub async fn get(&self, label: &str) -> Result<Keypair> {
-        let guard = self.read_lock().await?;
         self.disable_check()?;
         validate_label(label)?;
-        Self::decode_entry(
-            guard.as_deref().expect("cipher was checked when locking"),
-            label,
-            self.backend.get(label).await?,
-        )
-    }
-
-    fn decode_entry(
-        cipher: &dyn Cipher,
-        label: &str,
-        entry: Option<EncryptedEntry>,
-    ) -> Result<Keypair> {
-        let entry = entry.ok_or_else(|| Error::NotFound(label.to_owned()))?;
-        if entry.metadata.is_expired() {
+        let opened = self
+            .authenticated_entry(label)
+            .await?
+            .ok_or_else(|| Error::NotFound(label.to_owned()))?;
+        if opened.metadata.is_expired() {
             return Err(Error::Expired(label.to_owned()));
         }
-        let plaintext = Zeroizing::new(cipher.decrypt(Some(label.as_bytes()), &entry.ciphertext)?);
-        Keypair::from_protobuf_encoding(plaintext.as_slice()).map_err(Error::from)
+        Ok(opened.keypair)
+    }
+
+    fn seal_entry(
+        cipher: &dyn Cipher,
+        metadata: KeyMetadata,
+        keypair: &Keypair,
+    ) -> Result<EncryptedEntry> {
+        let plaintext = Zeroizing::new(keypair.to_protobuf_encoding()?);
+        let aad = metadata_aad(&metadata);
+        Ok(EncryptedEntry {
+            metadata,
+            ciphertext: cipher.encrypt(Some(&aad), plaintext.as_slice())?,
+        })
+    }
+
+    fn open_entry(cipher: &dyn Cipher, label: &str, entry: EncryptedEntry) -> Result<OpenedEntry> {
+        if entry.metadata.label != label {
+            return Err(Error::DecryptFailed);
+        }
+        let aad = metadata_aad(&entry.metadata);
+        let plaintext = Zeroizing::new(cipher.decrypt(Some(&aad), &entry.ciphertext)?);
+        let keypair = Keypair::from_protobuf_encoding(plaintext.as_slice())?;
+        if KeyType::from(keypair.key_type()) != entry.metadata.key_type
+            || keypair.public().encode_protobuf() != entry.metadata.public_key
+        {
+            return Err(Error::DecryptFailed);
+        }
+        Ok(OpenedEntry {
+            keypair,
+            metadata: entry.metadata,
+        })
+    }
+
+    async fn authenticated_entry(&self, label: &str) -> Result<Option<OpenedEntry>> {
+        let guard = self.read_lock().await?;
+        let entry = self.backend.get(label).await?;
+        entry
+            .map(|entry| {
+                Self::open_entry(
+                    guard.as_deref().expect("cipher was checked when locking"),
+                    label,
+                    entry,
+                )
+            })
+            .transpose()
     }
 
     /// The public key stored under `label`.
     pub async fn public_key(&self, label: &str) -> Result<PublicKey> {
-        let _guard = self.read_lock().await?;
-        self.disable_check()?;
-        validate_label(label)?;
-        let entry = self
-            .backend
-            .get(label)
-            .await?
-            .ok_or_else(|| Error::NotFound(label.to_owned()))?;
-        if entry.metadata.is_expired() {
-            return Err(Error::Expired(label.to_owned()));
-        }
-        entry.metadata.public_key()
+        Ok(self.get(label).await?.public())
     }
 
     /// The [`PeerId`] stored under `label`.
@@ -456,32 +530,84 @@ impl<S: Keystore> Keychain<S> {
         let guard = self.write_lock().await?;
         self.disable_check()?;
         validate_label(label)?;
-        match Self::decode_entry(
-            guard.as_deref().expect("cipher was checked when locking"),
-            label,
-            self.backend.get(label).await?,
-        ) {
-            Ok(keypair) => Ok(keypair),
-            Err(Error::NotFound(_)) => {
+        match self.backend.get(label).await? {
+            Some(entry) => {
+                let opened = Self::open_entry(
+                    guard.as_deref().expect("cipher was checked when locking"),
+                    label,
+                    entry,
+                )?;
+                if opened.metadata.is_expired() {
+                    return Err(Error::Expired(label.to_owned()));
+                }
+                Ok(opened.keypair)
+            }
+            None => {
                 let keypair = Keypair::generate_ed25519();
                 self.store(label, &keypair, Expiry::Never, 1, guard).await?;
                 Ok(keypair)
             }
-            Err(err) => Err(err),
         }
     }
 
-    /// List metadata for all stored keys.
+    /// List authenticated metadata for all stored keys.
     pub async fn list(&self) -> Result<Vec<KeyMetadata>> {
-        let _guard = self.read_lock().await?;
-        self.backend.list().await
+        Ok(self
+            .authenticated_entries()
+            .await?
+            .into_iter()
+            .map(|entry| entry.metadata)
+            .collect())
     }
 
-    /// Fetch the metadata for `label` without decrypting the key.
+    /// Fetch authenticated metadata for `label`.
     pub async fn metadata(&self, label: &str) -> Result<Option<KeyMetadata>> {
-        let _guard = self.read_lock().await?;
         validate_label(label)?;
-        Ok(self.backend.get(label).await?.map(|entry| entry.metadata))
+        Ok(self
+            .authenticated_entry(label)
+            .await?
+            .map(|entry| entry.metadata))
+    }
+
+    async fn authenticated_entries(&self) -> Result<Vec<OpenedEntry>> {
+        let guard = self.read_lock().await?;
+        let entries = self.load_entries().await?;
+        Self::open_entries(
+            guard.as_deref().expect("cipher was checked when locking"),
+            entries,
+        )
+    }
+
+    async fn load_entries(&self) -> Result<Vec<EncryptedEntry>> {
+        let listed = self.backend.list().await?;
+        let mut entries = Vec::with_capacity(listed.len());
+        let mut labels = HashSet::with_capacity(listed.len());
+        for metadata in listed {
+            validate_label(&metadata.label)?;
+            if !labels.insert(metadata.label.clone()) {
+                return Err(Error::DecryptFailed);
+            }
+            let entry = self
+                .backend
+                .get(&metadata.label)
+                .await?
+                .ok_or_else(|| Error::NotFound(metadata.label.clone()))?;
+            if !same_metadata(&metadata, &entry.metadata) {
+                return Err(Error::DecryptFailed);
+            }
+            entries.push(entry);
+        }
+        Ok(entries)
+    }
+
+    fn open_entries(cipher: &dyn Cipher, entries: Vec<EncryptedEntry>) -> Result<Vec<OpenedEntry>> {
+        entries
+            .into_iter()
+            .map(|entry| {
+                let label = entry.metadata.label.clone();
+                Self::open_entry(cipher, &label, entry)
+            })
+            .collect()
     }
 
     /// Remove the key stored under `label`, returning whether one existed.
@@ -496,14 +622,21 @@ impl<S: Keystore> Keychain<S> {
     /// Remove every expired key, returning how many were removed.
     pub async fn purge_expired(&self) -> Result<usize> {
         let guard = self.write_lock().await?;
+        let entries = self.load_entries().await?;
+        let opened = Self::open_entries(
+            guard.as_deref().expect("cipher was checked when locking"),
+            entries,
+        )?;
+        let expired: Vec<_> = opened
+            .into_iter()
+            .filter(|entry| entry.metadata.is_expired())
+            .map(|entry| entry.metadata.label)
+            .collect();
+        if expired.is_empty() {
+            return Ok(0);
+        }
         let backend = self.backend.clone();
         finish_mutation(guard, async move {
-            let expired = backend
-                .list()
-                .await?
-                .into_iter()
-                .filter(KeyMetadata::is_expired)
-                .map(|metadata| metadata.label);
             let mut removed = 0;
             for label in expired {
                 if backend.remove(&label).await? {
@@ -520,25 +653,16 @@ impl<S: Keystore> Keychain<S> {
     pub async fn migrate_cipher(&self, new_cipher: impl Cipher) -> Result<Keychain<S>> {
         let mut guard = self.write_lock().await?;
         self.disable_check()?;
-        let metadata = self.backend.list().await?;
-        let originals =
-            FuturesUnordered::from_iter(metadata.into_iter().map(|metadata| async move {
-                self.backend
-                    .get(&metadata.label)
-                    .await?
-                    .ok_or(Error::NotFound(metadata.label))
-            }))
-            .try_collect::<Vec<_>>()
-            .await?;
+        let originals = self.load_entries().await?;
         let mut entries = Vec::with_capacity(originals.len());
         let cipher = guard.as_ref().expect("cipher was checked when locking");
         for entry in &originals {
-            let aad = Some(entry.metadata.label.as_bytes());
-            let plaintext = Zeroizing::new(cipher.decrypt(aad, &entry.ciphertext)?);
-            entries.push(EncryptedEntry {
-                metadata: entry.metadata.clone(),
-                ciphertext: new_cipher.encrypt(aad, &plaintext)?,
-            });
+            let opened = Self::open_entry(cipher.as_ref(), &entry.metadata.label, entry.clone())?;
+            entries.push(Self::seal_entry(
+                &new_cipher,
+                opened.metadata,
+                &opened.keypair,
+            )?);
         }
 
         let next = self.clone();
@@ -584,13 +708,16 @@ async fn finish_mutation<T: Send + 'static>(
 }
 
 fn same_entry(a: &EncryptedEntry, b: &EncryptedEntry) -> bool {
-    a.ciphertext == b.ciphertext
-        && a.metadata.label == b.metadata.label
-        && a.metadata.key_type == b.metadata.key_type
-        && a.metadata.version == b.metadata.version
-        && a.metadata.created_at == b.metadata.created_at
-        && a.metadata.expires_at == b.metadata.expires_at
-        && a.metadata.public_key == b.metadata.public_key
+    a.ciphertext == b.ciphertext && same_metadata(&a.metadata, &b.metadata)
+}
+
+fn same_metadata(a: &KeyMetadata, b: &KeyMetadata) -> bool {
+    a.label == b.label
+        && a.key_type == b.key_type
+        && a.version == b.version
+        && a.created_at == b.created_at
+        && a.expires_at == b.expires_at
+        && a.public_key == b.public_key
 }
 
 #[cfg(test)]
@@ -702,6 +829,33 @@ mod tests {
         keychain.backend.put(entry).await.unwrap();
 
         assert!(matches!(keychain.get("b").await, Err(Error::DecryptFailed)));
+    }
+
+    #[cfg(feature = "ed25519")]
+    #[tokio::test]
+    async fn modified_expiry_fails_to_decrypt() {
+        let keychain = Keychain::<MemoryKeystore>::new(generate_key());
+        keychain
+            .insert_with_expiry(
+                "expired",
+                &Keypair::generate_ed25519(),
+                Expiry::At(web_time::UNIX_EPOCH),
+            )
+            .await
+            .unwrap();
+
+        let mut entry = keychain.backend.get("expired").await.unwrap().unwrap();
+        entry.metadata.expires_at = None;
+        keychain.backend.put(entry).await.unwrap();
+
+        assert!(matches!(
+            keychain.metadata("expired").await,
+            Err(Error::DecryptFailed)
+        ));
+        assert!(matches!(
+            keychain.get("expired").await,
+            Err(Error::DecryptFailed)
+        ));
     }
 
     #[cfg(feature = "ed25519")]
