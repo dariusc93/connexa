@@ -59,7 +59,7 @@ indexeddb = ["dep:idb", "serde"]
 redb = ["dep:redb", "dep:cbor4ii", "serde"]
 sqlite = ["dep:sqlx", "dep:cbor4ii", "serde"]
 
-webrtc = ["dep:libp2p-webrtc", "dep:libp2p-webrtc-websys"]
+webrtc = ["dep:libp2p-webrtc", "dep:libp2p-webrtc-websys", "dep:rustls"]
 websocket = ["libp2p/websocket", "rcgen", "dep:pem", "libp2p/websocket-websys"]
 webtransport = ["libp2p/webtransport-websys"]
 
@@ -97,6 +97,7 @@ rand = { version = "0.10" }
 rcgen = { version = "0.14.3", features = ["pem", "x509-parser"] }
 redb = "2"
 rlimit = "0.10.2"
+rustls = { version = "0.23.44", default-features = false, features = ["ring", "std"] }
 send_wrapper = "0.6.0"
 serde = { version = "1.0.219" }
 serde-wasm-bindgen = "0.6.5"
@@ -159,6 +160,7 @@ hickory-resolver.workspace = true
 rcgen = { workspace = true, optional = true }
 redb = { workspace = true, optional = true }
 rlimit.workspace = true
+rustls = { workspace = true, optional = true }
 sqlx = { workspace = true, optional = true }
 tokio = { features = ["full"], workspace = true }
 

@@ -289,6 +289,14 @@ pub(crate) fn build_transport(
     #[cfg(feature = "tls")]
     use libp2p::tls;
 
+    // Note that this is a temporary fix in the event of webrtc being enabled with tls or quic
+    // which may cause issues with the default crypto provider and require us to natively install
+    // the ring provider.
+    #[cfg(all(feature = "webrtc", any(feature = "tls", feature = "quic")))]
+    if enable_webrtc && rustls::crypto::CryptoProvider::get_default().is_none() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    }
+
     let transport = match enable_memory_transport {
         true => Either::Left(MemoryTransport::new()),
         false => Either::Right(DummyTransport::<DummyStream>::new()),
