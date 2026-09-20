@@ -3,11 +3,11 @@ use crate::behaviour::autorelay::handler::Out;
 use crate::multiaddr_ext::MultiaddrExt;
 use crate::prelude::swarm::derive_prelude::{ListenerId, PortUse};
 use crate::prelude::swarm::{
-    ExternalAddresses, ListenOpts, NewListenAddr, NotifyHandler,
+    ExternalAddresses, ListenOpts, NewListenAddr,
     derive_prelude::{
         AddressChange, ConnectionClosed, ConnectionDenied, ConnectionEstablished, ConnectionId,
-        DialFailure, ExpiredListenAddr, FromSwarm, ListenerClosed, ListenerError, Multiaddr,
-        NetworkBehaviour, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+        DialFailure, FromSwarm, ListenerClosed, ListenerError, Multiaddr, NetworkBehaviour,
+        THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
     },
     dial_opts::DialOpts,
     dummy,
@@ -15,6 +15,10 @@ use crate::prelude::swarm::{
 use crate::prelude::transport::Endpoint;
 use crate::prelude::{PeerId, Protocol};
 use either::Either;
+use futures::FutureExt;
+use futures_timer::Delay;
+use libp2p::core::ConnectedPoint;
+use libp2p::swarm::dial_opts::PeerCondition;
 use std::collections::BTreeMap;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -36,23 +40,27 @@ pub struct Behaviour {
 
     connections: HashMap<(PeerId, ConnectionId), Connection>,
 
-    reservations: HashMap<ListenerId, (PeerId, ConnectionId)>,
+    reservations: HashMap<ListenerId, Reservation>,
+
+    pending_eviction: Option<ListenerId>,
 
     external_reservations: HashMap<ListenerId, PeerId>,
 
-    // placeholder for reservations.
-    // TODO: Removed once https://github.com/libp2p/rust-libp2p/pull/3222 is published or backported.
-    reservation_addrs: HashMap<ListenerId, HashSet<Multiaddr>>,
-
     static_relays: HashMap<PeerId, Vec<Multiaddr>>,
+
+    pending_static_dials: HashMap<PeerId, ConnectionId>,
 
     static_dial_cooldowns: HashMap<PeerId, Instant>,
 
     failure_counts: HashMap<PeerId, u32>,
 
+    reservation_cooldowns: HashMap<PeerId, Instant>,
+
     previous_relays: VecDeque<(PeerId, Multiaddr, SystemTime)>,
 
     relays_available: bool,
+
+    cooldown_wakeup: Option<(Instant, Delay)>,
 
     waker: Option<Waker>,
 }
@@ -67,13 +75,16 @@ impl Default for Behaviour {
             events: VecDeque::new(),
             connections: HashMap::new(),
             reservations: HashMap::new(),
+            pending_eviction: None,
             external_reservations: HashMap::new(),
-            reservation_addrs: HashMap::new(),
             static_relays: HashMap::new(),
+            pending_static_dials: HashMap::new(),
             static_dial_cooldowns: HashMap::new(),
             failure_counts: HashMap::new(),
+            reservation_cooldowns: HashMap::new(),
             previous_relays: VecDeque::new(),
             relays_available: false,
+            cooldown_wakeup: None,
             waker: None,
         }
     }
@@ -88,32 +99,46 @@ pub enum Status {
 
 #[derive(Debug)]
 struct Connection {
-    address: Multiaddr,
+    endpoint: ConnectedPoint,
     relay_status: RelayStatus,
 }
 
 impl Connection {
     /// Mark relayed connection as not supported
     pub(crate) fn disqualify_connection_if_relayed(&mut self) {
-        if self.address.is_relayed() {
+        if self.endpoint.is_relayed() {
             self.relay_status = RelayStatus::NotSupported;
         }
+    }
+
+    pub(crate) fn is_relayed(&self) -> bool {
+        self.endpoint.is_relayed()
+    }
+
+    pub(crate) fn addr(&self) -> &Multiaddr {
+        self.endpoint.get_remote_address()
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RelayStatus {
-    Supported { status: ReservationStatus },
+    Supported,
     NotSupported,
     Pending,
 }
 
+#[derive(Debug)]
+struct Reservation {
+    peer_id: PeerId,
+    selected_connection_id: ConnectionId,
+    address: Multiaddr,
+    status: ReservationStatus,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReservationStatus {
-    Idle,
-    Pending { id: ListenerId },
-    Active { id: ListenerId },
-    Blacklisted,
+    Pending,
+    Active,
 }
 
 #[derive(Debug)]
@@ -239,10 +264,6 @@ impl Behaviour {
         }
         let combined = entry.clone();
 
-        if self.is_peer_idle(&peer_id) {
-            self.evict_for_static_peer(peer_id);
-        }
-
         if !self.queue_static_dial(peer_id, combined) {
             self.meet_reservation_target();
         }
@@ -250,7 +271,6 @@ impl Behaviour {
         if let Some(waker) = self.waker.take() {
             waker.wake();
         }
-
         true
     }
 
@@ -280,13 +300,21 @@ impl Behaviour {
     }
 
     fn queue_static_dial(&mut self, peer_id: PeerId, addresses: Vec<Multiaddr>) -> bool {
-        if addresses.is_empty()
+        if !self.static_relays.contains_key(&peer_id)
+            || addresses.is_empty()
             || self.has_direct_connection(&peer_id)
             || self.static_dial_in_cooldown(&peer_id)
+            || self.pending_static_dials.contains_key(&peer_id)
         {
             return false;
         }
-        let opts = DialOpts::peer_id(peer_id).addresses(addresses).build();
+        let opts = DialOpts::peer_id(peer_id)
+            .condition(PeerCondition::NotDialing)
+            .addresses(addresses)
+            .build();
+
+        self.pending_static_dials
+            .insert(peer_id, opts.connection_id());
         self.events.push_back(ToSwarm::Dial { opts });
         true
     }
@@ -321,6 +349,75 @@ impl Behaviour {
 
     fn clear_failure(&mut self, peer_id: &PeerId) {
         self.failure_counts.remove(peer_id);
+        self.reservation_cooldowns.remove(peer_id);
+    }
+
+    fn reservation_in_cooldown(&self, peer_id: &PeerId) -> bool {
+        self.reservation_cooldowns
+            .get(peer_id)
+            .is_some_and(|deadline| *deadline > Instant::now())
+    }
+
+    fn poll_cooldowns(&mut self, cx: &mut Context<'_>) -> bool {
+        let now = Instant::now();
+
+        let reservations_expired = self
+            .reservation_cooldowns
+            .values()
+            .any(|deadline| *deadline <= now);
+
+        let due_dials: Vec<_> = self
+            .static_dial_cooldowns
+            .iter()
+            .filter_map(|(peer, deadline)| (*deadline <= now).then_some(*peer))
+            .collect();
+
+        if reservations_expired || !due_dials.is_empty() {
+            self.reservation_cooldowns
+                .retain(|_, deadline| *deadline > now);
+            self.failure_counts.retain(|peer_id, _| {
+                self.reservation_cooldowns.contains_key(peer_id)
+                    || self.connections.keys().any(|(pid, _)| pid == peer_id)
+            });
+            self.cooldown_wakeup = None;
+
+            for peer_id in due_dials {
+                self.static_dial_cooldowns.remove(&peer_id);
+
+                if let Some(addresses) = self.static_relays.get(&peer_id).cloned() {
+                    self.queue_static_dial(peer_id, addresses);
+                }
+            }
+
+            if reservations_expired {
+                self.meet_reservation_target();
+            }
+
+            return true;
+        }
+
+        let deadline = self
+            .reservation_cooldowns
+            .values()
+            .chain(self.static_dial_cooldowns.values())
+            .copied()
+            .min();
+
+        let Some(deadline) = deadline else {
+            self.cooldown_wakeup = None;
+            return false;
+        };
+
+        if self.cooldown_wakeup.as_ref().map(|(at, _)| *at) != Some(deadline) {
+            self.cooldown_wakeup = Some((
+                deadline,
+                Delay::new(deadline.saturating_duration_since(now)),
+            ));
+        }
+
+        self.cooldown_wakeup
+            .as_mut()
+            .is_some_and(|(_, timer)| timer.poll_unpin(cx).is_ready())
     }
 
     fn determine_status_from_external_addresses(&mut self) {
@@ -346,41 +443,39 @@ impl Behaviour {
         }
     }
 
-    fn is_peer_idle(&self, peer_id: &PeerId) -> bool {
-        self.connections.iter().any(|((pid, _), info)| {
-            pid == peer_id
-                && info.relay_status
-                    == RelayStatus::Supported {
-                        status: ReservationStatus::Idle,
-                    }
-        })
-    }
-
     fn has_direct_connection(&self, peer_id: &PeerId) -> bool {
         self.connections
             .iter()
-            .any(|((pid, _), info)| pid == peer_id && !info.address.is_relayed())
+            .any(|((pid, _), info)| pid == peer_id && !info.is_relayed())
     }
 
-    fn evict_for_static_peer(&mut self, new_static: PeerId) {
-        let covered = self.covered_peers();
-        if covered.contains(&new_static) {
-            return;
-        }
-        let max = self.config.max_reservations.get() as usize;
-        if covered.len() < max {
+    fn make_room_for_static_relays(&mut self, needed: usize) {
+        if needed == 0 || self.pending_eviction.is_some() {
             return;
         }
 
-        if let Some(listener_id) = self
-            .reservations
-            .iter()
-            .find(|(_, (peer_id, _))| !self.static_relays.contains_key(peer_id))
-            .map(|(listener_id, _)| *listener_id)
-        {
-            self.events
-                .push_back(ToSwarm::RemoveListener { id: listener_id });
+        let listener_id = self.reservations.iter().find_map(|(id, reservation)| {
+            let peer = &reservation.peer_id;
+            let externally_reserved = self
+                .external_reservations
+                .values()
+                .any(|other| other == peer);
+
+            (!self.static_relays.contains_key(peer) && !externally_reserved).then_some(*id)
+        });
+
+        if let Some(id) = listener_id {
+            self.pending_eviction = Some(id);
+            self.events.push_back(ToSwarm::RemoveListener { id });
         }
+    }
+
+    fn remove_reservation(&mut self, id: ListenerId) -> Option<Reservation> {
+        if self.pending_eviction == Some(id) {
+            self.pending_eviction = None;
+        }
+
+        self.reservations.remove(&id)
     }
 
     fn select_connection_for_reservation(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
@@ -389,15 +484,12 @@ impl Behaviour {
             .get_mut(&(peer_id, connection_id))
             .expect("connection is present");
 
-        if info.relay_status
-            != (RelayStatus::Supported {
-                status: ReservationStatus::Idle,
-            })
-        {
+        if info.relay_status != RelayStatus::Supported {
             return;
         }
 
-        let addr_with_peer_id = match info.address.clone().with_p2p(peer_id) {
+        let address = info.addr().clone();
+        let addr_with_peer_id = match address.clone().with_p2p(peer_id) {
             Ok(addr) => addr,
             Err(addr) => {
                 tracing::warn!(%addr, "address unexpectedly contains a different peer id than the connection; marking relay connection ineligible");
@@ -409,162 +501,57 @@ impl Behaviour {
         let opts = ListenOpts::new(addr_with_peer_id.with(Protocol::P2pCircuit));
         let id = opts.listener_id();
 
-        info.relay_status = RelayStatus::Supported {
-            status: ReservationStatus::Pending { id },
-        };
-        self.reservations.insert(id, (peer_id, connection_id));
+        self.reservations.insert(
+            id,
+            Reservation {
+                peer_id,
+                selected_connection_id: connection_id,
+                address,
+                status: ReservationStatus::Pending,
+            },
+        );
         self.events.push_back(ToSwarm::ListenOn { opts });
     }
 
     /// Removes all existing reservations.
     pub fn remove_all_reservations(&mut self) {
-        let relay_listeners = self
-            .reservations
-            .iter()
-            .map(|(id, (peer_id, conn_id))| (*id, *peer_id, *conn_id))
-            .collect::<Vec<_>>();
-
-        for (listener_id, peer_id, connection_id) in relay_listeners {
-            let Some(connection) = self.connections.get_mut(&(peer_id, connection_id)) else {
-                continue;
-            };
-
-            if !matches!(
-                connection.relay_status,
-                RelayStatus::Supported {
-                    status: ReservationStatus::Active { id } | ReservationStatus::Pending { id }
-                } if id == listener_id
-            ) {
-                continue;
-            }
-
-            connection.relay_status = RelayStatus::Supported {
-                status: ReservationStatus::Idle,
-            };
-
-            self.events
-                .push_back(ToSwarm::RemoveListener { id: listener_id });
+        for &id in self.reservations.keys() {
+            self.events.push_back(ToSwarm::RemoveListener { id });
         }
     }
 
     fn disable_reservation(&mut self, id: ListenerId, failed: bool) {
-        self.expire_reservation_addrs(id);
-
         if self.external_reservations.remove(&id).is_some() {
             self.meet_reservation_target();
             return;
         }
 
-        let Some((peer_id, connection_id)) = self.reservations.remove(&id) else {
+        let Some(reservation) = self.remove_reservation(id) else {
             return;
         };
 
-        let Some(address) = self
-            .connections
-            .get(&(peer_id, connection_id))
-            .filter(|info| {
-                matches!(
-                    info.relay_status,
-                    RelayStatus::Supported {
-                        status: ReservationStatus::Active { .. }
-                            | ReservationStatus::Pending { .. }
-                    }
-                )
-            })
-            .map(|info| info.address.clone())
-        else {
-            self.meet_reservation_target();
-            return;
-        };
+        tracing::trace!(
+            listener_id = %id,
+            peer_id = %reservation.peer_id,
+            selected_connection_id = %reservation.selected_connection_id,
+            failed,
+            "reservation disabled"
+        );
 
-        let blacklist_duration = failed.then(|| self.record_failure(peer_id));
-
-        let connection = self
-            .connections
-            .get_mut(&(peer_id, connection_id))
-            .expect("connection is tracked");
-        match blacklist_duration {
-            Some(duration) => {
-                connection.relay_status = RelayStatus::Supported {
-                    status: ReservationStatus::Blacklisted,
-                };
-                self.events.push_back(ToSwarm::NotifyHandler {
-                    peer_id,
-                    handler: NotifyHandler::One(connection_id),
-                    event: Either::Left(handler::In::Blacklist { duration }),
-                });
-            }
-            None => {
-                connection.relay_status = RelayStatus::Supported {
-                    status: ReservationStatus::Idle,
-                };
-            }
+        if failed {
+            let duration = self.record_failure(reservation.peer_id);
+            self.reservation_cooldowns
+                .insert(reservation.peer_id, Instant::now() + duration);
         }
 
-        self.record_previous_relay(peer_id, address);
+        self.record_previous_relay(reservation.peer_id, reservation.address);
         self.meet_reservation_target();
-    }
-
-    fn reconcile_reservation_addrs(&mut self) {
-        let confirmed: HashSet<Multiaddr> = self
-            .external_addresses
-            .iter()
-            .filter(|addr| addr.is_relayed())
-            .cloned()
-            .collect();
-
-        for addrs in self.reservation_addrs.values_mut() {
-            addrs.retain(|addr| confirmed.contains(addr));
-        }
-        self.reservation_addrs.retain(|_, addrs| !addrs.is_empty());
-
-        for addr in confirmed {
-            let Some(relay_peer) = addr.relay_peer_id() else {
-                continue;
-            };
-
-            let listeners = self
-                .reservations
-                .iter()
-                .filter(|(_, (peer_id, _))| *peer_id == relay_peer)
-                .map(|(id, _)| *id)
-                .chain(
-                    self.external_reservations
-                        .iter()
-                        .filter(|(_, peer_id)| **peer_id == relay_peer)
-                        .map(|(id, _)| *id),
-                )
-                .collect::<Vec<_>>();
-
-            for id in listeners {
-                self.reservation_addrs
-                    .entry(id)
-                    .or_default()
-                    .insert(addr.clone());
-            }
-        }
-    }
-
-    fn expire_reservation_addrs(&mut self, id: ListenerId) {
-        let Some(addrs) = self.reservation_addrs.remove(&id) else {
-            return;
-        };
-
-        for addr in addrs {
-            let still_backed = self
-                .reservation_addrs
-                .values()
-                .any(|other| other.contains(&addr));
-            if !still_backed {
-                self.events.push_back(ToSwarm::ExternalAddrExpired(addr));
-            }
-        }
     }
 
     fn covered_peers(&self) -> HashSet<PeerId> {
         self.reservations
             .values()
-            .map(|(peer_id, _)| *peer_id)
+            .map(|reservation| reservation.peer_id)
             .chain(self.external_reservations.values().copied())
             .collect()
     }
@@ -578,9 +565,6 @@ impl Behaviour {
         let max = self.config.max_reservations.get() as usize;
         let covered = self.covered_peers();
         let budget = max.saturating_sub(covered.len());
-        if budget == 0 {
-            return;
-        }
 
         let mut static_candidates = BTreeMap::new();
         let mut candidates: BTreeMap<_, ConnectionId> = BTreeMap::new();
@@ -588,11 +572,10 @@ impl Behaviour {
             if covered.contains(peer_id) {
                 continue;
             }
-            if info.relay_status
-                != (RelayStatus::Supported {
-                    status: ReservationStatus::Idle,
-                })
-            {
+            if self.reservation_in_cooldown(peer_id) {
+                continue;
+            }
+            if info.relay_status != RelayStatus::Supported {
                 continue;
             }
             let bucket = if self.static_relays.contains_key(peer_id) {
@@ -604,6 +587,12 @@ impl Behaviour {
                 .entry(*peer_id)
                 .and_modify(|existing| *existing = (*existing).min(*connection_id))
                 .or_insert(*connection_id);
+        }
+
+        self.make_room_for_static_relays(static_candidates.len().saturating_sub(budget));
+
+        if budget == 0 {
+            return;
         }
 
         let selected_candidates: Vec<(PeerId, ConnectionId)> = static_candidates
@@ -623,7 +612,7 @@ impl Behaviour {
         let has_hop_peer = self
             .connections
             .values()
-            .any(|info| matches!(info.relay_status, RelayStatus::Supported { .. }));
+            .any(|info| info.relay_status == RelayStatus::Supported);
 
         match (has_hop_peer, self.relays_available) {
             (true, false) => {
@@ -681,10 +670,6 @@ impl NetworkBehaviour for Behaviour {
             self.determine_status_from_external_addresses();
         }
 
-        if change {
-            self.reconcile_reservation_addrs();
-        }
-
         match event {
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
@@ -692,10 +677,8 @@ impl NetworkBehaviour for Behaviour {
                 connection_id,
                 ..
             }) => {
-                let remote_addr = endpoint.get_remote_address().clone();
-
                 let mut connection = Connection {
-                    address: remote_addr,
+                    endpoint: endpoint.clone(),
                     relay_status: RelayStatus::Pending,
                 };
 
@@ -704,7 +687,11 @@ impl NetworkBehaviour for Behaviour {
                 self.connections
                     .insert((peer_id, connection_id), connection);
 
-                if self.static_relays.contains_key(&peer_id) {
+                if self.pending_static_dials.get(&peer_id) == Some(&connection_id) {
+                    self.pending_static_dials.remove(&peer_id);
+                }
+
+                if self.has_direct_connection(&peer_id) {
                     self.static_dial_cooldowns.remove(&peer_id);
                 }
             }
@@ -717,29 +704,21 @@ impl NetworkBehaviour for Behaviour {
                     return;
                 };
 
-                if !self.connections.keys().any(|(pid, _)| *pid == peer_id) {
+                if !self.connections.keys().any(|(pid, _)| *pid == peer_id)
+                    && !self.reservation_in_cooldown(&peer_id)
+                {
                     self.clear_failure(&peer_id);
                 }
 
-                let had_reservation = matches!(
-                    connection.relay_status,
-                    RelayStatus::Supported {
-                        status: ReservationStatus::Active { .. }
-                            | ReservationStatus::Pending { .. }
-                            | ReservationStatus::Blacklisted
-                    }
-                );
-
-                if let RelayStatus::Supported {
-                    status: ReservationStatus::Active { id } | ReservationStatus::Pending { id },
-                } = connection.relay_status
+                if !connection.is_relayed()
+                    && !self.has_direct_connection(&peer_id)
+                    && let Some(address) = self
+                        .reservations
+                        .values()
+                        .find(|reservation| reservation.peer_id == peer_id)
+                        .map(|reservation| reservation.address.clone())
                 {
-                    self.reservations.remove(&id);
-                    self.meet_reservation_target();
-                }
-
-                if had_reservation {
-                    self.record_previous_relay(peer_id, connection.address);
+                    self.record_previous_relay(peer_id, address);
                 }
 
                 if let Some(addresses) = self.static_relays.get(&peer_id).cloned() {
@@ -758,31 +737,17 @@ impl NetworkBehaviour for Behaviour {
                     return;
                 };
 
-                let new_addr = new.get_remote_address();
-
-                connection.address = new_addr.clone();
+                connection.endpoint = new.clone();
             }
             FromSwarm::NewListenAddr(NewListenAddr { listener_id, addr }) => {
                 if !addr.is_relayed() {
                     return;
                 }
 
-                if let Some((peer_id, connection_id)) = self.reservations.get(&listener_id).copied()
-                {
-                    let Some(connection) = self.connections.get_mut(&(peer_id, connection_id))
-                    else {
-                        return;
-                    };
-
-                    if matches!(
-                        connection.relay_status,
-                        RelayStatus::Supported {
-                            status: ReservationStatus::Pending { id }
-                        } if id == listener_id
-                    ) {
-                        connection.relay_status = RelayStatus::Supported {
-                            status: ReservationStatus::Active { id: listener_id },
-                        };
+                if let Some(reservation) = self.reservations.get_mut(&listener_id) {
+                    if reservation.status == ReservationStatus::Pending {
+                        reservation.status = ReservationStatus::Active;
+                        let peer_id = reservation.peer_id;
                         self.forget_previous_relay(&peer_id);
                         self.clear_failure(&peer_id);
                     }
@@ -792,11 +757,7 @@ impl NetworkBehaviour for Behaviour {
                 if let Some(relay_peer_id) = addr.relay_peer_id() {
                     self.external_reservations
                         .insert(listener_id, relay_peer_id);
-                    self.reconcile_reservation_addrs();
                 }
-            }
-            FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, .. }) => {
-                self.disable_reservation(listener_id, false);
             }
             FromSwarm::ListenerError(ListenerError { listener_id, .. }) => {
                 self.disable_reservation(listener_id, true);
@@ -810,12 +771,19 @@ impl NetworkBehaviour for Behaviour {
             }
             FromSwarm::DialFailure(DialFailure {
                 peer_id: Some(peer_id),
+                connection_id,
                 error,
                 ..
-            }) if self.static_relays.contains_key(&peer_id) => {
-                tracing::warn!(%peer_id, %error, "dial to static relay failed");
-                self.static_dial_cooldowns
-                    .insert(peer_id, Instant::now() + self.config.failure_cooldown);
+            }) if self.pending_static_dials.get(&peer_id) == Some(&connection_id) => {
+                self.pending_static_dials.remove(&peer_id);
+
+                if self.static_relays.contains_key(&peer_id)
+                    && !self.has_direct_connection(&peer_id)
+                {
+                    tracing::warn!(%peer_id, %error, "dial to static relay failed");
+                    self.static_dial_cooldowns
+                        .insert(peer_id, Instant::now() + self.config.failure_cooldown);
+                }
             }
             _ => {}
         }
@@ -839,48 +807,28 @@ impl NetworkBehaviour for Behaviour {
                     connection.relay_status,
                     RelayStatus::Pending | RelayStatus::NotSupported
                 ) {
-                    connection.relay_status = RelayStatus::Supported {
-                        status: ReservationStatus::Idle,
-                    };
-                    if self.static_relays.contains_key(&peer_id) {
-                        self.evict_for_static_peer(peer_id);
-                    }
+                    connection.relay_status = RelayStatus::Supported;
                     self.meet_reservation_target();
                     self.update_relay_availability();
                 }
             }
             Out::Unsupported => {
-                let drop_listener = match connection.relay_status {
-                    RelayStatus::Supported {
-                        status: ReservationStatus::Pending { id } | ReservationStatus::Active { id },
-                    } => Some(id),
-                    _ => None,
-                };
-                let lost_address = drop_listener.map(|_| connection.address.clone());
                 connection.relay_status = RelayStatus::NotSupported;
-                if let Some(id) = drop_listener {
-                    self.expire_reservation_addrs(id);
-                    self.reservations.remove(&id);
-                    self.events.push_back(ToSwarm::RemoveListener { id });
-                    self.meet_reservation_target();
-                }
-                if let Some(address) = lost_address {
-                    self.record_previous_relay(peer_id, address);
+
+                let has_supported_connection = self.connections.iter().any(|((peer, _), info)| {
+                    *peer == peer_id
+                        && !info.is_relayed()
+                        && info.relay_status == RelayStatus::Supported
+                });
+
+                if !has_supported_connection {
+                    for (id, reservation) in &self.reservations {
+                        if reservation.peer_id == peer_id {
+                            self.events.push_back(ToSwarm::RemoveListener { id: *id });
+                        }
+                    }
                 }
                 self.update_relay_availability();
-            }
-            Out::BlacklistExpired => {
-                if matches!(
-                    connection.relay_status,
-                    RelayStatus::Supported {
-                        status: ReservationStatus::Blacklisted
-                    }
-                ) {
-                    connection.relay_status = RelayStatus::Supported {
-                        status: ReservationStatus::Idle,
-                    };
-                    self.meet_reservation_target();
-                }
             }
         }
     }
@@ -889,13 +837,19 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        if let Some(event) = self.events.pop_front() {
-            return Poll::Ready(event);
+        loop {
+            if let Some(event) = self.events.pop_front() {
+                return Poll::Ready(event);
+            }
+
+            if self.poll_cooldowns(cx) {
+                continue;
+            }
+
+            self.waker = Some(cx.waker().clone());
+
+            return Poll::Pending;
         }
-
-        self.waker = Some(cx.waker().clone());
-
-        Poll::Pending
     }
 }
 
