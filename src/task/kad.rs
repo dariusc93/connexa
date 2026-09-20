@@ -100,7 +100,7 @@ where
 
                 let id = kad.get_providers(key);
 
-                let (tx, rx) = mpsc::channel(10);
+                let (tx, rx) = mpsc::channel(64);
 
                 self.pending_dht_get_provider_record.insert(id, tx);
 
@@ -117,7 +117,7 @@ where
                     return;
                 }
 
-                let (tx, rx) = mpsc::channel(10);
+                let (tx, rx) = mpsc::channel(64);
 
                 self.dht_event_sender.entry(key).or_default().push(tx);
 
@@ -132,7 +132,7 @@ where
                     return;
                 }
 
-                let (tx, rx) = mpsc::channel(10);
+                let (tx, rx) = mpsc::channel(64);
 
                 self.dht_event_global_sender.push(tx);
 
@@ -230,7 +230,7 @@ where
 
                 let id = kad.get_record(key);
 
-                let (tx, rx) = mpsc::channel(10);
+                let (tx, rx) = mpsc::channel(64);
 
                 self.pending_dht_get_record.insert(id, tx);
 
