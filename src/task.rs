@@ -69,7 +69,7 @@ use pollable_map::futures::FutureMap;
 use pollable_map::futures::set::FutureSet;
 use pollable_map::optional::Optional;
 use pollable_map::stream::StreamMap;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Debug;
 use std::future::Future as StdFuture;
 use std::pin::Pin;
@@ -79,6 +79,16 @@ use std::time::Duration;
 #[cfg(feature = "rendezvous")]
 type RendezvousDiscoverResponse =
     ConnexaResult<(libp2p::rendezvous::Cookie, Vec<(PeerId, Vec<Multiaddr>)>)>;
+
+#[cfg(feature = "rendezvous")]
+type RendezvousDiscoverRequest = (
+    Option<libp2p::rendezvous::Cookie>,
+    Option<u64>,
+    oneshot::Sender<RendezvousDiscoverResponse>,
+);
+
+#[cfg(feature = "rendezvous")]
+type RendezvousRegisterRequest = (Option<u64>, oneshot::Sender<ConnexaResult<()>>);
 
 pub struct ConnexaTask<X, C: NetworkBehaviour, S, T = (), K = MemoryKeystore>
 where
@@ -145,15 +155,11 @@ where
 
     #[cfg(feature = "rendezvous")]
     pub pending_rendezvous_register:
-        IndexMap<(PeerId, Namespace), Vec<oneshot::Sender<ConnexaResult<()>>>>,
+        IndexMap<(PeerId, Namespace), VecDeque<RendezvousRegisterRequest>>,
 
     #[cfg(feature = "rendezvous")]
     pub pending_rendezvous_discover:
-        IndexMap<PeerId, IndexMap<Namespace, Vec<oneshot::Sender<RendezvousDiscoverResponse>>>>,
-
-    #[cfg(feature = "rendezvous")]
-    pub pending_rendezvous_discover_any:
-        IndexMap<PeerId, Vec<oneshot::Sender<RendezvousDiscoverResponse>>>,
+        IndexMap<(PeerId, Option<Namespace>), VecDeque<RendezvousDiscoverRequest>>,
 
     #[cfg(feature = "gossipsub")]
     pub gossipsub_can_propagate:
@@ -227,8 +233,6 @@ where
             pending_rendezvous_discover: Default::default(),
             #[cfg(feature = "rendezvous")]
             pending_rendezvous_register: Default::default(),
-            #[cfg(feature = "rendezvous")]
-            pending_rendezvous_discover_any: Default::default(),
         }
     }
 

@@ -1,5 +1,5 @@
 use crate::behaviour::peer_store::store::Store;
-use crate::error::{Error, Protocol};
+use crate::error::{ConnexaResult, Error, Protocol};
 use crate::task::ConnexaTask;
 use crate::types::RendezvousCommand;
 use libp2p::rendezvous::Registration;
@@ -16,7 +16,6 @@ where
     S: Store,
 {
     pub fn process_rendezvous_command(&mut self, command: RendezvousCommand) {
-        let swarm = self.swarm.as_mut().expect("swarm is active");
         match command {
             RendezvousCommand::Register {
                 namespace,
@@ -24,28 +23,28 @@ where
                 ttl,
                 resp,
             } => {
-                let Some(rz) = swarm.behaviour_mut().rendezvous_client.as_mut() else {
-                    let _ = resp.send(Err(Error::Disabled {
-                        protocol: Protocol::Rendezvous,
-                    }));
+                let key = (peer_id, namespace);
+                if let Some(queue) = self.pending_rendezvous_register.get_mut(&key) {
+                    queue.push_back((ttl, resp));
                     return;
-                };
+                }
 
-                if let Err(e) = rz.register(namespace.clone(), peer_id, ttl) {
-                    let _ = resp.send(Err(std::io::Error::other(e).into()));
+                if let Err(error) = self.start_rendezvous_registration(&key, ttl) {
+                    let _ = resp.send(Err(error));
                     return;
                 }
 
                 self.pending_rendezvous_register
-                    .entry((peer_id, namespace))
+                    .entry(key)
                     .or_default()
-                    .push(resp);
+                    .push_back((ttl, resp));
             }
             RendezvousCommand::Unregister {
                 namespace,
                 peer_id,
                 resp,
             } => {
+                let swarm = self.swarm.as_mut().expect("swarm is active");
                 let Some(rz) = swarm.behaviour_mut().rendezvous_client.as_mut() else {
                     let _ = resp.send(Err(Error::Disabled {
                         protocol: Protocol::Rendezvous,
@@ -58,32 +57,115 @@ where
                 let _ = resp.send(Ok(()));
             }
             RendezvousCommand::Discover {
-                namespace: ns,
+                namespace,
                 peer_id,
                 cookie,
                 ttl,
                 resp,
             } => {
-                let Some(rz) = swarm.behaviour_mut().rendezvous_client.as_mut() else {
-                    let _ = resp.send(Err(Error::Disabled {
-                        protocol: Protocol::Rendezvous,
-                    }));
+                let key = (peer_id, namespace);
+                if let Some(queue) = self.pending_rendezvous_discover.get_mut(&key) {
+                    queue.push_back((cookie, ttl, resp));
                     return;
-                };
+                }
 
-                rz.discover(ns.clone(), cookie, ttl, peer_id);
+                if let Err(error) = self.start_rendezvous_discovery(&key, cookie.clone(), ttl) {
+                    let _ = resp.send(Err(error));
+                    return;
+                }
 
-                match ns {
-                    Some(ns) => {
-                        let namespaces =
-                            self.pending_rendezvous_discover.entry(peer_id).or_default();
-                        namespaces.entry(ns).or_default().push(resp);
+                self.pending_rendezvous_discover
+                    .entry(key)
+                    .or_default()
+                    .push_back((cookie, ttl, resp));
+            }
+        }
+    }
+
+    fn start_rendezvous_discovery(
+        &mut self,
+        key: &(libp2p::PeerId, Option<libp2p::rendezvous::Namespace>),
+        cookie: Option<libp2p::rendezvous::Cookie>,
+        ttl: Option<u64>,
+    ) -> ConnexaResult<()> {
+        let swarm = self.swarm.as_mut().expect("swarm is active");
+        let Some(rendezvous) = swarm.behaviour_mut().rendezvous_client.as_mut() else {
+            return Err(Error::Disabled {
+                protocol: Protocol::Rendezvous,
+            });
+        };
+
+        rendezvous.discover(key.1.clone(), cookie, ttl, key.0);
+        Ok(())
+    }
+
+    fn finish_rendezvous_discovery(
+        &mut self,
+        key: (libp2p::PeerId, Option<libp2p::rendezvous::Namespace>),
+        result: crate::task::RendezvousDiscoverResponse,
+    ) {
+        let Some(mut queue) = self.pending_rendezvous_discover.shift_remove(&key) else {
+            return;
+        };
+
+        if let Some((_, _, response)) = queue.pop_front() {
+            let _ = response.send(result);
+        }
+
+        while let Some((cookie, ttl, _)) = queue.front() {
+            match self.start_rendezvous_discovery(&key, cookie.clone(), *ttl) {
+                Ok(()) => {
+                    self.pending_rendezvous_discover.insert(key, queue);
+                    return;
+                }
+                Err(error) => {
+                    if let Some((_, _, response)) = queue.pop_front() {
+                        let _ = response.send(Err(error));
                     }
-                    None => {
-                        self.pending_rendezvous_discover_any
-                            .entry(peer_id)
-                            .or_default()
-                            .push(resp);
+                }
+            }
+        }
+    }
+
+    fn start_rendezvous_registration(
+        &mut self,
+        key: &(libp2p::PeerId, libp2p::rendezvous::Namespace),
+        ttl: Option<u64>,
+    ) -> ConnexaResult<()> {
+        let swarm = self.swarm.as_mut().expect("swarm is active");
+        let Some(rendezvous) = swarm.behaviour_mut().rendezvous_client.as_mut() else {
+            return Err(Error::Disabled {
+                protocol: Protocol::Rendezvous,
+            });
+        };
+
+        rendezvous
+            .register(key.1.clone(), key.0, ttl)
+            .map_err(|error| std::io::Error::other(error).into())
+    }
+
+    fn finish_rendezvous_registration(
+        &mut self,
+        key: (libp2p::PeerId, libp2p::rendezvous::Namespace),
+        result: ConnexaResult<()>,
+    ) {
+        let Some(mut queue) = self.pending_rendezvous_register.shift_remove(&key) else {
+            return;
+        };
+
+        if let Some((_, response)) = queue.pop_front() {
+            let _ = response.send(result);
+        }
+
+        while let Some((ttl, _)) = queue.front() {
+            match self.start_rendezvous_registration(&key, *ttl) {
+                Ok(()) => {
+                    self.pending_rendezvous_register.insert(key, queue);
+                    return;
+                }
+                Err(error) => {
+                    if let Some((_, response)) = queue.pop_front() {
+                        let _ = response.send(Err(error));
                     }
                 }
             }
@@ -143,35 +225,11 @@ where
                         (peer_id, addrs)
                     })
                     .collect::<Vec<_>>();
-
-                match cookie.namespace() {
-                    Some(ns) => {
-                        if let Some(namespaces) =
-                            self.pending_rendezvous_discover.get_mut(&rendezvous_node)
-                        {
-                            if let Some(list) = namespaces.shift_remove(ns) {
-                                for ch in list {
-                                    let _ = ch.send(Ok((cookie.clone(), discovered_peers.clone())));
-                                }
-                            }
-
-                            if namespaces.is_empty() {
-                                self.pending_rendezvous_discover
-                                    .shift_remove(&rendezvous_node);
-                            }
-                        }
-                    }
-                    None => {
-                        if let Some(list) = self
-                            .pending_rendezvous_discover_any
-                            .shift_remove(&rendezvous_node)
-                        {
-                            for ch in list {
-                                let _ = ch.send(Ok((cookie.clone(), discovered_peers.clone())));
-                            }
-                        }
-                    }
-                }
+                let namespace = cookie.namespace().cloned();
+                self.finish_rendezvous_discovery(
+                    (rendezvous_node, namespace),
+                    Ok((cookie, discovered_peers)),
+                );
             }
             RendezvousClientEvent::DiscoverFailed {
                 rendezvous_node,
@@ -179,38 +237,12 @@ where
                 error,
             } => {
                 tracing::error!(%rendezvous_node, ?namespace, ?error, "failed to discover ");
-                match namespace {
-                    Some(ns) => {
-                        if let Some(namespaces) =
-                            self.pending_rendezvous_discover.get_mut(&rendezvous_node)
-                        {
-                            if let Some(list) = namespaces.shift_remove(&ns) {
-                                for ch in list {
-                                    let _ = ch.send(Err(Error::Rendezvous(
-                                        crate::error::rendezvous::Error::from(error),
-                                    )));
-                                }
-                            }
-
-                            if namespaces.is_empty() {
-                                self.pending_rendezvous_discover
-                                    .shift_remove(&rendezvous_node);
-                            }
-                        }
-                    }
-                    None => {
-                        if let Some(list) = self
-                            .pending_rendezvous_discover_any
-                            .shift_remove(&rendezvous_node)
-                        {
-                            for ch in list {
-                                let _ = ch.send(Err(Error::Rendezvous(
-                                    crate::error::rendezvous::Error::from(error),
-                                )));
-                            }
-                        }
-                    }
-                }
+                self.finish_rendezvous_discovery(
+                    (rendezvous_node, namespace),
+                    Err(Error::Rendezvous(crate::error::rendezvous::Error::from(
+                        error,
+                    ))),
+                );
             }
             RendezvousClientEvent::Registered {
                 rendezvous_node,
@@ -218,14 +250,7 @@ where
                 namespace,
             } => {
                 tracing::debug!(%rendezvous_node, %namespace, %ttl, "registered to namespace");
-                if let Some(list) = self
-                    .pending_rendezvous_register
-                    .shift_remove(&(rendezvous_node, namespace))
-                {
-                    for ch in list {
-                        let _ = ch.send(Ok(()));
-                    }
-                }
+                self.finish_rendezvous_registration((rendezvous_node, namespace), Ok(()));
             }
             RendezvousClientEvent::RegisterFailed {
                 rendezvous_node,
@@ -233,16 +258,12 @@ where
                 error,
             } => {
                 tracing::error!(%rendezvous_node, %namespace, ?error, "failed to register to namespace");
-                if let Some(list) = self
-                    .pending_rendezvous_register
-                    .shift_remove(&(rendezvous_node, namespace))
-                {
-                    for ch in list {
-                        let _ = ch.send(Err(Error::Rendezvous(
-                            crate::error::rendezvous::Error::from(error),
-                        )));
-                    }
-                }
+                self.finish_rendezvous_registration(
+                    (rendezvous_node, namespace),
+                    Err(Error::Rendezvous(crate::error::rendezvous::Error::from(
+                        error,
+                    ))),
+                );
             }
             RendezvousClientEvent::Expired { peer } => {
                 tracing::debug!(%peer, "expired");

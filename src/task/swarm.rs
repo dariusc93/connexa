@@ -338,17 +338,17 @@ where
 
     #[cfg(feature = "rendezvous")]
     fn fail_pending_rendezvous(&mut self, peer_id: &PeerId) {
-        if let Some(namespaces) = self.pending_rendezvous_discover.shift_remove(peer_id) {
-            for (_namespace, list) in namespaces {
-                for ch in list {
+        let stale_keys = self
+            .pending_rendezvous_discover
+            .keys()
+            .filter(|(node, _)| node == peer_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        for key in stale_keys {
+            if let Some(list) = self.pending_rendezvous_discover.shift_remove(&key) {
+                for (_, _, ch) in list {
                     let _ = ch.send(Err(crate::error::Error::NotConnected(*peer_id)));
                 }
-            }
-        }
-
-        if let Some(list) = self.pending_rendezvous_discover_any.shift_remove(peer_id) {
-            for ch in list {
-                let _ = ch.send(Err(crate::error::Error::NotConnected(*peer_id)));
             }
         }
 
@@ -360,7 +360,7 @@ where
             .collect::<Vec<_>>();
         for key in stale_keys {
             if let Some(list) = self.pending_rendezvous_register.shift_remove(&key) {
-                for ch in list {
+                for (_, ch) in list {
                     let _ = ch.send(Err(crate::error::Error::NotConnected(*peer_id)));
                 }
             }
