@@ -181,7 +181,10 @@ impl Store for MemoryStore {
                     );
                 }
 
-                if self.connections.is_empty() || self.connections.capacity() < CAPACITY_CAP {
+                if self.connections.is_empty()
+                    || (self.connections.capacity() > CAPACITY_CAP
+                        && self.connections.len() < CAPACITY_CAP)
+                {
                     self.connections.shrink_to_fit();
                 }
             }
