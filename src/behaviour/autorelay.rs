@@ -40,7 +40,7 @@ pub struct Behaviour {
 
     connections: HashMap<(PeerId, ConnectionId), Connection>,
 
-    reservations: HashMap<ListenerId, (PeerId, ConnectionId)>,
+    reservations: HashMap<ListenerId, Reservation>,
 
     pending_eviction: Option<ListenerId>,
 
@@ -122,16 +122,23 @@ impl Connection {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RelayStatus {
-    Supported { status: ReservationStatus },
+    Supported,
     NotSupported,
     Pending,
 }
 
+#[derive(Debug)]
+struct Reservation {
+    peer_id: PeerId,
+    selected_connection_id: ConnectionId,
+    address: Multiaddr,
+    status: ReservationStatus,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReservationStatus {
-    Idle,
-    Pending { id: ListenerId },
-    Active { id: ListenerId },
+    Pending,
+    Active,
 }
 
 #[derive(Debug)]
@@ -447,7 +454,8 @@ impl Behaviour {
             return;
         }
 
-        let listener_id = self.reservations.iter().find_map(|(id, (peer, _))| {
+        let listener_id = self.reservations.iter().find_map(|(id, reservation)| {
+            let peer = &reservation.peer_id;
             let externally_reserved = self
                 .external_reservations
                 .values()
@@ -462,7 +470,7 @@ impl Behaviour {
         }
     }
 
-    fn remove_reservation(&mut self, id: ListenerId) -> Option<(PeerId, ConnectionId)> {
+    fn remove_reservation(&mut self, id: ListenerId) -> Option<Reservation> {
         if self.pending_eviction == Some(id) {
             self.pending_eviction = None;
         }
@@ -476,15 +484,12 @@ impl Behaviour {
             .get_mut(&(peer_id, connection_id))
             .expect("connection is present");
 
-        if info.relay_status
-            != (RelayStatus::Supported {
-                status: ReservationStatus::Idle,
-            })
-        {
+        if info.relay_status != RelayStatus::Supported {
             return;
         }
 
-        let addr_with_peer_id = match info.addr().clone().with_p2p(peer_id) {
+        let address = info.addr().clone();
+        let addr_with_peer_id = match address.clone().with_p2p(peer_id) {
             Ok(addr) => addr,
             Err(addr) => {
                 tracing::warn!(%addr, "address unexpectedly contains a different peer id than the connection; marking relay connection ineligible");
@@ -496,41 +501,22 @@ impl Behaviour {
         let opts = ListenOpts::new(addr_with_peer_id.with(Protocol::P2pCircuit));
         let id = opts.listener_id();
 
-        info.relay_status = RelayStatus::Supported {
-            status: ReservationStatus::Pending { id },
-        };
-        self.reservations.insert(id, (peer_id, connection_id));
+        self.reservations.insert(
+            id,
+            Reservation {
+                peer_id,
+                selected_connection_id: connection_id,
+                address,
+                status: ReservationStatus::Pending,
+            },
+        );
         self.events.push_back(ToSwarm::ListenOn { opts });
     }
 
     /// Removes all existing reservations.
     pub fn remove_all_reservations(&mut self) {
-        let relay_listeners = self
-            .reservations
-            .iter()
-            .map(|(id, (peer_id, conn_id))| (*id, *peer_id, *conn_id))
-            .collect::<Vec<_>>();
-
-        for (listener_id, peer_id, connection_id) in relay_listeners {
-            let Some(connection) = self.connections.get_mut(&(peer_id, connection_id)) else {
-                continue;
-            };
-
-            if !matches!(
-                connection.relay_status,
-                RelayStatus::Supported {
-                    status: ReservationStatus::Active { id } | ReservationStatus::Pending { id }
-                } if id == listener_id
-            ) {
-                continue;
-            }
-
-            connection.relay_status = RelayStatus::Supported {
-                status: ReservationStatus::Idle,
-            };
-
-            self.events
-                .push_back(ToSwarm::RemoveListener { id: listener_id });
+        for &id in self.reservations.keys() {
+            self.events.push_back(ToSwarm::RemoveListener { id });
         }
     }
 
@@ -540,51 +526,32 @@ impl Behaviour {
             return;
         }
 
-        let Some((peer_id, connection_id)) = self.remove_reservation(id) else {
+        let Some(reservation) = self.remove_reservation(id) else {
             return;
         };
 
-        let Some(address) = self
-            .connections
-            .get(&(peer_id, connection_id))
-            .filter(|info| {
-                matches!(
-                    info.relay_status,
-                    RelayStatus::Supported {
-                        status: ReservationStatus::Active { .. }
-                            | ReservationStatus::Pending { .. }
-                    }
-                )
-            })
-            .map(|info| info.addr().clone())
-        else {
-            self.meet_reservation_target();
-            return;
-        };
+        tracing::trace!(
+            listener_id = %id,
+            peer_id = %reservation.peer_id,
+            selected_connection_id = %reservation.selected_connection_id,
+            failed,
+            "reservation disabled"
+        );
 
-        let cooldown_duration = failed.then(|| self.record_failure(peer_id));
-
-        let connection = self
-            .connections
-            .get_mut(&(peer_id, connection_id))
-            .expect("connection is tracked");
-        connection.relay_status = RelayStatus::Supported {
-            status: ReservationStatus::Idle,
-        };
-
-        if let Some(duration) = cooldown_duration {
+        if failed {
+            let duration = self.record_failure(reservation.peer_id);
             self.reservation_cooldowns
-                .insert(peer_id, Instant::now() + duration);
+                .insert(reservation.peer_id, Instant::now() + duration);
         }
 
-        self.record_previous_relay(peer_id, address);
+        self.record_previous_relay(reservation.peer_id, reservation.address);
         self.meet_reservation_target();
     }
 
     fn covered_peers(&self) -> HashSet<PeerId> {
         self.reservations
             .values()
-            .map(|(peer_id, _)| *peer_id)
+            .map(|reservation| reservation.peer_id)
             .chain(self.external_reservations.values().copied())
             .collect()
     }
@@ -608,11 +575,7 @@ impl Behaviour {
             if self.reservation_in_cooldown(peer_id) {
                 continue;
             }
-            if info.relay_status
-                != (RelayStatus::Supported {
-                    status: ReservationStatus::Idle,
-                })
-            {
+            if info.relay_status != RelayStatus::Supported {
                 continue;
             }
             let bucket = if self.static_relays.contains_key(peer_id) {
@@ -649,7 +612,7 @@ impl Behaviour {
         let has_hop_peer = self
             .connections
             .values()
-            .any(|info| matches!(info.relay_status, RelayStatus::Supported { .. }));
+            .any(|info| info.relay_status == RelayStatus::Supported);
 
         match (has_hop_peer, self.relays_available) {
             (true, false) => {
@@ -747,24 +710,15 @@ impl NetworkBehaviour for Behaviour {
                     self.clear_failure(&peer_id);
                 }
 
-                let had_reservation = matches!(
-                    connection.relay_status,
-                    RelayStatus::Supported {
-                        status: ReservationStatus::Active { .. }
-                            | ReservationStatus::Pending { .. }
-                    }
-                );
-
-                if let RelayStatus::Supported {
-                    status: ReservationStatus::Active { id } | ReservationStatus::Pending { id },
-                } = connection.relay_status
+                if !connection.is_relayed()
+                    && !self.has_direct_connection(&peer_id)
+                    && let Some(address) = self
+                        .reservations
+                        .values()
+                        .find(|reservation| reservation.peer_id == peer_id)
+                        .map(|reservation| reservation.address.clone())
                 {
-                    self.remove_reservation(id);
-                    self.meet_reservation_target();
-                }
-
-                if had_reservation {
-                    self.record_previous_relay(peer_id, connection.addr().clone());
+                    self.record_previous_relay(peer_id, address);
                 }
 
                 if let Some(addresses) = self.static_relays.get(&peer_id).cloned() {
@@ -790,22 +744,10 @@ impl NetworkBehaviour for Behaviour {
                     return;
                 }
 
-                if let Some((peer_id, connection_id)) = self.reservations.get(&listener_id).copied()
-                {
-                    let Some(connection) = self.connections.get_mut(&(peer_id, connection_id))
-                    else {
-                        return;
-                    };
-
-                    if matches!(
-                        connection.relay_status,
-                        RelayStatus::Supported {
-                            status: ReservationStatus::Pending { id }
-                        } if id == listener_id
-                    ) {
-                        connection.relay_status = RelayStatus::Supported {
-                            status: ReservationStatus::Active { id: listener_id },
-                        };
+                if let Some(reservation) = self.reservations.get_mut(&listener_id) {
+                    if reservation.status == ReservationStatus::Pending {
+                        reservation.status = ReservationStatus::Active;
+                        let peer_id = reservation.peer_id;
                         self.forget_previous_relay(&peer_id);
                         self.clear_failure(&peer_id);
                     }
@@ -865,29 +807,26 @@ impl NetworkBehaviour for Behaviour {
                     connection.relay_status,
                     RelayStatus::Pending | RelayStatus::NotSupported
                 ) {
-                    connection.relay_status = RelayStatus::Supported {
-                        status: ReservationStatus::Idle,
-                    };
+                    connection.relay_status = RelayStatus::Supported;
                     self.meet_reservation_target();
                     self.update_relay_availability();
                 }
             }
             Out::Unsupported => {
-                let drop_listener = match connection.relay_status {
-                    RelayStatus::Supported {
-                        status: ReservationStatus::Pending { id } | ReservationStatus::Active { id },
-                    } => Some(id),
-                    _ => None,
-                };
-                let lost_address = drop_listener.map(|_| connection.addr().clone());
                 connection.relay_status = RelayStatus::NotSupported;
-                if let Some(id) = drop_listener {
-                    self.remove_reservation(id);
-                    self.events.push_back(ToSwarm::RemoveListener { id });
-                    self.meet_reservation_target();
-                }
-                if let Some(address) = lost_address {
-                    self.record_previous_relay(peer_id, address);
+
+                let has_supported_connection = self.connections.iter().any(|((peer, _), info)| {
+                    *peer == peer_id
+                        && !info.is_relayed()
+                        && info.relay_status == RelayStatus::Supported
+                });
+
+                if !has_supported_connection {
+                    for (id, reservation) in &self.reservations {
+                        if reservation.peer_id == peer_id {
+                            self.events.push_back(ToSwarm::RemoveListener { id: *id });
+                        }
+                    }
                 }
                 self.update_relay_availability();
             }
