@@ -468,7 +468,7 @@ pub enum AutoRelayCommand {
         resp: oneshot::Sender<ConnexaResult<()>>,
     },
     ListStaticRelays {
-        resp: oneshot::Sender<ConnexaResult<Vec<(PeerId, Vec<Multiaddr>)>>>,
+        resp: oneshot::Sender<ConnexaResult<PeerAddressList>>,
     },
     GetStaticRelay {
         peer_id: PeerId,

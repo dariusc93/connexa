@@ -434,10 +434,10 @@ where
                         num_remaining,
                     }) => {
                         tracing::info!(?peer, ?num_remaining, "kademlia bootstrap");
-                        if step.last {
-                            if let Some(ch) = self.pending_dht_bootstrap.shift_remove(&id) {
-                                let _ = ch.send(Ok(()));
-                            }
+                        if step.last
+                            && let Some(ch) = self.pending_dht_bootstrap.shift_remove(&id)
+                        {
+                            let _ = ch.send(Ok(()));
                         }
                     }
                     Err(BootstrapError::Timeout {
@@ -445,10 +445,10 @@ where
                         num_remaining,
                     }) => {
                         tracing::info!(?peer, ?num_remaining, "kademlia bootstrap timeout");
-                        if step.last {
-                            if let Some(ch) = self.pending_dht_bootstrap.shift_remove(&id) {
-                                let _ = ch.send(Err(Error::Timeout));
-                            }
+                        if step.last
+                            && let Some(ch) = self.pending_dht_bootstrap.shift_remove(&id)
+                        {
+                            let _ = ch.send(Err(Error::Timeout));
                         }
                     }
                 },

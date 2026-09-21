@@ -142,7 +142,6 @@ impl Store for MemoryStore {
                 peer_id,
                 connection_id,
                 endpoint,
-                failed_addresses: _,
                 ..
             }) => {
                 // Note: because we are adding the addresses from an established connection, we will not be persisting the address unless
