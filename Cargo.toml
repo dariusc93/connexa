@@ -97,7 +97,7 @@ rand = { version = "0.10" }
 rcgen = { version = "0.14.3", features = ["pem", "x509-parser"] }
 redb = "2"
 rlimit = "0.10.2"
-rustls = { version = "0.23.44", default-features = false, features = ["ring", "std"] }
+rustls = { version = "0.23.45", default-features = false, features = ["ring", "std"] }
 send_wrapper = "0.6.0"
 serde = { version = "1.0.219" }
 serde-wasm-bindgen = "0.6.5"
