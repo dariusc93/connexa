@@ -40,6 +40,8 @@ pub enum Error {
     KeyTypeMismatch { has: KeyType, wanted: KeyType },
     #[error("invalid key label {0:?}")]
     InvalidLabel(String),
+    #[error(transparent)]
+    JoinError(#[from] async_rt::JoinError),
     #[error("keychain is disabled")]
     Disabled,
 }
@@ -688,7 +690,7 @@ impl<S: Keystore> Keychain<S> {
             Ok(next)
         })
         .await
-        .map_err(Error::Backend)?
+        .map_err(Error::JoinError)?
     }
 }
 
@@ -704,7 +706,7 @@ async fn finish_mutation<T: Send + 'static>(
         result
     })
     .await
-    .map_err(Error::Backend)?
+    .map_err(Error::JoinError)?
 }
 
 fn same_entry(a: &EncryptedEntry, b: &EncryptedEntry) -> bool {

@@ -1036,7 +1036,7 @@ where
         let swarm = connexa_task.swarm.as_mut().expect("valid swarm");
         preload_callback(&keypair, swarm, &keychain, &mut context);
 
-        let to_task = async_rt::task::spawn_coroutine_with_context(
+        let to_task = async_rt::task::spawn_coroutine_with_receiver_and_context(
             (
                 context,
                 custom_task_callback,

@@ -8,7 +8,7 @@ exclude = [".gitignore"]
 description = "High level abstraction of rust-libp2p"
 readme = "README.md"
 repository = "https://github.com/dariusc93/connexa"
-rust-version = "1.93.0"
+rust-version = "1.95.0"
 categories = ["network-programming", "asynchronous"]
 keywords = ["libp2p", "p2p", "networking", "peer-to-peer"]
 
@@ -67,7 +67,7 @@ webtransport = ["libp2p/webtransport-websys"]
 members = ["examples/autorelay", "examples/browser-webrtc", "examples/custom-behaviour-and-context", "examples/custom-transport", "examples/distributed-key-value-store", "examples/file-sharing-request-response", "examples/file-sharing-stream", "examples/floodsub", "examples/gossipsub", "examples/ipfs-kad", "examples/peer-store", "examples/relay", "examples/rendezvous", "examples/stream", "examples/upnp"]
 
 [workspace.dependencies]
-async-rt = "0.1.8"
+async-rt = "0.2.0"
 aes-gcm = "0.11.1"
 async-trait = { version = "0.1.89" }
 base64 = "0.22.1"
@@ -126,7 +126,7 @@ web-time = "1.1.0"
 
 
 [dependencies]
-async-rt.workspace = true
+async-rt = { workspace = true }
 async-trait.workspace = true
 aes-gcm = { workspace = true, optional = true }
 base64 = { workspace = true, optional = true }
