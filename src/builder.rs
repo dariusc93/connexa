@@ -954,6 +954,15 @@ where
             websocket_cert,
         } = self;
 
+        #[cfg(feature = "pnet")]
+        #[cfg(not(target_arch = "wasm32"))]
+        if transport_config.enable_pnet && custom_transport.is_some() {
+            return Err(Error::InvalidConfig(
+                "pnet cannot be combined with a custom transport because custom transports replace the built-in pnet handshake"
+                    .into(),
+            ));
+        }
+
         // Finalize the identity (this is the single async point), then run the keypair-dependent
         // config that was deferred from the builder methods.
         let keypair = match identity {

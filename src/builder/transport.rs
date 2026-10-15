@@ -289,6 +289,22 @@ pub(crate) fn build_transport(
     #[cfg(feature = "tls")]
     use libp2p::tls;
 
+    #[cfg(all(feature = "pnet", feature = "quic"))]
+    if enable_pnet && enable_quic {
+        return Err(crate::error::Error::InvalidConfig(
+            "pnet cannot be combined with QUIC because QUIC does not support the pnet handshake"
+                .into(),
+        ));
+    }
+
+    #[cfg(all(feature = "pnet", feature = "webrtc"))]
+    if enable_pnet && enable_webrtc {
+        return Err(crate::error::Error::InvalidConfig(
+            "pnet cannot be combined with native WebRTC because native WebRTC does not support the pnet handshake"
+                .into(),
+        ));
+    }
+
     // Note that this is a temporary fix in the event of webrtc being enabled with tls or quic
     // which may cause issues with the default crypto provider and require us to natively install
     // the ring provider.
