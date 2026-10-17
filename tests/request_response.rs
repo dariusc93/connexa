@@ -4,7 +4,8 @@ use std::time::Duration;
 
 mod common;
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn send_request_to_peer() {
     let [
         (node1, node1_peer_id, _node1_addr),
@@ -64,7 +65,8 @@ async fn send_request_to_peer() {
     assert_eq!(response, "pong");
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn fail_to_respond_to_request() {
     let [
         (node1, _node1_peer_id, _node1_addr),

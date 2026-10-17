@@ -4,7 +4,8 @@ use connexa::keystore::generate_key;
 use connexa::keystore::store::memory::MemoryKeystore;
 use libp2p::identity::Keypair;
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn test_keypair_into_keypair() {
     let original = Keypair::generate_ed25519();
     let original_public = original.public();
@@ -16,7 +17,8 @@ fn test_keypair_into_keypair() {
     assert_eq!(result.public(), original_public);
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn test_keypair_ref_into_keypair() {
     let original = Keypair::generate_ed25519();
     let original_public = original.public();
@@ -30,7 +32,8 @@ fn test_keypair_ref_into_keypair() {
     assert_eq!(original.public(), original_public);
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 #[cfg(feature = "testing")]
 fn test_u8_into_keypair() {
     let seed: u8 = 42;
@@ -45,7 +48,8 @@ fn test_u8_into_keypair() {
     assert_ne!(keypair1.public(), keypair3.public());
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn test_vec_u8_into_keypair() {
     let bytes = vec![1u8; 32]; // Ed25519 requires exactly 32 bytes
     let keypair = bytes
@@ -58,7 +62,8 @@ fn test_vec_u8_into_keypair() {
     assert_eq!(keypair.public(), keypair2.public());
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn test_vec_u8_invalid_length() {
     let bytes = vec![1u8; 31]; // Invalid length for Ed25519
     assert!(
@@ -73,7 +78,8 @@ fn test_vec_u8_invalid_length() {
     );
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn test_slice_into_keypair() {
     let mut bytes = [0u8; 32];
     bytes[0] = 42;
@@ -91,7 +97,8 @@ fn test_slice_into_keypair() {
     assert_eq!(keypair.public(), keypair2.public());
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn test_slice_invalid_length() {
     let mut bytes = [0u8; 31];
     assert!(
@@ -100,7 +107,8 @@ fn test_slice_invalid_length() {
     );
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn test_option_some_into_keypair() {
     let original = Keypair::generate_ed25519();
     let original_public = original.public();
@@ -110,7 +118,8 @@ fn test_option_some_into_keypair() {
     assert_eq!(result.public(), original_public);
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn test_option_none_into_keypair() {
     let option: Option<Keypair> = None;
     let result = option.into_keypair().expect("should generate new keypair");
@@ -121,7 +130,8 @@ fn test_option_none_into_keypair() {
     assert_ne!(result.public(), result2.public());
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 #[cfg(feature = "testing")]
 fn test_option_u8_into_keypair() {
     // Test Option<u8> with Some
@@ -138,7 +148,8 @@ fn test_option_u8_into_keypair() {
     assert_ne!(result.public(), direct.public());
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn test_option_vec_into_keypair() {
     // Test Option<Vec<u8>> with Some
     let bytes = vec![1u8; 32];
@@ -155,7 +166,8 @@ fn test_option_vec_into_keypair() {
     assert_ne!(result.public(), direct.public());
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn test_deterministic_keypair_generation() {
     // Test that the same bytes always produce the same keypair
     let mut bytes1 = [0u8; 32];
@@ -170,7 +182,8 @@ fn test_deterministic_keypair_generation() {
     assert_eq!(kp1.public(), kp2.public());
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn test_different_bytes_produce_different_keypairs() {
     let bytes1 = vec![1u8; 32];
     let mut bytes2 = vec![1u8; 32];
@@ -182,7 +195,8 @@ fn test_different_bytes_produce_different_keypairs() {
     assert_ne!(kp1.public(), kp2.public());
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn test_keypair_type_preservation() {
     // Ensure Ed25519 keypairs are created correctly
     let bytes = vec![42u8; 32];
@@ -193,7 +207,8 @@ fn test_keypair_type_preservation() {
     assert!(!peer_id.to_string().is_empty());
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 #[cfg(feature = "testing")]
 fn test_u8_seed_consistency() {
     // Test that u8 seed creates consistent keypairs
@@ -208,7 +223,8 @@ fn test_u8_seed_consistency() {
     }
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn test_with_existing_identity_builder() {
     use connexa::prelude::DefaultConnexaBuilder;
 
@@ -237,7 +253,8 @@ fn test_with_existing_identity_builder() {
         .expect("should create builder with generated keypair");
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 #[cfg(feature = "testing")]
 fn test_with_existing_identity_builder_u8() {
     use connexa::prelude::DefaultConnexaBuilder;
@@ -253,7 +270,8 @@ fn test_with_existing_identity_builder_u8() {
         DefaultConnexaBuilder::with_existing_identity(option).expect("should create builder");
 }
 
-#[test]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn test_with_identity_and_keychain_builder() {
     use connexa::prelude::DefaultConnexaBuilder;
 
@@ -263,7 +281,8 @@ fn test_with_identity_and_keychain_builder() {
         .expect("should create builder");
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_new_identity_builds_ephemeral() {
     use connexa::prelude::DefaultConnexaBuilder;
 

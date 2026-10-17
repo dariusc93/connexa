@@ -4,6 +4,7 @@ use common::spawn_connexa_with_default_key;
 use connexa::prelude::dht::{Mode, Quorum, RecordKey};
 use connexa::prelude::{DHTEvent, Multiaddr, PeerId};
 use futures::StreamExt;
+use futures_timeout::TimeoutExt;
 
 use crate::common::DEFAULT_TIMEOUT;
 
@@ -34,7 +35,8 @@ async fn create_connected_nodes() -> (
     (node1, node2, node1_peer_id, node2_peer_id)
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_dht_mode() {
     let node = spawn_connexa_with_default_key().await;
 
@@ -54,7 +56,8 @@ async fn test_dht_mode() {
     assert_eq!(mode, Mode::Client);
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_dht_add_address() {
     let node = spawn_connexa_with_default_key().await;
     let peer_id = PeerId::random();
@@ -64,7 +67,8 @@ async fn test_dht_add_address() {
     node.dht().add_address(peer_id, addr).await.unwrap();
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_dht_put_and_get() {
     let (node1, node2, peer_id1, _peer_id2) = create_connected_nodes().await;
 
@@ -83,7 +87,9 @@ async fn test_dht_put_and_get() {
     let mut stream = node2.dht().get(key).await.unwrap();
 
     // Wait for at least one result
-    let record = tokio::time::timeout(DEFAULT_TIMEOUT, stream.next())
+    let record = stream
+        .next()
+        .timeout(DEFAULT_TIMEOUT)
         .await
         .unwrap()
         .unwrap()
@@ -93,7 +99,8 @@ async fn test_dht_put_and_get() {
     assert_eq!(record.record.publisher, Some(peer_id1));
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_dht_provide_and_get_providers() {
     let (node1, node2, peer_id1, _peer_id2) = create_connected_nodes().await;
 
@@ -106,7 +113,9 @@ async fn test_dht_provide_and_get_providers() {
     let mut stream = node2.dht().get_providers(key).await.unwrap();
 
     // Wait for providers
-    let providers = tokio::time::timeout(DEFAULT_TIMEOUT, stream.next())
+    let providers = stream
+        .next()
+        .timeout(DEFAULT_TIMEOUT)
         .await
         .unwrap()
         .unwrap()
@@ -115,7 +124,8 @@ async fn test_dht_provide_and_get_providers() {
     assert!(providers.contains(&peer_id1));
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_dht_stop_provide() {
     let node = spawn_connexa_with_default_key().await;
     let key = "stop-provide-key";
@@ -127,7 +137,8 @@ async fn test_dht_stop_provide() {
     node.dht().stop_provide(key).await.unwrap();
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_dht_find_peer() {
     let (_node1, node2, peer_id1, _peer_id2) = create_connected_nodes().await;
 
@@ -139,33 +150,37 @@ async fn test_dht_find_peer() {
     assert!(peer_info.iter().any(|info| info.peer_id == peer_id1));
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_dht_listener() {
     let (node1, node2, _peer_id1, _peer_id2) = create_connected_nodes().await;
 
     // Listen for all DHT events (None means all keys)
     let mut listener = node2.dht().listener(()).await.unwrap();
 
-    // Spawn a task to generate a DHT event
-    let node_clone = node1.clone();
-    tokio::spawn(async move {
-        node_clone
-            .dht()
-            .put("listener-test", &b"data"[..], Quorum::One)
-            .await
-            .unwrap();
-    });
+    let (result, event) = async {
+        futures::join!(
+            async {
+                node1
+                    .dht()
+                    .put("listener-test", &b"data"[..], Quorum::One)
+                    .await
+            },
+            listener.next()
+        )
+    }
+    .timeout(DEFAULT_TIMEOUT)
+    .await
+    .unwrap();
 
-    // Wait for an event with timeout
-    let event = tokio::time::timeout(DEFAULT_TIMEOUT, listener.next())
-        .await
-        .unwrap()
-        .unwrap();
+    result.unwrap();
+    let event = event.unwrap();
 
     assert!(matches!(event, DHTEvent::PutRecord { .. }))
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_dht_listener_with_specific_key() {
     let (node1, node2, _peer_id1, _peer_id2) = create_connected_nodes().await;
     let key = RecordKey::from(b"specific-key".to_vec());
@@ -173,27 +188,24 @@ async fn test_dht_listener_with_specific_key() {
     // Listen for events related to specific key
     let mut listener = node2.dht().listener(&key).await.unwrap();
 
-    // Spawn a task to generate events
-    let node_clone = node1.clone();
-    let key_clone = key.clone();
-    tokio::spawn(async move {
-        node_clone
-            .dht()
-            .put(&key_clone, &b"data"[..], Quorum::One)
-            .await
-            .unwrap();
-    });
+    let (result, event) = async {
+        futures::join!(
+            async { node1.dht().put(&key, &b"data"[..], Quorum::One).await },
+            listener.next()
+        )
+    }
+    .timeout(DEFAULT_TIMEOUT)
+    .await
+    .unwrap();
 
-    // Wait for an event with timeout
-    let event = tokio::time::timeout(DEFAULT_TIMEOUT, listener.next())
-        .await
-        .unwrap()
-        .unwrap();
+    result.unwrap();
+    let event = event.unwrap();
 
     assert!(matches!(event, DHTEvent::PutRecord { .. }));
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_dht_bootstrap_with_no_peers() {
     let node = spawn_connexa_with_default_key().await;
 
@@ -202,7 +214,8 @@ async fn test_dht_bootstrap_with_no_peers() {
     assert!(result.is_err());
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_dht_find_non_existent_peer() {
     let node = spawn_connexa_with_default_key().await;
     let random_peer = PeerId::random();
@@ -212,7 +225,8 @@ async fn test_dht_find_non_existent_peer() {
     assert!(result.is_empty());
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_dht_get_non_existent_key() {
     let node = spawn_connexa_with_default_key().await;
 

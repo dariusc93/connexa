@@ -12,7 +12,7 @@ use libp2p::PeerId;
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub async fn spawn_connexa(keypair: impl IntoKeypair) -> std::io::Result<Connexa> {
-    let connexa = DefaultConnexaBuilder::with_existing_identity(keypair)?
+    let builder = DefaultConnexaBuilder::with_existing_identity(keypair)?
         .enable_memory_transport()
         .with_gossipsub()
         .with_blacklist()
@@ -22,12 +22,13 @@ pub async fn spawn_connexa(keypair: impl IntoKeypair) -> std::io::Result<Connexa
             config
         })
         .with_request_response(vec![])
-        .with_relay()
-        .with_relay_server()
         .with_autonat_v1()
-        .with_ping()
-        .build()
-        .await?;
+        .with_ping();
+
+    #[cfg(not(target_arch = "wasm32"))]
+    let builder = builder.with_relay().with_relay_server();
+
+    let connexa = builder.build().await?;
 
     let listen_id = connexa.swarm().listen_on("/memory/0").await?;
 

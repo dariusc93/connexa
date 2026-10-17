@@ -2,12 +2,14 @@ mod common;
 
 use connexa::prelude::{ConnexaSwarmEvent, Multiaddr, PeerId};
 use futures::StreamExt;
+use futures_timeout::TimeoutExt;
 use libp2p::swarm::dial_opts::DialOpts;
 use std::time::Duration;
 
 use crate::common::spawn_connexa_with_default_key;
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_listen_on_address() {
     let node = spawn_connexa_with_default_key().await;
     let addr: Multiaddr = "/memory/0".parse().unwrap();
@@ -26,7 +28,8 @@ async fn test_listen_on_address() {
     );
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_listening_addresses() {
     let node = spawn_connexa_with_default_key().await;
     let addr: Multiaddr = "/memory/0".parse().unwrap();
@@ -41,7 +44,8 @@ async fn test_listening_addresses() {
         .unwrap();
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_remove_listener() {
     let node = spawn_connexa_with_default_key().await;
     let addr: Multiaddr = "/memory/0".parse().unwrap();
@@ -64,7 +68,8 @@ async fn test_remove_listener() {
     assert!(result.is_err() || result.unwrap().is_empty());
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_external_addresses() {
     let node = spawn_connexa_with_default_key().await;
     let addr: Multiaddr = "/ip4/127.0.0.1/tcp/1234".parse().unwrap();
@@ -85,7 +90,8 @@ async fn test_external_addresses() {
     assert!(addrs.contains(&addr));
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_remove_external_address() {
     let node = spawn_connexa_with_default_key().await;
     let addr: Multiaddr = "/ip4/127.0.0.1/tcp/1234".parse().unwrap();
@@ -108,7 +114,8 @@ async fn test_remove_external_address() {
     assert_eq!(addrs.len(), 1);
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_dial_and_connect() {
     let [
         (_node1, node1_peer_id, node1_addr),
@@ -123,7 +130,8 @@ async fn test_dial_and_connect() {
     assert!(is_connected);
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_connected_peers() {
     let [
         (node1, _node1_peer_id, node1_addr),
@@ -135,12 +143,25 @@ async fn test_connected_peers() {
     let peers = node1.swarm().connected_peers().await.unwrap();
     assert_eq!(peers.len(), 0);
 
+    let mut listener = node1.swarm().listener().await.unwrap();
+
     // Node2 and Node3 connect to Node1
     node2.swarm().dial(node1_addr.clone()).await.unwrap();
     node3.swarm().dial(node1_addr).await.unwrap();
 
     // Node1 should have 2 connected peers
-    let peers = node1.swarm().connected_peers().await.unwrap();
+    let peers = async {
+        loop {
+            let peers = node1.swarm().connected_peers().await.unwrap();
+            if peers.len() == 2 {
+                break peers;
+            }
+            listener.next().await.expect("swarm listener is open");
+        }
+    }
+    .timeout(common::DEFAULT_TIMEOUT)
+    .await
+    .expect("both peers should connect");
     assert_eq!(peers.len(), 2);
 
     let expected_peers = vec![node2_peer_id, node3_peer_id];
@@ -150,7 +171,8 @@ async fn test_connected_peers() {
     }
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_disconnect_by_peer_id() {
     let [
         (_node1, node1_peer_id, node1_addr),
@@ -173,7 +195,8 @@ async fn test_disconnect_by_peer_id() {
     assert!(!is_connected);
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_disconnect_by_connection_id() {
     let [
         (_node1, node1_peer_id, node1_addr),
@@ -221,7 +244,8 @@ async fn test_disconnect_by_connection_id() {
 //     assert!(result.is_ok() || result.is_err());
 // }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_dial_with_dial_opts() {
     let [
         (_node1, node1_peer_id, node1_addr),
@@ -241,7 +265,8 @@ async fn test_dial_with_dial_opts() {
     assert!(is_connected);
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_connection_listener() {
     let [
         (node1, _node1_peer_id, node1_addr),
@@ -254,18 +279,20 @@ async fn test_connection_listener() {
     node2.swarm().dial(node1_addr).await.unwrap();
 
     // Wait for a connection event
-    tokio::time::timeout(Duration::from_secs(2), async move {
+    async move {
         loop {
             if let Some(ConnexaSwarmEvent::ConnectionEstablished { .. }) = listener.next().await {
                 break;
             }
         }
-    })
+    }
+    .timeout(Duration::from_secs(2))
     .await
     .expect("Timeout waiting for connection event");
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_multiple_connections_same_peer() {
     let [
         (_node1, node1_peer_id, node1_addr),
@@ -284,7 +311,8 @@ async fn test_multiple_connections_same_peer() {
     assert!(is_connected2)
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_is_connected_nonexistent_peer() {
     let node = spawn_connexa_with_default_key().await;
     let random_peer_id = PeerId::random();
@@ -295,7 +323,8 @@ async fn test_is_connected_nonexistent_peer() {
 
 // FIXME: Maybe have another test to check for tcp properly, but using memory transport would make it easier to use in CI environment
 // due to most restrains
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_listening_on_invalid_address() {
     let node = spawn_connexa_with_default_key().await;
 
@@ -307,7 +336,8 @@ async fn test_listening_on_invalid_address() {
     assert!(result.is_err());
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_dial_self() {
     let [(node, _node_peer_id, self_addr)] =
         common::spawn_connexa_nodes_with_default_keys::<1>().await;
@@ -319,7 +349,8 @@ async fn test_dial_self() {
     assert!(result.is_err());
 }
 
-#[tokio::test]
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test_external_addresses_add_remove() {
     let node = spawn_connexa_with_default_key().await;
 

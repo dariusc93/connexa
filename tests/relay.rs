@@ -1,3 +1,5 @@
+#![cfg(not(target_arch = "wasm32"))]
+
 use connexa::prelude::Protocol;
 use futures::StreamExt;
 use futures::future::poll_fn;

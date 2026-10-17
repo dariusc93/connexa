@@ -41,6 +41,28 @@ jobs:
           toolchain: stable
       - run: cargo test
 
+  test-wasm:
+    name: Test (wasm)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      WASM_BINDGEN_USE_BROWSER: "1"
+      WASM_BINDGEN_TEST_TIMEOUT: "60"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+      - name: Install wasm test runner
+        run: |
+          wasm_bindgen_version=$(cargo metadata --format-version 1 --filter-platform wasm32-unknown-unknown |
+            jq -r '.packages[] | select(.name == "wasm-bindgen") | .version')
+          cargo install wasm-bindgen-cli --version "$wasm_bindgen_version" --locked
+      - run: cargo test -p connexa --target wasm32-unknown-unknown --test '*' --features testing
+        env:
+          CHROMEDRIVER: /usr/local/share/chromedriver-linux64/chromedriver
+
   test-keystore-backends:
     name: Test (keystore backends + ciphers)
     runs-on: ubuntu-latest
