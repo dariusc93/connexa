@@ -25,7 +25,7 @@ async fn send_request_to_peer() {
         .await
         .unwrap();
 
-    async_rt::task::dispatch({
+    let _handle = async_rt::task::spawn_abortable({
         let node_0 = node1.clone();
         let node_1 = node2.clone();
         async move {
@@ -63,6 +63,8 @@ async fn send_request_to_peer() {
         .expect("respond in time")
         .expect("valid response");
     assert_eq!(response, "pong");
+
+    drop(_handle);
 }
 
 #[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
