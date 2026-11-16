@@ -52,7 +52,7 @@ impl NetworkBehaviour for Behaviour {
         _: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
-        libp2p::core::util::unreachable(event)
+        let _ = event;
     }
 
     fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
@@ -78,7 +78,7 @@ impl ConnectionHandler for DummyHandler {
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-        libp2p::core::util::unreachable(event)
+        let _ = event;
     }
 
     fn poll(
@@ -95,15 +95,21 @@ impl ConnectionHandler for DummyHandler {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol, ..
-            }) => libp2p::core::util::unreachable(protocol),
+            }) => {
+                let _ = protocol;
+            },
 
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol, ..
-            }) => libp2p::core::util::unreachable(protocol),
+            }) => {
+                let _ = protocol;
+            },
 
             ConnectionEvent::DialUpgradeError(DialUpgradeError { info: _, error }) => match error {
                 StreamUpgradeError::Timeout => unreachable!(),
-                StreamUpgradeError::Apply(e) => libp2p::core::util::unreachable(e),
+                StreamUpgradeError::Apply(e) => {
+                    let _ = e;
+                },
                 StreamUpgradeError::NegotiationFailed | StreamUpgradeError::Io(_) => {
                     unreachable!("Denied upgrade does not support any protocols")
                 }

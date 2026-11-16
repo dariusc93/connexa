@@ -1,3 +1,7 @@
+// used due to warning in 1.100. Likely due to the `unreachable` functions upstream in libp2p
+// TODO: remove with https://github.com/libp2p/rust-libp2p/pull/6769
+#![allow(unreachable_code)]
+
 #[cfg(feature = "relay")]
 pub mod autorelay;
 pub mod dummy;
